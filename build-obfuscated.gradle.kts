@@ -1,23 +1,15 @@
 plugins {
-    id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT"
+    id("fabric-loom") version "1.17.20"
 }
 
 val mcVersion = stonecutter.current.version
 val toolchainJava = (property("mod.java") as String).toInt()
-
-val hasIntermediary = stonecutter.eval(mcVersion, "<26.1")
 
 version = "${property("mod.version")}+$mcVersion"
 group = property("mod.group")!!
 base { archivesName = "${property("mod.id")}-$mcVersion" }
 
 loom {
-    if (hasIntermediary) {
-        enableTransitiveAccessWideners = false
-    } else {
-        noIntermediateMappings()
-    }
-
     splitEnvironmentSourceSets()
     mods {
         create(property("mod.id") as String) {
@@ -29,8 +21,9 @@ loom {
 
 dependencies {
     minecraft("com.mojang:minecraft:$mcVersion")
-    implementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
-    implementation("net.fabricmc.fabric-api:fabric-api:${property("deps.fabric_api")}")
+    mappings(loom.officialMojangMappings())
+    modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric_loader")}")
+    modImplementation("net.fabricmc.fabric-api:fabric-api:${property("deps.fabric_api")}")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

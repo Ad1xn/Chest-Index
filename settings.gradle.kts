@@ -16,8 +16,8 @@ plugins {
 stonecutter {
     kotlinController = true
     shared {
-        version("1.21.11", "1.21.11")
-        version("26.2", "26.2")
+        version("1.21.11", "1.21.11").buildscript("build-obfuscated.gradle.kts")
+        version("26.2", "26.2").buildscript("build-native.gradle.kts")
     }
     create(rootProject)
 }
