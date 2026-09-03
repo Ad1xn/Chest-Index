@@ -56,7 +56,7 @@ public final class LiveScanner {
         return new ScanResult(scanned, skipped, found, removed);
     }
 
-    private record ChunkScan(int found, int removed) {}
+    public record ChunkScan(int found, int removed) {}
 
     public ChunkScan scanChunk(ServerLevel level, LevelChunk chunk, String dimensionId) {
         long tick = level.getGameTime();
@@ -85,6 +85,27 @@ public final class LiveScanner {
         long chunkKey = BlockKey.chunkKey(ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
         int removed = tracker.reconcileChunk(dimensionId, chunkKey, actual);
         return new ChunkScan(found, removed);
+    }
+
+    public boolean refreshIfLoaded(ServerLevel level, String dimensionId, long pos) {
+        int x = BlockKey.x(pos);
+        int y = BlockKey.y(pos);
+        int z = BlockKey.z(pos);
+        if (!level.getChunkSource().hasChunk(x >> 4, z >> 4)) {
+            return true;
+        }
+
+        BlockPos blockPos = new BlockPos(x, y, z);
+        BlockEntity blockEntity = level.getBlockEntity(blockPos);
+        if (blockEntity == null || !ContainerTypes.isContainer(blockEntity)) {
+            tracker.remove(dimensionId, pos);
+            return false;
+        }
+
+        String typeId = ContainerTypes.idOf(blockEntity);
+        if (typeId == null) return true;
+        tracker.record(dimensionId, toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime()));
+        return true;
     }
 
     private ContainerRecord toRecord(BlockEntity blockEntity, long pos, String typeId,

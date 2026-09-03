@@ -46,8 +46,12 @@ public final class ChunkExtractor {
             boolean unlooted = blockEntity.contains("LootTable") || blockEntity.contains("loot_table");
             Origin origin = unlooted ? Origin.NATURAL : Origin.UNKNOWN;
 
-            List<StackEntry> contents = new ArrayList<>();
-            collectItems(blockEntity.getCompoundList("Items"), contents, 0, palette);
+            List<StackEntry> contents = List.of();
+            if (!unlooted) {
+                List<StackEntry> found = new ArrayList<>();
+                collectItems(blockEntity.getCompoundList("Items"), found, 0, palette);
+                contents = found;
+            }
 
             containers.add(new ContainerRecord(
                     BlockKey.pack(x, y, z),
@@ -56,7 +60,7 @@ public final class ChunkExtractor {
                     origin,
                     null,
                     unlooted,
-                    true,
+                    !unlooted,
                     PlainText.of(blockEntity.getString("CustomName")),
                     tick,
                     contents));

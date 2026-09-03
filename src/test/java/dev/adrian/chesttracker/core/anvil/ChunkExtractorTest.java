@@ -70,6 +70,21 @@ class ChunkExtractorTest {
     }
 
     @Test
+    void unlootedContainersReportUnknownContentsRatherThanEmpty() throws IOException {
+        NbtCompound chunk = parse(NbtTestWriter.compound()
+                .put("block_entities", List.of(blockEntity("minecraft:chest", 0, 40, 0)
+                        .put("LootTable", "minecraft:chests/simple_dungeon"))));
+
+        ContainerRecord record = ChunkExtractor.extract(
+                chunk, Set.of("minecraft:chest"), 0, palette, 0L).containers().get(0);
+
+        assertTrue(record.unlooted());
+        assertFalse(record.contentsKnown());
+        assertTrue(record.contents().isEmpty());
+        assertFalse(record.isEmpty());
+    }
+
+    @Test
     void flattensShulkerContentsWithDepth() throws IOException {
         NbtTestWriter.Compound shulker = item("minecraft:shulker_box", 1)
                 .put("components", NbtTestWriter.compound()
