@@ -1,0 +1,107 @@
+package dev.adrian.chesttracker.server.scan;
+
+import dev.adrian.chesttracker.core.model.ContainerRecord;
+import dev.adrian.chesttracker.core.model.Origin;
+import dev.adrian.chesttracker.core.model.StackEntry;
+import dev.adrian.chesttracker.core.util.BlockKey;
+import dev.adrian.chesttracker.platform.ChunkPosCompat;
+import dev.adrian.chesttracker.platform.ContainerTypes;
+import dev.adrian.chesttracker.platform.LiveContainerReader;
+import dev.adrian.chesttracker.server.TrackerService;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+public final class LiveScanner {
+
+    private final TrackerService tracker;
+
+    public LiveScanner(TrackerService tracker) {
+        this.tracker = tracker;
+    }
+
+    public record ScanResult(int chunksScanned, int chunksSkipped, int containersFound, int staleRemoved) {}
+
+    public ScanResult scanAround(ServerLevel level, BlockPos center, int chunkRadius) {
+        String dimensionId = level.dimension().identifier().toString();
+        int centerChunkX = center.getX() >> 4;
+        int centerChunkZ = center.getZ() >> 4;
+
+        int scanned = 0;
+        int skipped = 0;
+        int found = 0;
+        int removed = 0;
+
+        for (int cx = centerChunkX - chunkRadius; cx <= centerChunkX + chunkRadius; cx++) {
+            for (int cz = centerChunkZ - chunkRadius; cz <= centerChunkZ + chunkRadius; cz++) {
+                LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
+                if (chunk == null) {
+                    skipped++;
+                    continue;
+                }
+                ChunkScan result = scanChunk(level, chunk, dimensionId);
+                scanned++;
+                found += result.found();
+                removed += result.removed();
+            }
+        }
+        return new ScanResult(scanned, skipped, found, removed);
+    }
+
+    private record ChunkScan(int found, int removed) {}
+
+    public ChunkScan scanChunk(ServerLevel level, LevelChunk chunk, String dimensionId) {
+        long tick = level.getGameTime();
+        Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
+
+        Set<Long> actual = new HashSet<>();
+        int found = 0;
+
+        for (Map.Entry<BlockPos, BlockEntity> entry : blockEntities.entrySet()) {
+            BlockEntity blockEntity = entry.getValue();
+            if (!ContainerTypes.isContainer(blockEntity)) continue;
+
+            BlockPos pos = entry.getKey();
+            if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) continue;
+
+            String typeId = ContainerTypes.idOf(blockEntity);
+            if (typeId == null) continue;
+            tracker.containerTypes().learn(typeId);
+
+            long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
+            actual.add(key);
+            tracker.record(dimensionId, toRecord(blockEntity, key, typeId, dimensionId, tick));
+            found++;
+        }
+
+        long chunkKey = BlockKey.chunkKey(ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
+        int removed = tracker.reconcileChunk(dimensionId, chunkKey, actual);
+        return new ChunkScan(found, removed);
+    }
+
+    private ContainerRecord toRecord(BlockEntity blockEntity, long pos, String typeId,
+                                     String dimensionId, long tick) {
+        boolean unlooted = blockEntity instanceof RandomizableContainerBlockEntity randomizable
+                && randomizable.getLootTable() != null;
+
+        int dimId = tracker.palette().intern(dimensionId);
+        int typeKey = tracker.palette().intern(typeId);
+
+        if (unlooted) {
+            return new ContainerRecord(pos, dimId, typeKey, Origin.NATURAL, null,
+                    true, false, null, tick, List.of());
+        }
+
+        List<StackEntry> contents = LiveContainerReader.read((Container) blockEntity, tracker.palette());
+        return new ContainerRecord(pos, dimId, typeKey, Origin.UNKNOWN, null,
+                false, true, null, tick, contents);
+    }
+}
