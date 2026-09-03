@@ -4,6 +4,7 @@ plugins {
 
 val mcVersion = stonecutter.current.version
 val toolchainJava = (property("mod.java") as String).toInt()
+
 val hasIntermediary = stonecutter.eval(mcVersion, "<26.1")
 
 version = "${property("mod.version")}+$mcVersion"
