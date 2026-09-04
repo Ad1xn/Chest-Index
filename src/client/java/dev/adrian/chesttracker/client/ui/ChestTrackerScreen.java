@@ -45,13 +45,13 @@ public final class ChestTrackerScreen extends Screen {
     private static final int SCROLL_COL = 14;
     private static final int EDGE_W = 7;
     private static final int FILLER_U = 100;
+    private static final int SLOT_FILLER_U = 170;
 
     private static final int COLS = 9;
     private static final int ROWS = 6;
     private static final int SLOT = 18;
     private static final int SEARCH_H = 16;
 
-    private static final int PANEL_FILL = 0xFFC6C6C6;
     private static final int BEVEL_LIGHT = 0xFFFFFFFF;
     private static final int BEVEL_DARK = 0xFF555555;
     private static final int GROOVE = 0xFF8B8B8B;
@@ -197,7 +197,6 @@ public final class ChestTrackerScreen extends Screen {
 
     private void draw(Gfx gfx, int mouseX, int mouseY) {
         hoverLabel = null;
-        drawWindow(gfx);
         drawButtons(gfx, mouseX, mouseY);
 
         if (unavailable) {
@@ -240,17 +239,28 @@ public final class ChestTrackerScreen extends Screen {
 
     private void drawSlotBand(Gfx gfx, int destY) {
         gfx.blit(CONTAINER_TEXTURE, panelX, destY, 0, ROWS_V, SLOTS_W, ROWS_H, SHEET, SHEET);
-        gfx.fill(panelX + SLOTS_W, destY, panelX + panelW - EDGE_W, destY + ROWS_H, PANEL_FILL);
+        for (int i = 0; i < SCROLL_COL; i++) {
+            gfx.blit(CONTAINER_TEXTURE, panelX + SLOTS_W + i, destY,
+                    SLOT_FILLER_U, ROWS_V, 1, ROWS_H, SHEET, SHEET);
+        }
         gfx.blit(CONTAINER_TEXTURE, panelX + panelW - EDGE_W, destY,
                 GUI_W - EDGE_W, ROWS_V, EDGE_W, ROWS_H, SHEET, SHEET);
     }
 
     private void drawSearchStrip(Gfx gfx, int searchY) {
-        gfx.fill(panelX, searchY, panelX + panelW, searchY + SEARCH_H, PANEL_FILL);
         gfx.blit(CONTAINER_TEXTURE, panelX, searchY, 0, 30, EDGE_W, SEARCH_H, SHEET, SHEET);
+        for (int x = panelX + EDGE_W; x < panelX + panelW - EDGE_W; x++) {
+            gfx.blit(CONTAINER_TEXTURE, x, searchY, SLOT_FILLER_U, 30, 1, SEARCH_H, SHEET, SHEET);
+        }
         gfx.blit(CONTAINER_TEXTURE, panelX + panelW - EDGE_W, searchY,
                 GUI_W - EDGE_W, 30, EDGE_W, SEARCH_H, SHEET, SHEET);
         drawGroove(gfx, panelX + 7, searchY + 2, panelW - 14, 12);
+    }
+
+    private void fillFromTexture(Gfx gfx, int x, int y, int w, int h) {
+        for (int i = 0; i < w; i++) {
+            gfx.blit(CONTAINER_TEXTURE, x + i, y, SLOT_FILLER_U, ROWS_V, 1, h, SHEET, SHEET);
+        }
     }
 
     private void drawGroove(Gfx gfx, int x, int y, int w, int h) {
@@ -311,7 +321,7 @@ public final class ChestTrackerScreen extends Screen {
         int travel = height - 2 - thumbHeight;
         int thumbY = y + 1 + (maxScroll == 0 ? 0 : travel * scrollRow / maxScroll);
 
-        gfx.fill(x + 1, thumbY, x + 11, thumbY + thumbHeight, PANEL_FILL);
+        fillFromTexture(gfx, x + 1, thumbY, 10, thumbHeight);
         gfx.fill(x + 1, thumbY, x + 11, thumbY + 1, BEVEL_LIGHT);
         gfx.fill(x + 1, thumbY, x + 2, thumbY + thumbHeight, BEVEL_LIGHT);
         gfx.fill(x + 1, thumbY + thumbHeight - 1, x + 11, thumbY + thumbHeight, BEVEL_DARK);
@@ -347,7 +357,11 @@ public final class ChestTrackerScreen extends Screen {
             boolean hovered = mouseX >= x && mouseX < x + 12 && mouseY >= y && mouseY < y + 12;
 
             gfx.fill(x, y, x + 12, y + 12, BEVEL_DARK);
-            gfx.fill(x, y, x + 11, y + 11, button.active() ? BUTTON_ON : PANEL_FILL);
+            if (button.active()) {
+                gfx.fill(x, y, x + 11, y + 11, BUTTON_ON);
+            } else {
+                fillFromTexture(gfx, x, y, 11, 11);
+            }
             gfx.fill(x, y, x + 11, y + 1, BEVEL_LIGHT);
             gfx.fill(x, y, x + 1, y + 11, BEVEL_LIGHT);
             if (hovered) {
@@ -525,6 +539,20 @@ public final class ChestTrackerScreen extends Screen {
         }
         return true;
     }
+
+    //? if >=26.1 {
+    /*@Override
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractBackground(graphics, mouseX, mouseY, partialTick);
+        drawWindow(new Gfx(graphics));
+    }
+    *///?} else {
+    @Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        super.renderBackground(graphics, mouseX, mouseY, partialTick);
+        drawWindow(new Gfx(graphics));
+    }
+    //?}
 
     //? if >=26.1 {
     /*@Override
