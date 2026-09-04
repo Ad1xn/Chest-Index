@@ -65,7 +65,34 @@ public final class ChestTrackerConfig {
 
     public int serverHelloTimeoutMs = 3000;
 
-    public boolean inWorldHighlight = true;
+    public enum Display {
+        BOXES,
+        ACTION_BAR,
+        BOTH,
+        NONE;
+
+        public static Display parse(String value) {
+            if (value == null) return BOXES;
+            for (Display display : values()) {
+                if (display.name().equalsIgnoreCase(value.trim())) return display;
+            }
+            return BOXES;
+        }
+
+        public boolean drawsBoxes() {
+            return this == BOXES || this == BOTH;
+        }
+
+        public boolean writesActionBar() {
+            return this == ACTION_BAR || this == BOTH;
+        }
+    }
+
+    public String highlightDisplay = Display.BOXES.name();
+
+    public Display highlightDisplay() {
+        return Display.parse(highlightDisplay);
+    }
 
     public int highlightSeconds = 45;
 

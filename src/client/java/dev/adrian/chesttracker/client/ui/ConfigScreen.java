@@ -64,8 +64,7 @@ public final class ConfigScreen extends Screen {
         });
         y += ROW_HEIGHT;
 
-        addRenderableWidget(toggle(x, y, "Outline containers in the world",
-                () -> config.inWorldHighlight, value -> config.inWorldHighlight = value));
+        addRenderableWidget(displayCycle(x, y));
         y += ROW_HEIGHT;
 
         addRenderableWidget(new IntSlider(x, y, config.highlightSeconds, 5, HIGHLIGHT_MAX, 5) {
@@ -148,6 +147,25 @@ public final class ConfigScreen extends Screen {
             setter.accept(!getter.getAsBoolean());
             button.setMessage(Component.literal(label + ": " + onOff(getter.getAsBoolean())));
         }).bounds(x, y, WIDGET_WIDTH, 20).build();
+    }
+
+    private Button displayCycle(int x, int y) {
+        return Button.builder(Component.literal(displayLabel()), button -> {
+            ChestTrackerConfig.Display[] modes = ChestTrackerConfig.Display.values();
+            int next = (config.highlightDisplay().ordinal() + 1) % modes.length;
+            config.highlightDisplay = modes[next].name();
+            button.setMessage(Component.literal(displayLabel()));
+        }).bounds(x, y, WIDGET_WIDTH, 20).build();
+    }
+
+    private String displayLabel() {
+        String mode = switch (config.highlightDisplay()) {
+            case BOXES -> "boxes in the world";
+            case ACTION_BAR -> "text above the hotbar";
+            case BOTH -> "boxes and text";
+            case NONE -> "nothing";
+        };
+        return "Show found containers as: " + mode;
     }
 
     private Button accessCycle(int x, int y) {

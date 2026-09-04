@@ -28,6 +28,15 @@ public final class ClientCompat {
         //?}
     }
 
+    public static Screen currentScreen() {
+        Minecraft client = Minecraft.getInstance();
+        //? if >=26.1 {
+        /*return client.gui == null ? null : client.gui.screen();
+        *///?} else {
+        return client.screen;
+        //?}
+    }
+
     public static void openScreen(Screen screen) {
         Minecraft.getInstance().setScreenAndShow(screen);
     }

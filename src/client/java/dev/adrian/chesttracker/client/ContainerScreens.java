@@ -24,7 +24,7 @@ public final class ContainerScreens {
     private static boolean keyWasDown;
     private static long lastTrigger;
 
-    private static AbstractContainerScreen<?> openContainer;
+    private static boolean reportedInit;
 
     public static void register(KeyMapping searchHovered) {
         searchKey = searchHovered;
@@ -40,13 +40,11 @@ public final class ContainerScreens {
                         access.chesttracker$topPos()));
             }
 
-            openContainer = container;
-            ScreenEvents.remove(screen).register(closed -> {
-                if (openContainer == closed) {
-                    openContainer = null;
-                    keyWasDown = false;
-                }
-            });
+            if (!reportedInit) {
+                reportedInit = true;
+                ChestTracker.LOG.info("Container screen hook installed on {}",
+                        container.getClass().getName());
+            }
 
             ScreenKeyboardEvents.beforeKeyPress(screen).register((ignored, keyEvent) -> {
                 if (searchHovered.matches(keyEvent)) trigger(container, "screen event");
@@ -55,8 +53,9 @@ public final class ContainerScreens {
     }
 
     public static void tick() {
-        AbstractContainerScreen<?> container = openContainer;
         Minecraft client = Minecraft.getInstance();
+        AbstractContainerScreen<?> container =
+                ClientCompat.currentScreen() instanceof AbstractContainerScreen<?> open ? open : null;
         if (container == null || searchKey == null || client.getWindow() == null) {
             keyWasDown = false;
             return;

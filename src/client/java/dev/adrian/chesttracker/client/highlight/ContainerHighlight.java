@@ -69,9 +69,17 @@ public final class ContainerHighlight {
         positions = List.of();
     }
 
+    private static final double GROW_PER_BLOCK = 0.03;
+
+    private static final double MAX_GROW = 3.0;
+
+    private static final float BASE_LINE_WIDTH = 2.5f;
+    private static final float LINE_WIDTH_PER_BLOCK = 0.06f;
+    private static final float MAX_LINE_WIDTH = 8.0f;
+
     public boolean hasBoxes() {
         return timer.isActive() && !positions.isEmpty()
-                && ChestTrackerConfig.get().inWorldHighlight;
+                && ChestTrackerConfig.get().highlightDisplay().drawsBoxes();
     }
 
     public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
@@ -86,14 +94,20 @@ public final class ContainerHighlight {
             double dx = x + 0.5 - eye.x;
             double dy = y + 0.5 - eye.y;
             double dz = z + 0.5 - eye.z;
-            if (dx * dx + dy * dy + dz * dz > DRAW_RADIUS * DRAW_RADIUS) continue;
+            double distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq > DRAW_RADIUS * DRAW_RADIUS) continue;
+
+            double distance = Math.sqrt(distSq);
+            double grow = Math.min(MAX_GROW, distance * GROW_PER_BLOCK);
+            float width = (float) Math.min(MAX_LINE_WIDTH,
+                    BASE_LINE_WIDTH + distance * LINE_WIDTH_PER_BLOCK);
 
             boolean nearest = position == pos;
             HighlightBox.emit(pose, lines, x - eye.x, y - eye.y, z - eye.z,
                     nearest ? 1.0f : 0.25f,
                     nearest ? 0.82f : 0.85f,
                     nearest ? 0.2f : 1.0f,
-                    0.9f);
+                    0.9f, grow, width);
             drawn++;
         }
     }
@@ -132,6 +146,8 @@ public final class ContainerHighlight {
         if (!timer.update(distance, System.currentTimeMillis())) {
             return;
         }
+
+        if (!ChestTrackerConfig.get().highlightDisplay().writesActionBar()) return;
 
         if (distance <= ARRIVAL_DISTANCE) {
             ClientCompat.actionBar(Component.literal(label + " - you are here")
