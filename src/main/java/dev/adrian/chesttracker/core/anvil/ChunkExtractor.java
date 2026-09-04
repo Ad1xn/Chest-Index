@@ -112,9 +112,13 @@ public final class ChunkExtractor {
             NbtCompound start = starts.getCompound(structureId);
             if (start == null) continue;
 
-            addBox(boxes, structureId, start.getIntArray("BB"));
-            for (NbtCompound child : start.getCompoundList("Children")) {
-                addBox(boxes, structureId, child.getIntArray("BB"));
+            List<NbtCompound> pieces = start.getCompoundList("Children");
+            if (pieces.isEmpty()) {
+                addBox(boxes, structureId, start.getIntArray("BB"));
+            } else {
+                for (NbtCompound piece : pieces) {
+                    addBox(boxes, structureId, piece.getIntArray("BB"));
+                }
             }
         }
         return boxes;

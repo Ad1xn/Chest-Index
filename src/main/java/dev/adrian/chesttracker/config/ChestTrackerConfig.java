@@ -59,6 +59,8 @@ public final class ChestTrackerConfig {
 
     public int serverHelloTimeoutMs = 3000;
 
+    public boolean inWorldHighlight = true;
+
     public int highlightSeconds = 45;
 
     public int highlightRecedingGraceSeconds = 10;

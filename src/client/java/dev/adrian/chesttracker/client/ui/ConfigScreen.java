@@ -64,6 +64,10 @@ public final class ConfigScreen extends Screen {
         });
         y += ROW_HEIGHT;
 
+        addRenderableWidget(toggle(x, y, "Outline containers in the world",
+                () -> config.inWorldHighlight, value -> config.inWorldHighlight = value));
+        y += ROW_HEIGHT;
+
         addRenderableWidget(new IntSlider(x, y, config.highlightSeconds, 5, HIGHLIGHT_MAX, 5) {
             @Override
             String label(int value) {

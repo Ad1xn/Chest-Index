@@ -4,10 +4,15 @@ import dev.adrian.chesttracker.client.platform.ClientCompat;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.highlight.HighlightTimer;
 import dev.adrian.chesttracker.core.util.BlockKey;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
 
 public final class ContainerHighlight {
 
@@ -19,9 +24,15 @@ public final class ContainerHighlight {
 
     private HighlightTimer timer = HighlightTimer.defaults();
 
+    private List<Long> positions = List.of();
+
     private long pos;
     private String dimensionId;
     private String label;
+
+    private static final double DRAW_RADIUS = 160.0;
+
+    private static final int MAX_BOXES = 96;
 
     private ContainerHighlight() {}
 
@@ -30,6 +41,16 @@ public final class ContainerHighlight {
     }
 
     public void select(long pos, String dimensionId, String label) {
+        select(List.of(pos), dimensionId, label);
+    }
+
+    public void select(List<Long> positions, String dimensionId, String label) {
+        this.positions = positions == null ? List.of() : List.copyOf(positions);
+        long nearest = this.positions.isEmpty() ? 0 : this.positions.get(0);
+        selectPrimary(nearest, dimensionId, label);
+    }
+
+    private void selectPrimary(long pos, String dimensionId, String label) {
         ChestTrackerConfig config = ChestTrackerConfig.get();
         this.timer = new HighlightTimer(config.highlightDurationMs(),
                 config.highlightRecedingGraceMs(), SAMPLE_INTERVAL_MS);
@@ -44,6 +65,52 @@ public final class ContainerHighlight {
 
     public void clear() {
         timer.clear();
+        positions = List.of();
+    }
+
+    public boolean hasBoxes() {
+        return timer.isActive() && !positions.isEmpty()
+                && ChestTrackerConfig.get().inWorldHighlight;
+    }
+
+    public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        int drawn = 0;
+        for (Long position : positions) {
+            if (drawn >= MAX_BOXES) break;
+
+            double x = BlockKey.x(position);
+            double y = BlockKey.y(position);
+            double z = BlockKey.z(position);
+
+            double dx = x + 0.5 - eye.x;
+            double dy = y + 0.5 - eye.y;
+            double dz = z + 0.5 - eye.z;
+            if (dx * dx + dy * dy + dz * dz > DRAW_RADIUS * DRAW_RADIUS) continue;
+
+            boolean nearest = position == pos;
+            HighlightBox.emit(pose, lines, x - eye.x, y - eye.y, z - eye.z,
+                    nearest ? 1.0f : 0.25f,
+                    nearest ? 0.82f : 0.85f,
+                    nearest ? 0.2f : 1.0f,
+                    0.9f);
+            drawn++;
+        }
+    }
+
+    private void followNearest(LocalPlayer player) {
+        if (positions.size() < 2) return;
+
+        long best = pos;
+        double bestDistSq = Double.MAX_VALUE;
+        long from = BlockKey.pack(player.getBlockX(), player.getBlockY(), player.getBlockZ());
+        for (Long position : positions) {
+            double distSq = BlockKey.distanceSq(from, position);
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                best = position;
+            }
+        }
+        pos = best;
     }
 
     public boolean isActive() {
@@ -67,6 +134,8 @@ public final class ContainerHighlight {
             timer.clear();
             return;
         }
+
+        followNearest(player);
 
         double distance = distanceTo(player);
         if (!timer.update(distance, System.currentTimeMillis())) {

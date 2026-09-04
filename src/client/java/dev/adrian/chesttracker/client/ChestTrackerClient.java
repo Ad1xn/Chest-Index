@@ -5,6 +5,7 @@ import dev.adrian.chesttracker.ChestTracker;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
 import dev.adrian.chesttracker.client.net.ServerLink;
 import dev.adrian.chesttracker.client.platform.ClientCompat;
+import dev.adrian.chesttracker.client.platform.WorldHighlightHook;
 import dev.adrian.chesttracker.client.ui.ChestTrackerScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -20,6 +21,8 @@ public final class ChestTrackerClient implements ClientModInitializer {
         ChestTracker.LOG.info("ChestTracker initialising (client)");
 
         ServerLink.register();
+
+        WorldHighlightHook.register();
 
         openSearch = ClientCompat.registerKeyMapping(new KeyMapping(
                 "key.chestindex.search",

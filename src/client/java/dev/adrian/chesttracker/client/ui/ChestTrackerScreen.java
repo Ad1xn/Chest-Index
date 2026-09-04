@@ -2,6 +2,7 @@ package dev.adrian.chesttracker.client.ui;
 
 import dev.adrian.chesttracker.client.ClientTracker;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
+import dev.adrian.chesttracker.client.platform.ClientCompat;
 import dev.adrian.chesttracker.client.platform.Gfx;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.net.QueryDto;
@@ -270,6 +271,24 @@ public final class ChestTrackerScreen extends Screen {
         return copy;
     }
 
+    private void highlightItem(String itemId) {
+        if (!mayAttempt()) return;
+        String label = displayName(itemId);
+        String dimensionId = minecraft.player.level().dimension().identifier().toString();
+
+        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS).thenAccept(response ->
+                minecraft.execute(() -> {
+                    if (response.hits().isEmpty()) {
+                        ClientCompat.actionBar(Component.literal("Nothing indexed holds " + label));
+                        return;
+                    }
+                    List<Long> positions = new ArrayList<>(response.hits().size());
+                    for (QueryDto.ContainerHit hit : response.hits()) positions.add(hit.pos());
+                    ContainerHighlight.get().select(positions, dimensionId, label);
+                }));
+        onClose();
+    }
+
     private void selectItem(String itemId) {
         selectedItemId = itemId;
         containers = List.of();
@@ -475,7 +494,7 @@ public final class ChestTrackerScreen extends Screen {
 
         if (hovered >= 0) {
             QueryDto.ItemSummary summary = items.get(hovered);
-            hoverLabel = String.format("%s  %,d in %d",
+            hoverLabel = String.format("%s  %,d in %d  -  right-click to list",
                     displayName(summary.itemId()), summary.totalCount(), summary.containerCount());
         } else if (items.isEmpty()) {
             gfx.text(font, Component.literal(pending.isBlank() ? "Nothing indexed yet" : "No match"),
@@ -517,8 +536,8 @@ public final class ChestTrackerScreen extends Screen {
 
     private List<MenuRow> menuRows() {
         String origin = switch (originIndex) {
-            case 1 -> "player-placed" ;
-            case 2 -> "natural";
+            case 1 -> "built";
+            case 2 -> "generated";
             default -> "any";
         };
         return List.of(
@@ -692,10 +711,17 @@ public final class ChestTrackerScreen extends Screen {
         if (event.button() == 0 && clickButton(mouseX, mouseY)) return true;
         if (!canQuery()) return super.mouseClicked(event, doubleClick);
 
-        if (event.button() == 1 && selectedItemId != null) {
-            back();
-            if (itemsStale) refreshItems(false);
-            return true;
+        if (event.button() == 1) {
+            if (selectedItemId != null) {
+                back();
+                if (itemsStale) refreshItems(false);
+                return true;
+            }
+            int index = slotAt(mouseX, mouseY);
+            if (index >= 0) {
+                selectItem(items.get(index).itemId());
+                return true;
+            }
         }
 
         if (event.button() == 0) {
@@ -708,7 +734,7 @@ public final class ChestTrackerScreen extends Screen {
             if (selectedItemId == null) {
                 int index = slotAt(mouseX, mouseY);
                 if (index >= 0) {
-                    selectItem(items.get(index).itemId());
+                    highlightItem(items.get(index).itemId());
                     return true;
                 }
             } else {
