@@ -1,11 +1,34 @@
 package dev.adrian.chesttracker.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chesttracker.ChestTracker;
+import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
+import dev.adrian.chesttracker.client.platform.ClientCompat;
+import dev.adrian.chesttracker.client.ui.ChestTrackerScreen;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.client.KeyMapping;
+import org.lwjgl.glfw.GLFW;
 
 public final class ChestTrackerClient implements ClientModInitializer {
+
+    private static KeyMapping openSearch;
+
     @Override
     public void onInitializeClient() {
         ChestTracker.LOG.info("ChestTracker initialising (client)");
+
+        openSearch = ClientCompat.registerKeyMapping(new KeyMapping(
+                "key.chesttracker.search",
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_GRAVE_ACCENT,
+                KeyMapping.Category.INVENTORY));
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (openSearch.consumeClick()) {
+                ClientCompat.openScreen(new ChestTrackerScreen());
+            }
+            ContainerHighlight.get().tick();
+        });
     }
 }
