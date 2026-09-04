@@ -51,11 +51,17 @@ public final class ServerLink {
 
         ClientPlayNetworking.registerGlobalReceiver(
                 ChestTrackerPayloads.SummaryResponsePayload.TYPE,
-                (payload, context) -> deliver(payload.response().requestId(), payload.response()));
+                (payload, context) -> {
+                    canQuery = payload.response().permitted();
+                    deliver(payload.response().requestId(), payload.response());
+                });
 
         ClientPlayNetworking.registerGlobalReceiver(
                 ChestTrackerPayloads.ContainerResponsePayload.TYPE,
-                (payload, context) -> deliver(payload.response().requestId(), payload.response()));
+                (payload, context) -> {
+                    canQuery = payload.response().permitted();
+                    deliver(payload.response().requestId(), payload.response());
+                });
 
         ClientPlayNetworking.registerGlobalReceiver(
                 ChestTrackerPayloads.IndexChangedPayload.TYPE,
@@ -120,13 +126,13 @@ public final class ServerLink {
     public static CompletableFuture<QueryDto.SummaryResponse> summarise(QueryDto.SummaryRequest request) {
         return send(request.requestId(), QueryDto.SummaryResponse.class,
                 new ChestTrackerPayloads.SummaryRequestPayload(request),
-                new QueryDto.SummaryResponse(request.requestId(), List.of()));
+                QueryDto.SummaryResponse.of(request.requestId(), List.of()));
     }
 
     public static CompletableFuture<QueryDto.ContainerResponse> containers(QueryDto.ContainerRequest request) {
         return send(request.requestId(), QueryDto.ContainerResponse.class,
                 new ChestTrackerPayloads.ContainerRequestPayload(request),
-                new QueryDto.ContainerResponse(request.requestId(), List.of()));
+                QueryDto.ContainerResponse.of(request.requestId(), List.of()));
     }
 
     private static <T> CompletableFuture<T> send(int requestId, Class<T> type,
@@ -142,10 +148,7 @@ public final class ServerLink {
     }
 
     private static void deliver(int requestId, Object response) {
-        if (state == State.WAITING) {
-            state = State.PRESENT;
-            canQuery = true;
-        }
+        if (state == State.WAITING) state = State.PRESENT;
 
         Pending<?> pending = PENDING.get(requestId);
         if (pending == null) return;

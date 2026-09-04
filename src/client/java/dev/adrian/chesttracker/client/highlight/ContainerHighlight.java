@@ -1,6 +1,7 @@
 package dev.adrian.chesttracker.client.highlight;
 
 import dev.adrian.chesttracker.client.platform.ClientCompat;
+import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.highlight.HighlightTimer;
 import dev.adrian.chesttracker.core.util.BlockKey;
 import net.minecraft.ChatFormatting;
@@ -14,7 +15,9 @@ public final class ContainerHighlight {
 
     private static final double ARRIVAL_DISTANCE = 3.0;
 
-    private final HighlightTimer timer = HighlightTimer.defaults();
+    private static final long SAMPLE_INTERVAL_MS = 1000;
+
+    private HighlightTimer timer = HighlightTimer.defaults();
 
     private long pos;
     private String dimensionId;
@@ -27,6 +30,9 @@ public final class ContainerHighlight {
     }
 
     public void select(long pos, String dimensionId, String label) {
+        ChestTrackerConfig config = ChestTrackerConfig.get();
+        this.timer = new HighlightTimer(config.highlightDurationMs(),
+                config.highlightRecedingGraceMs(), SAMPLE_INTERVAL_MS);
         this.pos = pos;
         this.dimensionId = dimensionId;
         this.label = label;

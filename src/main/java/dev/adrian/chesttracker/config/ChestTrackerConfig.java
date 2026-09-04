@@ -19,9 +19,15 @@ public final class ChestTrackerConfig {
 
     public boolean scanOnWorldJoin = true;
 
-    public boolean indexMachineContents = false;
+    public boolean showMachines = false;
 
-    public int maxResults = 300;
+    public int maxResults = 900;
+
+    public static final int UNLIMITED_RESULTS = 0;
+
+    public int resultLimit() {
+        return Math.max(0, maxResults);
+    }
 
     public boolean includeNested = true;
 
@@ -31,15 +37,15 @@ public final class ChestTrackerConfig {
         OP;
 
         public static Access parse(String value) {
-            if (value == null) return OP;
+            if (value == null) return ALL;
             for (Access access : values()) {
                 if (access.name().equalsIgnoreCase(value.trim())) return access;
             }
-            return OP;
+            return ALL;
         }
     }
 
-    public String permissionTier = Access.OP.name();
+    public String permissionTier = Access.ALL.name();
 
     public Access permissionTier() {
         return Access.parse(permissionTier);

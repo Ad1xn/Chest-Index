@@ -131,6 +131,15 @@ public final class ChestTrackerNetwork {
         WATCHERS.remove(player.getUUID());
     }
 
+    public static void announceAccess(MinecraftServer server) {
+        if (server == null || Trackers.current() == null) return;
+        ChestTrackerConfig.Access tier = access();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            send(player, new ChestTrackerPayloads.HelloPayload(new QueryDto.Hello(
+                    QueryDto.Hello.PROTOCOL_VERSION, QueryService.mayQuery(player, tier))));
+        }
+    }
+
     public static void forgetAll() {
         WATCHERS.clear();
         sinceLastSignal = 0;

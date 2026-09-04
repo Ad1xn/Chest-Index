@@ -3,6 +3,7 @@ package dev.adrian.chesttracker.client.ui;
 import dev.adrian.chesttracker.client.ClientTracker;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
 import dev.adrian.chesttracker.client.platform.Gfx;
+import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.net.QueryDto;
 import dev.adrian.chesttracker.core.util.BlockKey;
 import net.minecraft.client.gui.components.EditBox;
@@ -58,10 +59,17 @@ public final class ChestTrackerScreen extends Screen {
     private static final int SLOT_HOVER = 0x80FFFFFF;
     private static final int ROW_HOVER = 0x40000000;
     private static final int BUTTON_ON = 0xFF6A9A4A;
+    private static final int BUTTON_ON_TEXT = 0xFF2F6B1F;
+
+    private static final int BUTTON_SIZE = 12;
+    private static final int TOOLBAR_BUTTONS = 2;
+    private static final int MENU_W = 132;
+    private static final int MENU_ROW_H = 12;
 
     private static final long AUTO_REFRESH_MIN_MS = 400;
 
-    private static final int MAX_ITEMS = 900;
+    private static final long REFUSED_RETRY_MS = 2000;
+
     private static final int MAX_CONTAINERS = 64;
     private static final int DETAIL_ROW = 11;
 
@@ -85,6 +93,7 @@ public final class ChestTrackerScreen extends Screen {
     private String selectedItemId;
     private int scrollRow;
     private boolean draggingScrollbar;
+    private boolean menuOpen;
 
     private ClientTracker.Availability availability = ClientTracker.Availability.NONE;
 
@@ -99,8 +108,8 @@ public final class ChestTrackerScreen extends Screen {
     private boolean itemsStale;
 
     private Sort sort = Sort.COUNT;
-    private boolean includeNested = true;
-    private boolean includeMachines;
+    private boolean includeNested = ChestTrackerConfig.get().includeNested;
+    private boolean includeMachines = ChestTrackerConfig.get().showMachines;
     private int originIndex;
 
     private int panelX;
@@ -153,8 +162,8 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private void refreshItems(boolean resetView) {
-        if (!canQuery()) return;
-        ClientTracker.summarise(pending, filters(), MAX_ITEMS).thenAccept(response ->
+        if (!mayAttempt()) return;
+        ClientTracker.summarise(pending, filters(), ChestTrackerConfig.get().resultLimit()).thenAccept(response ->
                 minecraft.execute(() -> {
                     if (response.requestId() <= newestItemsReply) return;
                     newestItemsReply = response.requestId();
@@ -171,7 +180,7 @@ public final class ChestTrackerScreen extends Screen {
 
     private void refreshContainers() {
         String itemId = selectedItemId;
-        if (itemId == null || !canQuery()) return;
+        if (itemId == null || !mayAttempt()) return;
         ClientTracker.containers(itemId, filters(), MAX_CONTAINERS).thenAccept(response ->
                 minecraft.execute(() -> {
                     if (!itemId.equals(selectedItemId)) return;
@@ -180,6 +189,14 @@ public final class ChestTrackerScreen extends Screen {
                     containers = response.hits();
                     containersPending = false;
                 }));
+    }
+
+    private void retryWhileRefused() {
+        if (availability != ClientTracker.Availability.NOT_PERMITTED) return;
+        long now = System.currentTimeMillis();
+        if (now - lastAutoRefresh < REFUSED_RETRY_MS) return;
+        lastAutoRefresh = now;
+        refreshItems(false);
     }
 
     private void pollForChanges() {
@@ -202,6 +219,10 @@ public final class ChestTrackerScreen extends Screen {
     private boolean canQuery() {
         return availability == ClientTracker.Availability.LOCAL
                 || availability == ClientTracker.Availability.SERVER;
+    }
+
+    private boolean mayAttempt() {
+        return canQuery() || availability == ClientTracker.Availability.NOT_PERMITTED;
     }
 
     private List<QueryDto.ItemSummary> sorted(List<QueryDto.ItemSummary> source) {
@@ -263,6 +284,7 @@ public final class ChestTrackerScreen extends Screen {
             refreshItems();
         } else {
             pollForChanges();
+            retryWhileRefused();
         }
 
         if (!canQuery()) {
@@ -281,6 +303,8 @@ public final class ChestTrackerScreen extends Screen {
                 : selectedItemId != null ? displayName(selectedItemId) : "Chest Tracker";
         int available = buttonX(0) - (panelX + 8) - 4;
         gfx.text(font, Component.literal(truncate(title, available)), panelX + 8, panelY + 6, TEXT_DARK);
+
+        drawMenu(gfx, mouseX, mouseY);
     }
 
     private String unavailableMessage() {
@@ -402,47 +426,91 @@ public final class ChestTrackerScreen extends Screen {
         gfx.fill(x + 10, thumbY, x + 11, thumbY + thumbHeight, BEVEL_DARK);
     }
 
-    private record Toolbar(String glyph, String label, boolean active) {}
+    private record MenuRow(String label, String value, boolean active) {}
 
-    private List<Toolbar> toolbar() {
+    private List<MenuRow> menuRows() {
         String origin = switch (originIndex) {
-            case 1 -> "Player-placed only";
-            case 2 -> "Natural only";
-            default -> "All origins";
+            case 1 -> "player-placed" ;
+            case 2 -> "natural";
+            default -> "any";
         };
         return List.of(
-                new Toolbar("S", "Sort: " + sort.label, sort != Sort.COUNT),
-                new Toolbar("O", origin, originIndex != 0),
-                new Toolbar("N", includeNested ? "Counting nested items" : "Ignoring nested items", includeNested),
-                new Toolbar("M", includeMachines ? "Showing machines" : "Hiding machines", includeMachines),
-                new Toolbar("X", "Close", false));
+                new MenuRow("Sort by", sort.label, sort != Sort.COUNT),
+                new MenuRow("Origin", origin, originIndex != 0),
+                new MenuRow("Inside shulkers", includeNested ? "counted" : "ignored", includeNested),
+                new MenuRow("Machines", includeMachines ? "shown" : "hidden", includeMachines));
     }
 
     private int buttonX(int index) {
-        return panelX + panelW - 8 - (5 - index) * 13;
+        return panelX + panelW - 8 - (TOOLBAR_BUTTONS - index) * (BUTTON_SIZE + 1);
+    }
+
+    private int menuX() {
+        return panelX + panelW - 8 - MENU_W;
+    }
+
+    private int menuY() {
+        return panelY + 3 + BUTTON_SIZE + 1;
+    }
+
+    private int menuH() {
+        return menuRows().size() * MENU_ROW_H + 3;
     }
 
     private void drawButtons(Gfx gfx, int mouseX, int mouseY) {
-        List<Toolbar> buttons = toolbar();
-        for (int i = 0; i < buttons.size(); i++) {
-            Toolbar button = buttons.get(i);
+        for (int i = 0; i < TOOLBAR_BUTTONS; i++) {
             int x = buttonX(i);
             int y = panelY + 3;
-            boolean hovered = mouseX >= x && mouseX < x + 12 && mouseY >= y && mouseY < y + 12;
+            boolean hovered = mouseX >= x && mouseX < x + BUTTON_SIZE
+                    && mouseY >= y && mouseY < y + BUTTON_SIZE;
+            boolean active = i == 0 && menuOpen;
 
-            gfx.fill(x, y, x + 12, y + 12, BEVEL_DARK);
-            if (button.active()) {
-                gfx.fill(x, y, x + 11, y + 11, BUTTON_ON);
+            gfx.fill(x, y, x + BUTTON_SIZE, y + BUTTON_SIZE, BEVEL_DARK);
+            if (active) {
+                gfx.fill(x, y, x + BUTTON_SIZE - 1, y + BUTTON_SIZE - 1, BUTTON_ON);
             } else {
-                fillFromTexture(gfx, x, y, 11, 11);
+                fillFromTexture(gfx, x, y, BUTTON_SIZE - 1, BUTTON_SIZE - 1);
             }
-            gfx.fill(x, y, x + 11, y + 1, BEVEL_LIGHT);
-            gfx.fill(x, y, x + 1, y + 11, BEVEL_LIGHT);
+            gfx.fill(x, y, x + BUTTON_SIZE - 1, y + 1, BEVEL_LIGHT);
+            gfx.fill(x, y, x + 1, y + BUTTON_SIZE - 1, BEVEL_LIGHT);
             if (hovered) {
-                gfx.fill(x + 1, y + 1, x + 11, y + 11, SLOT_HOVER);
-                hoverLabel = button.label();
+                gfx.fill(x + 1, y + 1, x + BUTTON_SIZE - 1, y + BUTTON_SIZE - 1, SLOT_HOVER);
+                hoverLabel = i == 0 ? "Filters and sorting" : "Close";
             }
-            gfx.text(font, button.glyph(), x + 3, y + 2, TEXT_DARK);
+
+            if (i == 0) {
+                for (int line = 0; line < 3; line++) {
+                    gfx.fill(x + 3, y + 3 + line * 3, x + BUTTON_SIZE - 3, y + 4 + line * 3, TEXT_DARK);
+                }
+            } else {
+                gfx.text(font, "X", x + 3, y + 2, TEXT_DARK);
+            }
+        }
+    }
+
+    private void drawMenu(Gfx gfx, int mouseX, int mouseY) {
+        if (!menuOpen) return;
+
+        int x = menuX();
+        int y = menuY();
+        int height = menuH();
+
+        gfx.fill(x - 1, y - 1, x + MENU_W + 1, y + height + 1, BEVEL_DARK);
+        fillFromTexture(gfx, x, y, MENU_W, height);
+        gfx.fill(x, y, x + MENU_W, y + 1, BEVEL_LIGHT);
+        gfx.fill(x, y, x + 1, y + height, BEVEL_LIGHT);
+
+        List<MenuRow> rows = menuRows();
+        for (int i = 0; i < rows.size(); i++) {
+            MenuRow row = rows.get(i);
+            int rowY = y + 2 + i * MENU_ROW_H;
+            if (mouseX >= x && mouseX < x + MENU_W && mouseY >= rowY - 1 && mouseY < rowY + MENU_ROW_H - 1) {
+                gfx.fill(x + 1, rowY - 1, x + MENU_W, rowY + MENU_ROW_H - 1, SLOT_HOVER);
+            }
+            gfx.text(font, Component.literal(row.label()), x + 4, rowY, TEXT_DARK);
+            String value = row.value();
+            gfx.text(font, Component.literal(value), x + MENU_W - 4 - font.width(value), rowY,
+                    row.active() ? BUTTON_ON_TEXT : TEXT_DARK);
         }
     }
 
@@ -513,6 +581,14 @@ public final class ChestTrackerScreen extends Screen {
         int mouseX = (int) event.x();
         int mouseY = (int) event.y();
 
+        if (event.button() == 0 && menuOpen) {
+            if (clickMenuRow(mouseX, mouseY)) return true;
+            if (!overToolbar(mouseX, mouseY)) {
+                menuOpen = false;
+                return true;
+            }
+        }
+
         if (event.button() == 0 && clickButton(mouseX, mouseY)) return true;
         if (!canQuery()) return super.mouseClicked(event, doubleClick);
 
@@ -546,37 +622,58 @@ public final class ChestTrackerScreen extends Screen {
         return super.mouseClicked(event, doubleClick);
     }
 
+    private boolean overToolbar(int mouseX, int mouseY) {
+        int y = panelY + 3;
+        if (mouseY < y || mouseY >= y + BUTTON_SIZE) return false;
+        return mouseX >= buttonX(0) && mouseX < buttonX(TOOLBAR_BUTTONS - 1) + BUTTON_SIZE;
+    }
+
     private boolean clickButton(int mouseX, int mouseY) {
         int y = panelY + 3;
-        if (mouseY < y || mouseY >= y + 12) return false;
+        if (mouseY < y || mouseY >= y + BUTTON_SIZE) return false;
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < TOOLBAR_BUTTONS; i++) {
             int x = buttonX(i);
-            if (mouseX < x || mouseX >= x + 12) continue;
-
-            switch (i) {
-                case 0 -> {
-                    sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length];
-                    items = sorted(items);
-                    scrollRow = 0;
-                }
-                case 1 -> {
-                    originIndex = (originIndex + 1) % 3;
-                    refreshItems();
-                }
-                case 2 -> {
-                    includeNested = !includeNested;
-                    refreshItems();
-                }
-                case 3 -> {
-                    includeMachines = !includeMachines;
-                    refreshItems();
-                }
-                default -> onClose();
+            if (mouseX < x || mouseX >= x + BUTTON_SIZE) continue;
+            if (i == 0) {
+                menuOpen = !menuOpen;
+            } else {
+                onClose();
             }
             return true;
         }
         return false;
+    }
+
+    private boolean clickMenuRow(int mouseX, int mouseY) {
+        int x = menuX();
+        int y = menuY();
+        if (mouseX < x || mouseX >= x + MENU_W || mouseY < y || mouseY >= y + menuH()) return false;
+
+        int row = (mouseY - (y + 1)) / MENU_ROW_H;
+        switch (row) {
+            case 0 -> {
+                sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length];
+                items = sorted(items);
+                scrollRow = 0;
+            }
+            case 1 -> {
+                originIndex = (originIndex + 1) % 3;
+                refreshItems();
+            }
+            case 2 -> {
+                includeNested = !includeNested;
+                refreshItems();
+            }
+            case 3 -> {
+                includeMachines = !includeMachines;
+                refreshItems();
+            }
+            default -> {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void dragScrollbar(int mouseY) {

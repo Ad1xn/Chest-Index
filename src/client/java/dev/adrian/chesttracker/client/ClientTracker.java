@@ -68,7 +68,7 @@ public final class ClientTracker {
 
         return onServerThread(
                 (tracker, player) -> QueryService.summarise(tracker, player, request, localAccess()),
-                new QueryDto.SummaryResponse(requestId, List.of()));
+                QueryDto.SummaryResponse.of(requestId, List.of()));
     }
 
     public static CompletableFuture<QueryDto.ContainerResponse> containers(
@@ -81,7 +81,7 @@ public final class ClientTracker {
 
         return onServerThread(
                 (tracker, player) -> QueryService.containers(tracker, player, request, localAccess()),
-                new QueryDto.ContainerResponse(requestId, List.of()));
+                QueryDto.ContainerResponse.of(requestId, List.of()));
     }
 
     private static ChestTrackerConfig.Access localAccess() {

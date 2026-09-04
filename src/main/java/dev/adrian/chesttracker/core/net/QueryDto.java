@@ -36,9 +36,17 @@ public final class QueryDto {
 
     public record ItemSummary(String itemId, int totalCount, int containerCount, double nearestDistSq) {}
 
-    public record SummaryResponse(int requestId, List<ItemSummary> items) {
+    public record SummaryResponse(int requestId, boolean permitted, List<ItemSummary> items) {
         public SummaryResponse {
             items = items == null ? List.of() : List.copyOf(items);
+        }
+
+        public static SummaryResponse refused(int requestId) {
+            return new SummaryResponse(requestId, false, List.of());
+        }
+
+        public static SummaryResponse of(int requestId, List<ItemSummary> items) {
+            return new SummaryResponse(requestId, true, items);
         }
     }
 
@@ -47,14 +55,22 @@ public final class QueryDto {
     public record ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
                                boolean nested, boolean natural, boolean contentsKnown) {}
 
-    public record ContainerResponse(int requestId, List<ContainerHit> hits) {
+    public record ContainerResponse(int requestId, boolean permitted, List<ContainerHit> hits) {
         public ContainerResponse {
             hits = hits == null ? List.of() : List.copyOf(hits);
+        }
+
+        public static ContainerResponse refused(int requestId) {
+            return new ContainerResponse(requestId, false, List.of());
+        }
+
+        public static ContainerResponse of(int requestId, List<ContainerHit> hits) {
+            return new ContainerResponse(requestId, true, hits);
         }
     }
 
     public record Hello(int protocolVersion, boolean canQuery) {
 
-        public static final int PROTOCOL_VERSION = 1;
+        public static final int PROTOCOL_VERSION = 2;
     }
 }
