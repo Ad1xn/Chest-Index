@@ -33,6 +33,20 @@ public final class HighlightBox {
         ring(pose, lines, x0, x1, y1, z0, z1, red, green, blue, alpha, lineWidth);
     }
 
+    public static void beam(PoseStack.Pose pose, VertexConsumer lines,
+                            double x, double y, double z, double height,
+                            float red, float green, float blue, float alpha, float lineWidth) {
+        final int segments = 8;
+        double step = height / segments;
+        for (int i = 0; i < segments; i++) {
+            float from = alpha * (1.0f - (float) i / segments);
+            float to = alpha * (1.0f - (float) (i + 1) / segments);
+            float mid = (from + to) / 2.0f;
+            line(pose, lines, x, y + i * step, z, x, y + (i + 1) * step, z,
+                    red, green, blue, mid, lineWidth);
+        }
+    }
+
     public static void line(PoseStack.Pose pose, VertexConsumer lines,
                             double ax, double ay, double az,
                             double bx, double by, double bz,

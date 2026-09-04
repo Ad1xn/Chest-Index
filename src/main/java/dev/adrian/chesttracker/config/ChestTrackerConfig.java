@@ -98,7 +98,7 @@ public final class ChestTrackerConfig {
 
     public boolean turnToTarget = true;
 
-    public boolean guideLine = true;
+    public boolean guideBeam = true;
 
     public int highlightSeconds = 45;
 
