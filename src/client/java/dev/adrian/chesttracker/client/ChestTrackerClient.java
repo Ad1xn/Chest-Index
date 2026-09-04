@@ -23,13 +23,13 @@ public final class ChestTrackerClient implements ClientModInitializer {
         ServerLink.register();
 
         openSearch = ClientCompat.registerKeyMapping(new KeyMapping(
-                "key.chestindex.search",
+                "key.chest-tracker.search",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_GRAVE_ACCENT,
                 KeyMapping.Category.INVENTORY));
 
         searchHovered = ClientCompat.registerKeyMapping(new KeyMapping(
-                "key.chestindex.search_hovered",
+                "key.chest-tracker.search_hovered",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_Z,
                 KeyMapping.Category.INVENTORY));

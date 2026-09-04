@@ -9,14 +9,14 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface ContainerScreenAccessor {
 
     @Accessor("hoveredSlot")
-    Slot chestindex$hoveredSlot();
+    Slot chesttracker$hoveredSlot();
 
     @Accessor("leftPos")
-    int chestindex$leftPos();
+    int chesttracker$leftPos();
 
     @Accessor("topPos")
-    int chestindex$topPos();
+    int chesttracker$topPos();
 
     @Accessor("imageWidth")
-    int chestindex$imageWidth();
+    int chesttracker$imageWidth();
 }

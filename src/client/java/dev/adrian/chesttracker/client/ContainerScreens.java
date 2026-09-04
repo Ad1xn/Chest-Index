@@ -22,14 +22,14 @@ public final class ContainerScreens {
 
             if (ChestTrackerConfig.get().containerSearchButton) {
                 ClientCompat.addWidget(screen, new SearchButton(
-                        access.chestindex$leftPos() + access.chestindex$imageWidth(),
-                        access.chestindex$topPos()));
+                        access.chesttracker$leftPos() + access.chesttracker$imageWidth(),
+                        access.chesttracker$topPos()));
             }
 
             ScreenKeyboardEvents.afterKeyPress(screen).register((ignored, keyEvent) -> {
                 if (!searchHovered.matches(keyEvent)) return;
 
-                Slot hovered = access.chestindex$hoveredSlot();
+                Slot hovered = access.chesttracker$hoveredSlot();
                 if (hovered == null || !hovered.hasItem()) return;
 
                 ContainerSearch.findAndGuide(hovered.getItem());
