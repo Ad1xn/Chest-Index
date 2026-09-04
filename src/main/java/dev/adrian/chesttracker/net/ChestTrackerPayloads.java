@@ -151,6 +151,36 @@ public final class ChestTrackerPayloads {
         }
     }
 
+    public record SubscribePayload(boolean watching) implements CustomPacketPayload {
+
+        public static final Type<SubscribePayload> TYPE = new Type<>(id("subscribe"));
+
+        public static final StreamCodec<FriendlyByteBuf, SubscribePayload> CODEC =
+                StreamCodec.of(
+                        (buf, payload) -> buf.writeBoolean(payload.watching()),
+                        buf -> new SubscribePayload(buf.readBoolean()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record IndexChangedPayload() implements CustomPacketPayload {
+
+        public static final Type<IndexChangedPayload> TYPE = new Type<>(id("index_changed"));
+
+        public static final IndexChangedPayload INSTANCE = new IndexChangedPayload();
+
+        public static final StreamCodec<FriendlyByteBuf, IndexChangedPayload> CODEC =
+                StreamCodec.of((buf, payload) -> {}, buf -> INSTANCE);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public record HelloPayload(QueryDto.Hello hello) implements CustomPacketPayload {
 
         public static final Type<HelloPayload> TYPE = new Type<>(id("hello"));

@@ -8,7 +8,6 @@ import dev.adrian.chesttracker.core.model.Origin;
 import dev.adrian.chesttracker.core.model.StackEntry;
 import dev.adrian.chesttracker.core.net.QueryDto;
 import dev.adrian.chesttracker.core.util.BlockKey;
-import dev.adrian.chesttracker.server.scan.LiveScanner;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -98,9 +97,10 @@ public final class QueryService {
         applyFilters(builder, request.filters(), tracker);
         IndexQuery query = builder.build();
 
-        refreshLoaded(tracker, player.level(), dimensionId, query);
-
         List<SearchResult> results = tracker.search(dimensionId, query);
+        if (refreshStale(player.level(), dimensionId, results) > 0) {
+            results = tracker.search(dimensionId, query);
+        }
         List<QueryDto.ContainerHit> hits = new java.util.ArrayList<>(results.size());
         for (SearchResult result : results) {
             String typeId = tracker.palette().value(result.container().typeId());
@@ -117,13 +117,11 @@ public final class QueryService {
         return new QueryDto.ContainerResponse(id, hits);
     }
 
-    private static void refreshLoaded(TrackerService tracker, ServerLevel level,
-                                      String dimensionId, IndexQuery query) {
-        if (level == null) return;
-        LiveScanner refresher = new LiveScanner(tracker);
-        for (SearchResult candidate : tracker.search(dimensionId, query)) {
-            refresher.refreshIfLoaded(level, dimensionId, candidate.container().pos());
-        }
+    private static int refreshStale(ServerLevel level, String dimensionId, List<SearchResult> results) {
+        if (results.isEmpty()) return 0;
+        List<Long> positions = new java.util.ArrayList<>(results.size());
+        for (SearchResult result : results) positions.add(result.container().pos());
+        return Trackers.refreshDirty(level, dimensionId, positions);
     }
 
     private static boolean hasNestedMatch(SearchResult result) {

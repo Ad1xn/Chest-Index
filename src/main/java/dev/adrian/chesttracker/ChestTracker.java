@@ -48,10 +48,13 @@ public final class ChestTracker implements ModInitializer {
                 LOG.info("ChestTracker saved {} containers", tracker.totalContainers());
             }
             Trackers.clear();
+            ChestTrackerNetwork.forgetAll();
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             Trackers.drainDirty();
+
+            ChestTrackerNetwork.flushChanges(server);
 
             RegionScanner scanner = Trackers.regionScanner();
             if (scanner == null) return;

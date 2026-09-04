@@ -59,6 +59,8 @@ public final class ChestTrackerScreen extends Screen {
     private static final int ROW_HOVER = 0x40000000;
     private static final int BUTTON_ON = 0xFF6A9A4A;
 
+    private static final long AUTO_REFRESH_MIN_MS = 400;
+
     private static final int MAX_ITEMS = 900;
     private static final int MAX_CONTAINERS = 64;
     private static final int DETAIL_ROW = 11;
@@ -90,6 +92,11 @@ public final class ChestTrackerScreen extends Screen {
     private int newestContainersReply;
 
     private boolean containersPending;
+
+    private long lastChangeToken;
+    private long lastAutoRefresh;
+
+    private boolean itemsStale;
 
     private Sort sort = Sort.COUNT;
     private boolean includeNested = true;
@@ -126,7 +133,15 @@ public final class ChestTrackerScreen extends Screen {
         setInitialFocus(search);
 
         availability = ClientTracker.availability();
+        lastChangeToken = ClientTracker.changeToken();
+        ClientTracker.setWatching(true);
         refreshItems();
+    }
+
+    @Override
+    public void removed() {
+        ClientTracker.setWatching(false);
+        super.removed();
     }
 
     private QueryDto.Filters filters() {
@@ -134,15 +149,54 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private void refreshItems() {
+        refreshItems(true);
+    }
+
+    private void refreshItems(boolean resetView) {
         if (!canQuery()) return;
         ClientTracker.summarise(pending, filters(), MAX_ITEMS).thenAccept(response ->
                 minecraft.execute(() -> {
                     if (response.requestId() <= newestItemsReply) return;
                     newestItemsReply = response.requestId();
                     items = sorted(response.items());
+                    itemsStale = false;
+                    if (!resetView) {
+                        scrollRow = Math.min(scrollRow, maxScrollRow());
+                        return;
+                    }
                     scrollRow = 0;
                     back();
                 }));
+    }
+
+    private void refreshContainers() {
+        String itemId = selectedItemId;
+        if (itemId == null || !canQuery()) return;
+        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS).thenAccept(response ->
+                minecraft.execute(() -> {
+                    if (!itemId.equals(selectedItemId)) return;
+                    if (response.requestId() <= newestContainersReply) return;
+                    newestContainersReply = response.requestId();
+                    containers = response.hits();
+                    containersPending = false;
+                }));
+    }
+
+    private void pollForChanges() {
+        long token = ClientTracker.changeToken();
+        if (token == lastChangeToken) return;
+
+        long now = System.currentTimeMillis();
+        if (now - lastAutoRefresh < AUTO_REFRESH_MIN_MS) return;
+        lastChangeToken = token;
+        lastAutoRefresh = now;
+
+        if (selectedItemId == null) {
+            refreshItems(false);
+        } else {
+            refreshContainers();
+            itemsStale = true;
+        }
     }
 
     private boolean canQuery() {
@@ -164,14 +218,7 @@ public final class ChestTrackerScreen extends Screen {
         selectedItemId = itemId;
         containers = List.of();
         containersPending = true;
-        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS).thenAccept(response ->
-                minecraft.execute(() -> {
-                    if (!itemId.equals(selectedItemId)) return;
-                    if (response.requestId() <= newestContainersReply) return;
-                    newestContainersReply = response.requestId();
-                    containers = response.hits();
-                    containersPending = false;
-                }));
+        refreshContainers();
     }
 
     private void back() {
@@ -211,7 +258,11 @@ public final class ChestTrackerScreen extends Screen {
         ClientTracker.Availability now = ClientTracker.availability();
         if (now != availability) {
             availability = now;
+            ClientTracker.setWatching(true);
+            lastChangeToken = ClientTracker.changeToken();
             refreshItems();
+        } else {
+            pollForChanges();
         }
 
         if (!canQuery()) {
@@ -467,6 +518,7 @@ public final class ChestTrackerScreen extends Screen {
 
         if (event.button() == 1 && selectedItemId != null) {
             back();
+            if (itemsStale) refreshItems(false);
             return true;
         }
 

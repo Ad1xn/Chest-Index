@@ -133,6 +133,23 @@ public final class Trackers {
         return done;
     }
 
+    public static int refreshDirty(ServerLevel level, String dimensionId, java.util.Collection<Long> positions) {
+        TrackerService tracker = current;
+        if (tracker == null || level == null) return 0;
+
+        java.util.Set<Long> dirty = DIRTY.get(dimensionId);
+        if (dirty == null || dirty.isEmpty()) return 0;
+
+        var scanner = new dev.adrian.chesttracker.server.scan.LiveScanner(tracker);
+        int refreshed = 0;
+        for (Long pos : positions) {
+            if (!dirty.remove(pos)) continue;
+            scanner.refreshIfLoaded(level, dimensionId, pos);
+            refreshed++;
+        }
+        return refreshed;
+    }
+
     public static void liveScanChunk(String dimensionId, long chunkKey) {
         TrackerService tracker = current;
         if (tracker == null) return;

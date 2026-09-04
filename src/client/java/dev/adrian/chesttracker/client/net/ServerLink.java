@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class ServerLink {
 
@@ -29,6 +30,8 @@ public final class ServerLink {
     private static volatile State state = State.ABSENT;
     private static volatile boolean canQuery;
     private static volatile long joinedAt;
+
+    private static final AtomicLong CHANGE_TOKEN = new AtomicLong();
 
     private record Pending<T>(Class<T> type, CompletableFuture<T> future, T empty, long deadline) {}
 
@@ -54,6 +57,10 @@ public final class ServerLink {
                 ChestTrackerPayloads.ContainerResponsePayload.TYPE,
                 (payload, context) -> deliver(payload.response().requestId(), payload.response()));
 
+        ClientPlayNetworking.registerGlobalReceiver(
+                ChestTrackerPayloads.IndexChangedPayload.TYPE,
+                (payload, context) -> CHANGE_TOKEN.incrementAndGet());
+
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             failAllPending();
             state = State.WAITING;
@@ -70,6 +77,16 @@ public final class ServerLink {
 
     public static State state() {
         return state;
+    }
+
+    public static long changeToken() {
+        return CHANGE_TOKEN.get();
+    }
+
+    public static void setWatching(boolean watching) {
+        if (state != State.PRESENT) return;
+        if (!ClientPlayNetworking.canSend(ChestTrackerPayloads.SubscribePayload.TYPE)) return;
+        ClientPlayNetworking.send(new ChestTrackerPayloads.SubscribePayload(watching));
     }
 
     public static boolean canQuery() {

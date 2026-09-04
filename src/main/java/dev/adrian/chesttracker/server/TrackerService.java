@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class TrackerService {
 
@@ -24,6 +26,8 @@ public final class TrackerService {
     private final Map<String, WorldIndex> byDimension = new HashMap<>();
     private final ContainerTypes containerTypes = new ContainerTypes();
     private final Path storageRoot;
+
+    private final Map<String, AtomicLong> generations = new ConcurrentHashMap<>();
 
     public TrackerService(Path storageRoot) {
         this.storageRoot = storageRoot;
@@ -46,16 +50,31 @@ public final class TrackerService {
         return Set.copyOf(byDimension.keySet());
     }
 
+    public long generation(String dimensionId) {
+        AtomicLong counter = generations.get(dimensionId);
+        return counter == null ? 0L : counter.get();
+    }
+
+    private void bump(String dimensionId) {
+        generations.computeIfAbsent(dimensionId, id -> new AtomicLong()).incrementAndGet();
+    }
+
     public void record(String dimensionId, ContainerRecord container) {
+        ContainerRecord previous = index(dimensionId).get(container.pos());
         index(dimensionId).put(container);
+        if (previous == null || !previous.sameDataAs(container)) bump(dimensionId);
     }
 
     public ContainerRecord remove(String dimensionId, long pos) {
-        return index(dimensionId).remove(pos);
+        ContainerRecord removed = index(dimensionId).remove(pos);
+        if (removed != null) bump(dimensionId);
+        return removed;
     }
 
     public int reconcileChunk(String dimensionId, long chunkKey, Set<Long> actual) {
-        return index(dimensionId).reconcileChunk(chunkKey, actual);
+        int dropped = index(dimensionId).reconcileChunk(chunkKey, actual);
+        if (dropped > 0) bump(dimensionId);
+        return dropped;
     }
 
     public List<SearchResult> search(String dimensionId, IndexQuery query) {

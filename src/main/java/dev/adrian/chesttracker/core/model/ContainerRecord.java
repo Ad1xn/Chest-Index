@@ -31,6 +31,19 @@ public record ContainerRecord(
         return new ContainerRecord(pos, dimensionId, typeId, origin, null, false, false, null, tick, List.of());
     }
 
+    public boolean sameDataAs(ContainerRecord other) {
+        return other != null
+                && pos == other.pos
+                && dimensionId == other.dimensionId
+                && typeId == other.typeId
+                && origin == other.origin
+                && unlooted == other.unlooted
+                && contentsKnown == other.contentsKnown
+                && Objects.equals(owner, other.owner)
+                && Objects.equals(customName, other.customName)
+                && contents.equals(other.contents);
+    }
+
     public long chunkKey() {
         return BlockKey.chunkOf(pos);
     }

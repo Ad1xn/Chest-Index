@@ -44,6 +44,20 @@ public final class ClientTracker {
         return client.hasSingleplayerServer() && client.getSingleplayerServer() != null;
     }
 
+    public static long changeToken() {
+        if (!hasLocalIndex()) return ServerLink.changeToken();
+
+        TrackerService tracker = Trackers.current();
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (tracker == null || player == null) return 0L;
+        return tracker.generation(player.level().dimension().identifier().toString());
+    }
+
+    public static void setWatching(boolean watching) {
+        if (hasLocalIndex()) return;
+        ServerLink.setWatching(watching);
+    }
+
     public static CompletableFuture<QueryDto.SummaryResponse> summarise(
             String text, QueryDto.Filters filters, int limit) {
 
