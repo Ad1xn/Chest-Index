@@ -47,10 +47,12 @@ public final class ChestTracker implements ModInitializer {
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            Trackers.drainDirty();
+
             RegionScanner scanner = Trackers.regionScanner();
             if (scanner == null) return;
             long tickNanos = (long) (server.getCurrentSmoothedTickTime() * 1_000_000.0f);
-            scanner.drain(Trackers::isChunkLoaded, tickNanos);
+            scanner.drain(Trackers::isChunkLoaded, Trackers::liveScanChunk, tickNanos);
         });
 
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> {

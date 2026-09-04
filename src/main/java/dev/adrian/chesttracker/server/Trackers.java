@@ -23,6 +23,10 @@ public final class Trackers {
 
     private static final Map<ResourceKey<Level>, String> DIMENSION_IDS = new ConcurrentHashMap<>();
 
+    private static final Map<String, java.util.Set<Long>> DIRTY = new ConcurrentHashMap<>();
+
+    private static final int DIRTY_BUDGET_PER_TICK = 48;
+
     private Trackers() {}
 
     public static void setCurrent(TrackerService service, net.minecraft.server.MinecraftServer minecraftServer) {
@@ -62,6 +66,7 @@ public final class Trackers {
 
     public static void clear() {
         if (regionScanner != null) regionScanner.cancel();
+        DIRTY.clear();
         regionScanner = null;
         server = null;
         current = null;
@@ -85,6 +90,60 @@ public final class Trackers {
         if (blockEntity == null || !ContainerTypes.isContainer(blockEntity)) {
             tracker.remove(dimensionId, key);
         }
+    }
+
+    public static void onContainerChanged(BlockEntity blockEntity) {
+        TrackerService tracker = current;
+        if (tracker == null) return;
+
+        Level level = blockEntity.getLevel();
+        if (!(level instanceof ServerLevel)) return;
+        if (!ContainerTypes.isContainer(blockEntity)) return;
+
+        BlockPos pos = blockEntity.getBlockPos();
+        if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) return;
+
+        DIRTY.computeIfAbsent(dimensionId(level), id -> java.util.concurrent.ConcurrentHashMap.newKeySet())
+                .add(BlockKey.pack(pos.getX(), pos.getY(), pos.getZ()));
+    }
+
+    public static int drainDirty() {
+        TrackerService tracker = current;
+        if (tracker == null || DIRTY.isEmpty()) return 0;
+
+        int done = 0;
+        for (Map.Entry<String, java.util.Set<Long>> entry : DIRTY.entrySet()) {
+            ServerLevel level = levelFor(entry.getKey());
+            java.util.Set<Long> positions = entry.getValue();
+            if (level == null) {
+                positions.clear();
+                continue;
+            }
+
+            var scanner = new dev.adrian.chesttracker.server.scan.LiveScanner(tracker);
+            var iterator = positions.iterator();
+            while (iterator.hasNext() && done < DIRTY_BUDGET_PER_TICK) {
+                long pos = iterator.next();
+                iterator.remove();
+                scanner.refreshIfLoaded(level, entry.getKey(), pos);
+                done++;
+            }
+            if (done >= DIRTY_BUDGET_PER_TICK) break;
+        }
+        return done;
+    }
+
+    public static void liveScanChunk(String dimensionId, long chunkKey) {
+        TrackerService tracker = current;
+        if (tracker == null) return;
+        ServerLevel level = levelFor(dimensionId);
+        if (level == null) return;
+
+        var chunk = level.getChunkSource()
+                .getChunkNow(BlockKey.chunkX(chunkKey), BlockKey.chunkZ(chunkKey));
+        if (chunk == null) return;
+        new dev.adrian.chesttracker.server.scan.LiveScanner(tracker)
+                .scanChunk(level, chunk, dimensionId);
     }
 
     public static void onBlockPlaced(Level level, BlockPos pos, LivingEntity placer) {

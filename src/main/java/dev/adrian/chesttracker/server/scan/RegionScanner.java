@@ -186,7 +186,9 @@ public final class RegionScanner {
         }
     }
 
-    public int drain(java.util.function.BiPredicate<String, Long> isChunkLoaded, long tickTimeNanos) {
+    public int drain(java.util.function.BiPredicate<String, Long> isChunkLoaded,
+                     java.util.function.BiConsumer<String, Long> liveScanChunk,
+                     long tickTimeNanos) {
         if (tickTimeNanos > TICK_TIME_BUDGET_NANOS) return 0;
 
         int applied = 0;
@@ -195,6 +197,7 @@ public final class RegionScanner {
             applied++;
 
             if (isChunkLoaded.test(batch.dimensionId(), batch.chunkKey())) {
+                liveScanChunk.accept(batch.dimensionId(), batch.chunkKey());
                 chunksSkippedLoaded.incrementAndGet();
                 continue;
             }
