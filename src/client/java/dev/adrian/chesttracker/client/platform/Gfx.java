@@ -1,7 +1,9 @@
 package dev.adrian.chesttracker.client.platform;
 
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 //? if >=26.1 {
@@ -42,6 +44,11 @@ public final class Gfx {
     public void disableScissor() {
         raw.disableScissor();
     }
+
+    public void blit(Identifier texture, int x, int y, float u, float v,
+                     int width, int height, int textureWidth, int textureHeight) {
+        raw.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight);
+    }
     *///?} else {
     private final GuiGraphics raw;
 
@@ -71,6 +78,11 @@ public final class Gfx {
 
     public void disableScissor() {
         raw.disableScissor();
+    }
+
+    public void blit(Identifier texture, int x, int y, float u, float v,
+                     int width, int height, int textureWidth, int textureHeight) {
+        raw.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight);
     }
     //?}
 }
