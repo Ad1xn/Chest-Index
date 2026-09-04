@@ -26,7 +26,7 @@ public final class ContainerScreens {
                         access.chesttracker$topPos()));
             }
 
-            ScreenKeyboardEvents.afterKeyPress(screen).register((ignored, keyEvent) -> {
+            ScreenKeyboardEvents.beforeKeyPress(screen).register((ignored, keyEvent) -> {
                 if (!searchHovered.matches(keyEvent)) return;
 
                 Slot hovered = access.chesttracker$hoveredSlot();
@@ -35,7 +35,9 @@ public final class ContainerScreens {
                     return;
                 }
 
-                ContainerSearch.findAndGuide(hovered.getItem());
+                if (ContainerSearch.findAndGuide(hovered.getItem())) {
+                    container.onClose();
+                }
             });
         });
     }

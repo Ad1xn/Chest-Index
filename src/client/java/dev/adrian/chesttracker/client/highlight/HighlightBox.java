@@ -7,6 +7,8 @@ public final class HighlightBox {
 
     private static final double SWELL = 0.002;
 
+    private static final float LINE_WIDTH = 2.0f;
+
     private HighlightBox() {}
 
     public static void emit(PoseStack.Pose pose, VertexConsumer lines,
@@ -42,7 +44,9 @@ public final class HighlightBox {
                              float ax, float ay, float az, float bx, float by, float bz,
                              float nx, float ny, float nz,
                              float red, float green, float blue, float alpha) {
-        lines.addVertex(pose, ax, ay, az).setColor(red, green, blue, alpha).setNormal(pose, nx, ny, nz);
-        lines.addVertex(pose, bx, by, bz).setColor(red, green, blue, alpha).setNormal(pose, nx, ny, nz);
+        lines.addVertex(pose, ax, ay, az).setColor(red, green, blue, alpha)
+                .setNormal(pose, nx, ny, nz).setLineWidth(LINE_WIDTH);
+        lines.addVertex(pose, bx, by, bz).setColor(red, green, blue, alpha)
+                .setNormal(pose, nx, ny, nz).setLineWidth(LINE_WIDTH);
     }
 }
