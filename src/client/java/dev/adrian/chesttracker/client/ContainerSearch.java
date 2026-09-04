@@ -58,6 +58,10 @@ public final class ContainerSearch {
                 }));
     }
 
+    public static void sayNothingHovered() {
+        say("Point at an item to search for it", ChatFormatting.GRAY);
+    }
+
     private static QueryDto.Filters filters() {
         ChestTrackerConfig config = ChestTrackerConfig.get();
         return new QueryDto.Filters(config.includeNested, false, QueryDto.Filters.ORIGIN_ANY);

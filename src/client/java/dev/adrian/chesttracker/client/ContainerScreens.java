@@ -30,7 +30,10 @@ public final class ContainerScreens {
                 if (!searchHovered.matches(keyEvent)) return;
 
                 Slot hovered = access.chesttracker$hoveredSlot();
-                if (hovered == null || !hovered.hasItem()) return;
+                if (hovered == null || !hovered.hasItem()) {
+                    ContainerSearch.sayNothingHovered();
+                    return;
+                }
 
                 ContainerSearch.findAndGuide(hovered.getItem());
             });
