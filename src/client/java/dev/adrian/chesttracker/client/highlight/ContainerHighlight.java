@@ -9,6 +9,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 
+import java.util.List;
+
 public final class ContainerHighlight {
 
     private static final ContainerHighlight INSTANCE = new ContainerHighlight();
@@ -19,7 +21,8 @@ public final class ContainerHighlight {
 
     private HighlightTimer timer = HighlightTimer.defaults();
 
-    private long pos;
+    private List<Long> targets = List.of();
+
     private String dimensionId;
     private String label;
 
@@ -30,28 +33,50 @@ public final class ContainerHighlight {
     }
 
     public void select(long pos, String dimensionId, String label) {
+        select(List.of(pos), dimensionId, label);
+    }
+
+    public void select(List<Long> positions, String dimensionId, String label) {
+        if (positions == null || positions.isEmpty()) {
+            clear();
+            return;
+        }
         ChestTrackerConfig config = ChestTrackerConfig.get();
         this.timer = new HighlightTimer(config.highlightDurationMs(),
                 config.highlightRecedingGraceMs(), SAMPLE_INTERVAL_MS);
-        this.pos = pos;
+        this.targets = List.copyOf(positions);
         this.dimensionId = dimensionId;
         this.label = label;
 
         LocalPlayer player = Minecraft.getInstance().player;
-        double distance = player == null ? 0 : distanceTo(player);
+        double distance = player == null ? 0 : distanceTo(player, nearestTo(player));
         timer.start(distance, System.currentTimeMillis());
     }
 
     public void clear() {
         timer.clear();
+        targets = List.of();
     }
 
     public boolean isActive() {
         return timer.isActive();
     }
 
+    public List<Long> targets() {
+        return targets;
+    }
+
+    public String dimensionId() {
+        return dimensionId;
+    }
+
+    public String label() {
+        return label;
+    }
+
     public long pos() {
-        return pos;
+        LocalPlayer player = Minecraft.getInstance().player;
+        return targets.isEmpty() || player == null ? 0L : nearestTo(player);
     }
 
     public void tick() {
@@ -59,36 +84,55 @@ public final class ContainerHighlight {
 
         Minecraft client = Minecraft.getInstance();
         LocalPlayer player = client.player;
-        if (player == null) {
-            timer.clear();
+        if (player == null || targets.isEmpty()) {
+            clear();
             return;
         }
         if (!player.level().dimension().identifier().toString().equals(dimensionId)) {
-            timer.clear();
+            clear();
             return;
         }
 
-        double distance = distanceTo(player);
+        long target = nearestTo(player);
+        double distance = distanceTo(player, target);
         if (!timer.update(distance, System.currentTimeMillis())) {
             return;
         }
 
         if (distance <= ARRIVAL_DISTANCE) {
-            ClientCompat.actionBar(Component.literal(label + " - you are here")
+            ClientCompat.actionBar(Component.literal(label + " - you are here" + remainder())
                     .withStyle(ChatFormatting.GREEN));
             return;
         }
 
-        ClientCompat.actionBar(Component.literal(String.format("%s  %s  %.0fm",
-                label, bearing(player), distance)).withStyle(ChatFormatting.AQUA));
+        ClientCompat.actionBar(Component.literal(String.format("%s  %s  %.0fm%s",
+                label, bearing(player, target), distance, remainder()))
+                .withStyle(ChatFormatting.AQUA));
     }
 
-    private double distanceTo(LocalPlayer player) {
+    private String remainder() {
+        return targets.size() > 1 ? "  (+" + (targets.size() - 1) + " more)" : "";
+    }
+
+    private long nearestTo(LocalPlayer player) {
+        long best = targets.get(0);
+        double bestDistance = distanceTo(player, best);
+        for (int i = 1; i < targets.size(); i++) {
+            double distance = distanceTo(player, targets.get(i));
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = targets.get(i);
+            }
+        }
+        return best;
+    }
+
+    private double distanceTo(LocalPlayer player, long pos) {
         return Math.sqrt(BlockKey.distanceSq(
                 BlockKey.pack(player.getBlockX(), player.getBlockY(), player.getBlockZ()), pos));
     }
 
-    private String bearing(LocalPlayer player) {
+    private String bearing(LocalPlayer player, long pos) {
         double dx = BlockKey.x(pos) + 0.5 - player.getX();
         double dz = BlockKey.z(pos) + 0.5 - player.getZ();
         double targetYaw = Math.toDegrees(Math.atan2(-dx, dz));

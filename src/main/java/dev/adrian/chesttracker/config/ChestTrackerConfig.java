@@ -37,6 +37,12 @@ public final class ChestTrackerConfig {
 
     public String searchText = "";
 
+    public boolean containerSearchButton = true;
+
+    public int searchButtonX = -15;
+
+    public int searchButtonY = 4;
+
     public enum Access {
         ALL,
         OWNED,

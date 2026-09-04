@@ -14,6 +14,7 @@ import org.lwjgl.glfw.GLFW;
 public final class ChestTrackerClient implements ClientModInitializer {
 
     private static KeyMapping openSearch;
+    private static KeyMapping searchHovered;
 
     @Override
     public void onInitializeClient() {
@@ -26,6 +27,14 @@ public final class ChestTrackerClient implements ClientModInitializer {
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_GRAVE_ACCENT,
                 KeyMapping.Category.INVENTORY));
+
+        searchHovered = ClientCompat.registerKeyMapping(new KeyMapping(
+                "key.chestindex.search_hovered",
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_Z,
+                KeyMapping.Category.INVENTORY));
+
+        ContainerScreens.register(searchHovered);
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openSearch.consumeClick()) {
