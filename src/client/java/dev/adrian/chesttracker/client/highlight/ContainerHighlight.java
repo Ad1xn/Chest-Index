@@ -81,7 +81,7 @@ public final class ContainerHighlight {
 
     private static final double BEAM_MIN_DISTANCE = 8.0;
 
-    private static final double BEAM_HEIGHT = 48.0;
+    private static final double BEAM_HEIGHT = 32.0;
 
     private static final int TURN_TICKS = 7;
 

@@ -10,9 +10,13 @@ import dev.adrian.chesttracker.client.ui.ChestTrackerScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 public final class ChestTrackerClient implements ClientModInitializer {
+
+    private static final KeyMapping.Category CATEGORY =
+            new KeyMapping.Category(Identifier.fromNamespaceAndPath(ChestTracker.MOD_ID, "title"));
 
     private static KeyMapping openSearch;
     private static KeyMapping searchHovered;
@@ -29,13 +33,13 @@ public final class ChestTrackerClient implements ClientModInitializer {
                 "key.chest-tracker.search",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_GRAVE_ACCENT,
-                KeyMapping.Category.INVENTORY));
+                CATEGORY));
 
         searchHovered = ClientCompat.registerKeyMapping(new KeyMapping(
                 "key.chest-tracker.search_hovered",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_Z,
-                KeyMapping.Category.INVENTORY));
+                CATEGORY));
 
         ContainerScreens.register(searchHovered);
 

@@ -33,17 +33,18 @@ public final class HighlightBox {
         ring(pose, lines, x0, x1, y1, z0, z1, red, green, blue, alpha, lineWidth);
     }
 
+    private static final double BEAM_SPACING = 2.5;
+
+    private static final double BEAM_MARK = 0.45;
+
     public static void beam(PoseStack.Pose pose, VertexConsumer lines,
                             double x, double y, double z, double height,
                             float red, float green, float blue, float alpha, float lineWidth) {
-        final int segments = 8;
-        double step = height / segments;
-        for (int i = 0; i < segments; i++) {
-            float from = alpha * (1.0f - (float) i / segments);
-            float to = alpha * (1.0f - (float) (i + 1) / segments);
-            float mid = (from + to) / 2.0f;
-            line(pose, lines, x, y + i * step, z, x, y + (i + 1) * step, z,
-                    red, green, blue, mid, lineWidth);
+        for (double at = 0; at < height; at += BEAM_SPACING) {
+            float fade = alpha * (float) (1.0 - at / height);
+            if (fade <= 0.02f) break;
+            line(pose, lines, x, y + at, z, x, y + at + BEAM_MARK, z,
+                    red, green, blue, fade, lineWidth);
         }
     }
 
