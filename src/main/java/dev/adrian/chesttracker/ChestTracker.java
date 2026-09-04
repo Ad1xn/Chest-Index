@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
 
 public final class ChestTracker implements ModInitializer {
 
-    public static final String MOD_ID = "chesttracker";
+    public static final String MOD_ID = "chestindex";
     public static final Logger LOG = LoggerFactory.getLogger("ChestTracker");
 
     @Override

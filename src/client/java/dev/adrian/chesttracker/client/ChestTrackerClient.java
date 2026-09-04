@@ -19,7 +19,7 @@ public final class ChestTrackerClient implements ClientModInitializer {
         ChestTracker.LOG.info("ChestTracker initialising (client)");
 
         openSearch = ClientCompat.registerKeyMapping(new KeyMapping(
-                "key.chesttracker.search",
+                "key.chestindex.search",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_GRAVE_ACCENT,
                 KeyMapping.Category.INVENTORY));
