@@ -55,11 +55,12 @@ public final class ChestTrackerScreen extends Screen {
     private static final int GROOVE = 0xFF8B8B8B;
     private static final int GROOVE_DARK = 0xFF373737;
     private static final int TEXT_DARK = 0xFF404040;
+
+    private static final int TEXT_MUTED = 0xFF808080;
     private static final int TEXT_LIGHT = 0xFFFFFFFF;
     private static final int SLOT_HOVER = 0x80FFFFFF;
     private static final int ROW_HOVER = 0x40000000;
     private static final int BUTTON_ON = 0xFF6A9A4A;
-    private static final int BUTTON_ON_TEXT = 0xFF2F6B1F;
 
     private static final int BUTTON_SIZE = 12;
     private static final int TOOLBAR_BUTTONS = 2;
@@ -83,10 +84,17 @@ public final class ChestTrackerScreen extends Screen {
         Sort(String label) {
             this.label = label;
         }
+
+        static Sort parse(String name) {
+            for (Sort value : values()) {
+                if (value.name().equalsIgnoreCase(name)) return value;
+            }
+            return COUNT;
+        }
     }
 
     private EditBox search;
-    private String pending = "";
+    private String pending = ChestTrackerConfig.get().searchText;
 
     private List<QueryDto.ItemSummary> items = List.of();
     private List<QueryDto.ContainerHit> containers = List.of();
@@ -107,10 +115,10 @@ public final class ChestTrackerScreen extends Screen {
 
     private boolean itemsStale;
 
-    private Sort sort = Sort.COUNT;
+    private Sort sort = Sort.parse(ChestTrackerConfig.get().sortMode);
     private boolean includeNested = ChestTrackerConfig.get().includeNested;
     private boolean includeMachines = ChestTrackerConfig.get().showMachines;
-    private int originIndex;
+    private int originIndex = Math.max(0, Math.min(2, ChestTrackerConfig.get().originFilter));
 
     private int panelX;
     private int panelY;
@@ -134,6 +142,7 @@ public final class ChestTrackerScreen extends Screen {
                 Component.literal("Search"));
         search.setMaxLength(64);
         search.setHint(Component.literal("Search"));
+        search.setValue(pending);
         search.setResponder(value -> {
             pending = value;
             refreshItems();
@@ -150,7 +159,25 @@ public final class ChestTrackerScreen extends Screen {
     @Override
     public void removed() {
         ClientTracker.setWatching(false);
+        rememberPreferences();
         super.removed();
+    }
+
+    private void rememberPreferences() {
+        ChestTrackerConfig config = ChestTrackerConfig.get();
+        boolean changed = config.includeNested != includeNested
+                || config.showMachines != includeMachines
+                || config.originFilter != originIndex
+                || !config.sortMode.equals(sort.name())
+                || !config.searchText.equals(pending);
+        if (!changed) return;
+
+        config.includeNested = includeNested;
+        config.showMachines = includeMachines;
+        config.originFilter = originIndex;
+        config.sortMode = sort.name();
+        config.searchText = pending;
+        config.save();
     }
 
     private QueryDto.Filters filters() {
@@ -510,7 +537,7 @@ public final class ChestTrackerScreen extends Screen {
             gfx.text(font, Component.literal(row.label()), x + 4, rowY, TEXT_DARK);
             String value = row.value();
             gfx.text(font, Component.literal(value), x + MENU_W - 4 - font.width(value), rowY,
-                    row.active() ? BUTTON_ON_TEXT : TEXT_DARK);
+                    row.active() ? TEXT_DARK : TEXT_MUTED);
         }
     }
 

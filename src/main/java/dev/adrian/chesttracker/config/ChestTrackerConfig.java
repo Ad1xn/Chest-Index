@@ -31,6 +31,12 @@ public final class ChestTrackerConfig {
 
     public boolean includeNested = true;
 
+    public String sortMode = "COUNT";
+
+    public int originFilter = 0;
+
+    public String searchText = "";
+
     public enum Access {
         ALL,
         OWNED,

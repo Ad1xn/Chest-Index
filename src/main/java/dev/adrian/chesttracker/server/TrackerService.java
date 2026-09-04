@@ -61,8 +61,10 @@ public final class TrackerService {
 
     public void record(String dimensionId, ContainerRecord container) {
         ContainerRecord previous = index(dimensionId).get(container.pos());
-        index(dimensionId).put(container);
-        if (previous == null || !previous.sameDataAs(container)) bump(dimensionId);
+        ContainerRecord merged = container.inheriting(previous);
+
+        index(dimensionId).put(merged);
+        if (previous == null || !previous.sameDataAs(merged)) bump(dimensionId);
     }
 
     public ContainerRecord remove(String dimensionId, long pos) {

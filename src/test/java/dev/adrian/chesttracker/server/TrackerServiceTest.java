@@ -98,6 +98,68 @@ class TrackerServiceTest {
         assertNotEquals(after, tracker.generation(DIM));
     }
 
+    private ContainerRecord placedBy(java.util.UUID owner, long tick, StackEntry... contents) {
+        return new ContainerRecord(POS, tracker.palette().intern(DIM),
+                tracker.palette().intern("minecraft:chest"),
+                Origin.PLAYER_PLACED, owner, false, true, null, tick, List.of(contents));
+    }
+
+    private ContainerRecord observed(long tick, StackEntry... contents) {
+        return new ContainerRecord(POS, tracker.palette().intern(DIM),
+                tracker.palette().intern("minecraft:chest"),
+                Origin.UNKNOWN, null, false, true, null, tick, List.of(contents));
+    }
+
+    @Test
+    void aRereadDoesNotErasePlacementOrOwner() {
+        java.util.UUID owner = java.util.UUID.randomUUID();
+        tracker.record(DIM, placedBy(owner, 1));
+
+        tracker.record(DIM, observed(2, new StackEntry(1, 5)));
+
+        ContainerRecord stored = tracker.index(DIM).get(POS);
+        assertEquals(Origin.PLAYER_PLACED, stored.origin());
+        assertEquals(owner, stored.owner());
+        assertEquals(1, stored.contents().size());
+    }
+
+    @Test
+    void anObservationStillEstablishesClassificationWhenNoneWasKnown() {
+        tracker.record(DIM, observed(1));
+        assertEquals(Origin.UNKNOWN, tracker.index(DIM).get(POS).origin());
+
+        tracker.record(DIM, new ContainerRecord(POS, tracker.palette().intern(DIM),
+                tracker.palette().intern("minecraft:chest"), Origin.NATURAL, null,
+                true, false, null, 2, List.of()));
+
+        assertEquals(Origin.NATURAL, tracker.index(DIM).get(POS).origin());
+    }
+
+    @Test
+    void openingAGeneratedChestStopsItBeingUnlooted() {
+        tracker.record(DIM, new ContainerRecord(POS, tracker.palette().intern(DIM),
+                tracker.palette().intern("minecraft:chest"), Origin.NATURAL, null,
+                true, false, null, 1, List.of()));
+
+        tracker.record(DIM, observed(2, new StackEntry(1, 3)));
+
+        ContainerRecord stored = tracker.index(DIM).get(POS);
+        assertFalse(stored.unlooted());
+        assertTrue(stored.contentsKnown());
+        assertEquals(Origin.NATURAL, stored.origin());
+    }
+
+    @Test
+    void inheritedClassificationIsNotReportedAsAChange() {
+        java.util.UUID owner = java.util.UUID.randomUUID();
+        tracker.record(DIM, placedBy(owner, 1, new StackEntry(1, 5)));
+        long after = tracker.generation(DIM);
+
+        tracker.record(DIM, observed(2, new StackEntry(1, 5)));
+
+        assertEquals(after, tracker.generation(DIM));
+    }
+
     @Test
     void dimensionsCountSeparately() {
         tracker.record(DIM, chest(1));

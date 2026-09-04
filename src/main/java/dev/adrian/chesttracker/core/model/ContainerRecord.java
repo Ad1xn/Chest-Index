@@ -31,6 +31,17 @@ public record ContainerRecord(
         return new ContainerRecord(pos, dimensionId, typeId, origin, null, false, false, null, tick, List.of());
     }
 
+    public ContainerRecord inheriting(ContainerRecord previous) {
+        if (previous == null) return this;
+
+        Origin combined = previous.origin.merge(origin);
+        UUID knownOwner = owner != null ? owner : previous.owner;
+        if (combined == origin && knownOwner == owner) return this;
+
+        return new ContainerRecord(pos, dimensionId, typeId, combined, knownOwner,
+                unlooted, contentsKnown, customName, lastSeenTick, contents);
+    }
+
     public boolean sameDataAs(ContainerRecord other) {
         return other != null
                 && pos == other.pos
