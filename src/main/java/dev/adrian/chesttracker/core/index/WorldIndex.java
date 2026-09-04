@@ -191,6 +191,43 @@ public final class WorldIndex {
         return matches;
     }
 
+    public record ItemSummary(int itemId, int totalCount, int containerCount, double nearestDistSq)
+            implements Comparable<ItemSummary> {
+        @Override
+        public int compareTo(ItemSummary other) {
+            int byCount = Integer.compare(other.totalCount, totalCount);
+            return byCount != 0 ? byCount : Double.compare(nearestDistSq, other.nearestDistSq);
+        }
+    }
+
+    public List<ItemSummary> summarise(IndexQuery query) {
+        Map<Integer, int[]> totals = new HashMap<>();
+        Map<Integer, Double> nearest = new HashMap<>();
+
+        for (SearchResult result : query(query)) {
+            ContainerRecord container = result.container();
+            if (!container.contentsKnown()) continue;
+
+            Set<Integer> seenHere = new HashSet<>();
+            for (StackEntry entry : container.contents()) {
+                if (!query.includeNested() && entry.isNested()) continue;
+                if (!query.itemIds().isEmpty() && !query.itemIds().contains(entry.itemId())) continue;
+
+                int[] totalsFor = totals.computeIfAbsent(entry.itemId(), id -> new int[2]);
+                totalsFor[0] += entry.count();
+                if (seenHere.add(entry.itemId())) totalsFor[1]++;
+
+                nearest.merge(entry.itemId(), result.distanceSq(), Math::min);
+            }
+        }
+
+        List<ItemSummary> summaries = new ArrayList<>(totals.size());
+        totals.forEach((itemId, counts) -> summaries.add(new ItemSummary(
+                itemId, counts[0], counts[1], nearest.getOrDefault(itemId, Double.MAX_VALUE))));
+        Collections.sort(summaries);
+        return summaries;
+    }
+
     public Stats stats() {
         int known = 0;
         int unlooted = 0;
