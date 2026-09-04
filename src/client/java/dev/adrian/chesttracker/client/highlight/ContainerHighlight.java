@@ -5,10 +5,13 @@ import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.highlight.HighlightTargets;
 import dev.adrian.chesttracker.core.highlight.HighlightTimer;
 import dev.adrian.chesttracker.core.util.BlockKey;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
@@ -22,10 +25,15 @@ public final class ContainerHighlight {
 
     private HighlightTimer timer = HighlightTimer.defaults();
 
-    private List<Long> targets = List.of();
+    private List<Long> positions = List.of();
 
+    private long pos;
     private String dimensionId;
     private String label;
+
+    private static final double DRAW_RADIUS = 160.0;
+
+    private static final int MAX_BOXES = 96;
 
     private ContainerHighlight() {}
 
@@ -38,46 +46,70 @@ public final class ContainerHighlight {
     }
 
     public void select(List<Long> positions, String dimensionId, String label) {
-        if (positions == null || positions.isEmpty()) {
-            clear();
-            return;
-        }
+        this.positions = positions == null ? List.of() : List.copyOf(positions);
+        long nearest = this.positions.isEmpty() ? 0 : this.positions.get(0);
+        selectPrimary(nearest, dimensionId, label);
+    }
+
+    private void selectPrimary(long pos, String dimensionId, String label) {
         ChestTrackerConfig config = ChestTrackerConfig.get();
         this.timer = new HighlightTimer(config.highlightDurationMs(),
                 config.highlightRecedingGraceMs(), SAMPLE_INTERVAL_MS);
-        this.targets = List.copyOf(positions);
+        this.pos = pos;
         this.dimensionId = dimensionId;
         this.label = label;
 
         LocalPlayer player = Minecraft.getInstance().player;
-        double distance = player == null ? 0 : distanceTo(player, nearestTo(player));
+        double distance = player == null ? 0 : distanceTo(player);
         timer.start(distance, System.currentTimeMillis());
     }
 
     public void clear() {
         timer.clear();
-        targets = List.of();
+        positions = List.of();
+    }
+
+    public boolean hasBoxes() {
+        return timer.isActive() && !positions.isEmpty()
+                && ChestTrackerConfig.get().inWorldHighlight;
+    }
+
+    public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        int drawn = 0;
+        for (Long position : positions) {
+            if (drawn >= MAX_BOXES) break;
+
+            double x = BlockKey.x(position);
+            double y = BlockKey.y(position);
+            double z = BlockKey.z(position);
+
+            double dx = x + 0.5 - eye.x;
+            double dy = y + 0.5 - eye.y;
+            double dz = z + 0.5 - eye.z;
+            if (dx * dx + dy * dy + dz * dz > DRAW_RADIUS * DRAW_RADIUS) continue;
+
+            boolean nearest = position == pos;
+            HighlightBox.emit(pose, lines, x - eye.x, y - eye.y, z - eye.z,
+                    nearest ? 1.0f : 0.25f,
+                    nearest ? 0.82f : 0.85f,
+                    nearest ? 0.2f : 1.0f,
+                    0.9f);
+            drawn++;
+        }
+    }
+
+    private void followNearest(LocalPlayer player) {
+        if (positions.size() < 2) return;
+        pos = HighlightTargets.nearest(positions,
+                player.getBlockX(), player.getBlockY(), player.getBlockZ());
     }
 
     public boolean isActive() {
         return timer.isActive();
     }
 
-    public List<Long> targets() {
-        return targets;
-    }
-
-    public String dimensionId() {
-        return dimensionId;
-    }
-
-    public String label() {
-        return label;
-    }
-
     public long pos() {
-        LocalPlayer player = Minecraft.getInstance().player;
-        return targets.isEmpty() || player == null ? 0L : nearestTo(player);
+        return pos;
     }
 
     public void tick() {
@@ -85,47 +117,38 @@ public final class ContainerHighlight {
 
         Minecraft client = Minecraft.getInstance();
         LocalPlayer player = client.player;
-        if (player == null || targets.isEmpty()) {
-            clear();
+        if (player == null) {
+            timer.clear();
             return;
         }
         if (!player.level().dimension().identifier().toString().equals(dimensionId)) {
-            clear();
+            timer.clear();
             return;
         }
 
-        long target = nearestTo(player);
-        double distance = distanceTo(player, target);
+        followNearest(player);
+
+        double distance = distanceTo(player);
         if (!timer.update(distance, System.currentTimeMillis())) {
             return;
         }
 
         if (distance <= ARRIVAL_DISTANCE) {
-            ClientCompat.actionBar(Component.literal(label + " - you are here" + remainder())
+            ClientCompat.actionBar(Component.literal(label + " - you are here")
                     .withStyle(ChatFormatting.GREEN));
             return;
         }
 
-        ClientCompat.actionBar(Component.literal(String.format("%s  %s  %.0fm%s",
-                label, bearing(player, target), distance, remainder()))
-                .withStyle(ChatFormatting.AQUA));
+        ClientCompat.actionBar(Component.literal(String.format("%s  %s  %.0fm",
+                label, bearing(player), distance)).withStyle(ChatFormatting.AQUA));
     }
 
-    private String remainder() {
-        return targets.size() > 1 ? "  (+" + (targets.size() - 1) + " more)" : "";
-    }
-
-    private long nearestTo(LocalPlayer player) {
-        return HighlightTargets.nearest(targets,
-                player.getBlockX(), player.getBlockY(), player.getBlockZ());
-    }
-
-    private double distanceTo(LocalPlayer player, long pos) {
+    private double distanceTo(LocalPlayer player) {
         return Math.sqrt(BlockKey.distanceSq(
                 BlockKey.pack(player.getBlockX(), player.getBlockY(), player.getBlockZ()), pos));
     }
 
-    private String bearing(LocalPlayer player, long pos) {
+    private String bearing(LocalPlayer player) {
         double dx = BlockKey.x(pos) + 0.5 - player.getX();
         double dz = BlockKey.z(pos) + 0.5 - player.getZ();
         double targetYaw = Math.toDegrees(Math.atan2(-dx, dz));

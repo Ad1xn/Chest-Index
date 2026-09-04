@@ -144,7 +144,7 @@ class ChunkExtractorTest {
     }
 
     @Test
-    void extractsStructureBoundingBoxesIncludingChildren() throws IOException {
+    void usesStructurePiecesRatherThanTheWholeStructureBox() throws IOException {
         NbtCompound chunk = parse(NbtTestWriter.compound()
                 .put("structures", NbtTestWriter.compound()
                         .put("starts", NbtTestWriter.compound()
@@ -156,10 +156,24 @@ class ChunkExtractorTest {
         List<ChunkExtractor.StructureBox> boxes =
                 ChunkExtractor.extract(chunk, null, 0, palette, 0L).structureBoxes();
 
-        assertEquals(2, boxes.size());
-        assertTrue(boxes.get(0).contains(20, 70, 20));
-        assertFalse(boxes.get(0).contains(100, 70, 20));
-        assertTrue(boxes.get(1).contains(10, 65, 10));
+        assertEquals(1, boxes.size());
+        assertTrue(boxes.get(0).contains(10, 65, 10));
+        assertFalse(boxes.get(0).contains(30, 70, 30));
+    }
+
+    @Test
+    void fallsBackToTheStructureBoxWhenItHasNoPieces() throws IOException {
+        NbtCompound chunk = parse(NbtTestWriter.compound()
+                .put("structures", NbtTestWriter.compound()
+                        .put("starts", NbtTestWriter.compound()
+                                .put("minecraft:buried_treasure", NbtTestWriter.compound()
+                                        .put("BB", new int[]{0, 60, 0, 4, 64, 4})))));
+
+        List<ChunkExtractor.StructureBox> boxes =
+                ChunkExtractor.extract(chunk, null, 0, palette, 0L).structureBoxes();
+
+        assertEquals(1, boxes.size());
+        assertTrue(boxes.get(0).contains(2, 62, 2));
     }
 
     @Test
