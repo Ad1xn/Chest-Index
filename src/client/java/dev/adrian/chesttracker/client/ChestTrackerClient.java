@@ -44,6 +44,7 @@ public final class ChestTrackerClient implements ClientModInitializer {
                 ClientCompat.openScreen(new ChestTrackerScreen());
             }
             ContainerHighlight.get().tick();
+            ContainerScreens.tick();
             ServerLink.tick();
         });
     }
