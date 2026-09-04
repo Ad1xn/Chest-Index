@@ -22,6 +22,7 @@ versions/*/build/
 run/
 runs/
 versions/*/run/
+versions/*/logs/
 
 # OS
 .DS_Store

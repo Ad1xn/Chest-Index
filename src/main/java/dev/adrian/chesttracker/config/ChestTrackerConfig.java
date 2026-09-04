@@ -25,6 +25,28 @@ public final class ChestTrackerConfig {
 
     public boolean includeNested = true;
 
+    public enum Access {
+        ALL,
+        OWNED,
+        OP;
+
+        public static Access parse(String value) {
+            if (value == null) return OP;
+            for (Access access : values()) {
+                if (access.name().equalsIgnoreCase(value.trim())) return access;
+            }
+            return OP;
+        }
+    }
+
+    public String permissionTier = Access.OP.name();
+
+    public Access permissionTier() {
+        return Access.parse(permissionTier);
+    }
+
+    public int serverHelloTimeoutMs = 3000;
+
     public int highlightSeconds = 45;
 
     public int highlightRecedingGraceSeconds = 10;

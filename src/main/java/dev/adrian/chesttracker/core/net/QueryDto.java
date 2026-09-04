@@ -15,6 +15,10 @@ public final class QueryDto {
         public static final int ORIGIN_PLAYER_PLACED = 1;
         public static final int ORIGIN_NATURAL = 2;
 
+        public Filters {
+            if (originFilter < ORIGIN_ANY || originFilter > ORIGIN_NATURAL) originFilter = ORIGIN_ANY;
+        }
+
         public static Filters defaults() {
             return new Filters(true, false, ORIGIN_ANY);
         }
@@ -28,24 +32,29 @@ public final class QueryDto {
         }
     }
 
-    public record SummaryRequest(String text, Filters filters, long centre, int limit) {}
+    public record SummaryRequest(int requestId, String text, Filters filters, int limit) {}
 
     public record ItemSummary(String itemId, int totalCount, int containerCount, double nearestDistSq) {}
 
-    public record SummaryResponse(List<ItemSummary> items) {
+    public record SummaryResponse(int requestId, List<ItemSummary> items) {
         public SummaryResponse {
             items = items == null ? List.of() : List.copyOf(items);
         }
     }
 
-    public record ContainerRequest(String itemId, Filters filters, long centre, int limit) {}
+    public record ContainerRequest(int requestId, String itemId, Filters filters, int limit) {}
 
     public record ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
                                boolean nested, boolean natural, boolean contentsKnown) {}
 
-    public record ContainerResponse(List<ContainerHit> hits) {
+    public record ContainerResponse(int requestId, List<ContainerHit> hits) {
         public ContainerResponse {
             hits = hits == null ? List.of() : List.copyOf(hits);
         }
+    }
+
+    public record Hello(int protocolVersion, boolean canQuery) {
+
+        public static final int PROTOCOL_VERSION = 1;
     }
 }

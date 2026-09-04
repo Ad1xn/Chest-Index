@@ -1,5 +1,6 @@
 package dev.adrian.chesttracker;
 
+import dev.adrian.chesttracker.net.ChestTrackerNetwork;
 import dev.adrian.chesttracker.server.ChestTrackerCommands;
 import dev.adrian.chesttracker.server.TrackerService;
 import dev.adrian.chesttracker.server.Trackers;
@@ -22,6 +23,9 @@ public final class ChestTracker implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        ChestTrackerNetwork.registerTypes();
+        ChestTrackerNetwork.registerServerHandlers();
+
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             TrackerService tracker = new TrackerService(
                     server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(MOD_ID));

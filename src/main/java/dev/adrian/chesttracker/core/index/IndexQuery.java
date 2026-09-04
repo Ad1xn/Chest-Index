@@ -3,6 +3,7 @@ package dev.adrian.chesttracker.core.index;
 import dev.adrian.chesttracker.core.model.Origin;
 
 import java.util.Set;
+import java.util.UUID;
 
 public record IndexQuery(
         Set<Integer> itemIds,
@@ -11,6 +12,7 @@ public record IndexQuery(
         Set<Integer> excludedTypeIds,
         boolean unlootedOnly,
         boolean knownContentsOnly,
+        UUID owner,
         boolean includeNested,
         long center,
         double maxDistance,
@@ -43,6 +45,7 @@ public record IndexQuery(
         private Set<Integer> excludedTypeIds = Set.of();
         private boolean unlootedOnly;
         private boolean knownContentsOnly;
+        private UUID owner;
         private boolean includeNested = true;
         private long center;
         private double maxDistance;
@@ -56,6 +59,7 @@ public record IndexQuery(
         public Builder excludeTypes(Set<Integer> ids) { this.excludedTypeIds = ids; return this; }
         public Builder unlootedOnly(boolean v) { this.unlootedOnly = v; return this; }
         public Builder knownContentsOnly(boolean v) { this.knownContentsOnly = v; return this; }
+        public Builder owner(UUID id) { this.owner = id; return this; }
         public Builder includeNested(boolean v) { this.includeNested = v; return this; }
         public Builder center(long packedPos) { this.center = packedPos; return this; }
         public Builder maxDistance(double blocks) { this.maxDistance = blocks; return this; }
@@ -63,7 +67,7 @@ public record IndexQuery(
 
         public IndexQuery build() {
             return new IndexQuery(itemIds, origins, typeIds, excludedTypeIds, unlootedOnly,
-                    knownContentsOnly, includeNested, center, maxDistance, limit);
+                    knownContentsOnly, owner, includeNested, center, maxDistance, limit);
         }
     }
 }

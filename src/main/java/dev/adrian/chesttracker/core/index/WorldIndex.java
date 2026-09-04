@@ -178,6 +178,7 @@ public final class WorldIndex {
         if (query.excludedTypeIds().contains(record.typeId())) return false;
         if (query.unlootedOnly() && !record.unlooted()) return false;
         if (query.knownContentsOnly() && !record.contentsKnown()) return false;
+        if (query.owner() != null && !query.owner().equals(record.owner())) return false;
         return true;
     }
 

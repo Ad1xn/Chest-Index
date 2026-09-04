@@ -52,6 +52,9 @@ public final class ConfigScreen extends Screen {
 
         addRenderableWidget(stepper(x, y, "Grace when walking away", () -> config.highlightRecedingGraceSeconds,
                 value -> config.highlightRecedingGraceSeconds = value, 5, 5, 120));
+        y += ROW_HEIGHT;
+
+        addRenderableWidget(accessCycle(x, y));
         y += ROW_HEIGHT + 8;
 
         addRenderableWidget(Button.builder(Component.literal("Done"), button -> onClose())
@@ -79,6 +82,24 @@ public final class ConfigScreen extends Screen {
             setter.accept(next);
             button.setMessage(Component.literal(label + ": " + getter.getAsInt()));
         }).bounds(x, y, WIDGET_WIDTH, 20).build();
+    }
+
+    private Button accessCycle(int x, int y) {
+        return Button.builder(Component.literal(accessLabel()), button -> {
+            ChestTrackerConfig.Access[] tiers = ChestTrackerConfig.Access.values();
+            int next = (config.permissionTier().ordinal() + 1) % tiers.length;
+            config.permissionTier = tiers[next].name();
+            button.setMessage(Component.literal(accessLabel()));
+        }).bounds(x, y, WIDGET_WIDTH, 20).build();
+    }
+
+    private String accessLabel() {
+        String tier = switch (config.permissionTier()) {
+            case ALL -> "everyone";
+            case OWNED -> "own containers";
+            case OP -> "operators";
+        };
+        return "Players served: " + tier;
     }
 
     private static String onOff(boolean value) {

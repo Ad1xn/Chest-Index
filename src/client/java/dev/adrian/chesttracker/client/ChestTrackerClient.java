@@ -3,6 +3,7 @@ package dev.adrian.chesttracker.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chesttracker.ChestTracker;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
+import dev.adrian.chesttracker.client.net.ServerLink;
 import dev.adrian.chesttracker.client.platform.ClientCompat;
 import dev.adrian.chesttracker.client.ui.ChestTrackerScreen;
 import net.fabricmc.api.ClientModInitializer;
@@ -18,6 +19,8 @@ public final class ChestTrackerClient implements ClientModInitializer {
     public void onInitializeClient() {
         ChestTracker.LOG.info("ChestTracker initialising (client)");
 
+        ServerLink.register();
+
         openSearch = ClientCompat.registerKeyMapping(new KeyMapping(
                 "key.chestindex.search",
                 InputConstants.Type.KEYSYM,
@@ -29,6 +32,7 @@ public final class ChestTrackerClient implements ClientModInitializer {
                 ClientCompat.openScreen(new ChestTrackerScreen());
             }
             ContainerHighlight.get().tick();
+            ServerLink.tick();
         });
     }
 }
