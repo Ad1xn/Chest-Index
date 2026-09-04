@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 
@@ -78,7 +79,8 @@ public final class LiveScanner {
 
             long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
             actual.add(key);
-            tracker.record(dimensionId, toRecord(blockEntity, key, typeId, dimensionId, tick));
+            tracker.record(dimensionId, toRecord(blockEntity, key, typeId, dimensionId, tick,
+                    naturalityOf(level, pos, key, dimensionId)));
             found++;
         }
 
@@ -104,12 +106,21 @@ public final class LiveScanner {
 
         String typeId = ContainerTypes.idOf(blockEntity);
         if (typeId == null) return true;
-        tracker.record(dimensionId, toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime()));
+        tracker.record(dimensionId, toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime(),
+                naturalityOf(level, blockPos, pos, dimensionId)));
         return true;
     }
 
+    private Origin naturalityOf(ServerLevel level, BlockPos blockPos, long pos, String dimensionId) {
+        if (tracker.index(dimensionId).get(pos) != null) return Origin.UNKNOWN;
+
+        StructureStart start = level.structureManager()
+                .getStructureWithPieceAt(blockPos, holder -> true);
+        return start != null && start.isValid() ? Origin.NATURAL : Origin.UNKNOWN;
+    }
+
     private ContainerRecord toRecord(BlockEntity blockEntity, long pos, String typeId,
-                                     String dimensionId, long tick) {
+                                     String dimensionId, long tick, Origin observed) {
         boolean unlooted = blockEntity instanceof RandomizableContainerBlockEntity randomizable
                 && randomizable.getLootTable() != null;
 
@@ -122,7 +133,7 @@ public final class LiveScanner {
         }
 
         List<StackEntry> contents = LiveContainerReader.read((Container) blockEntity, tracker.palette());
-        return new ContainerRecord(pos, dimId, typeKey, Origin.UNKNOWN, null,
+        return new ContainerRecord(pos, dimId, typeKey, observed, null,
                 false, true, null, tick, contents);
     }
 }

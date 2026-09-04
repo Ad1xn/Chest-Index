@@ -54,9 +54,11 @@ public final class ChestTrackerScreen extends Screen {
     private static final int BEVEL_DARK = 0xFF555555;
     private static final int GROOVE = 0xFF8B8B8B;
     private static final int GROOVE_DARK = 0xFF373737;
-    private static final int TEXT_DARK = 0xFF404040;
+    private static final int TEXT_MAIN = 0xFFFFFFFF;
 
-    private static final int TEXT_MUTED = 0xFF808080;
+    private static final int TEXT_MUTED = 0xFFAAAAAA;
+
+    private static final int ICON = 0xFF404040;
     private static final int TEXT_LIGHT = 0xFFFFFFFF;
     private static final int SLOT_HOVER = 0x80FFFFFF;
     private static final int ROW_HOVER = 0x40000000;
@@ -315,7 +317,7 @@ public final class ChestTrackerScreen extends Screen {
         }
 
         if (!canQuery()) {
-            gfx.text(font, Component.literal(unavailableMessage()), gridX(), gridY() + 4, TEXT_DARK);
+            gfx.text(font, Component.literal(unavailableMessage()), gridX(), gridY() + 4, TEXT_MAIN);
             return;
         }
 
@@ -329,7 +331,7 @@ public final class ChestTrackerScreen extends Screen {
         String title = hoverLabel != null ? hoverLabel
                 : selectedItemId != null ? displayName(selectedItemId) : "Chest Tracker";
         int available = buttonX(0) - (panelX + 8) - 4;
-        gfx.text(font, Component.literal(truncate(title, available)), panelX + 8, panelY + 6, TEXT_DARK);
+        gfx.text(font, Component.literal(truncate(title, available)), panelX + 8, panelY + 6, TEXT_MAIN);
 
         drawMenu(gfx, mouseX, mouseY);
     }
@@ -418,7 +420,7 @@ public final class ChestTrackerScreen extends Screen {
                     displayName(summary.itemId()), summary.totalCount(), summary.containerCount());
         } else if (items.isEmpty()) {
             gfx.text(font, Component.literal(pending.isBlank() ? "Nothing indexed yet" : "No match"),
-                    gridX(), gridY() + 4, TEXT_DARK);
+                    gridX(), gridY() + 4, TEXT_MAIN);
         }
     }
 
@@ -507,10 +509,10 @@ public final class ChestTrackerScreen extends Screen {
 
             if (i == 0) {
                 for (int line = 0; line < 3; line++) {
-                    gfx.fill(x + 3, y + 3 + line * 3, x + BUTTON_SIZE - 3, y + 4 + line * 3, TEXT_DARK);
+                    gfx.fill(x + 3, y + 3 + line * 3, x + BUTTON_SIZE - 3, y + 4 + line * 3, ICON);
                 }
             } else {
-                gfx.text(font, "X", x + 3, y + 2, TEXT_DARK);
+                gfx.text(font, "X", x + 3, y + 2, TEXT_MAIN);
             }
         }
     }
@@ -534,10 +536,10 @@ public final class ChestTrackerScreen extends Screen {
             if (mouseX >= x && mouseX < x + MENU_W && mouseY >= rowY - 1 && mouseY < rowY + MENU_ROW_H - 1) {
                 gfx.fill(x + 1, rowY - 1, x + MENU_W, rowY + MENU_ROW_H - 1, SLOT_HOVER);
             }
-            gfx.text(font, Component.literal(row.label()), x + 4, rowY, TEXT_DARK);
+            gfx.text(font, Component.literal(row.label()), x + 4, rowY, TEXT_MAIN);
             String value = row.value();
             gfx.text(font, Component.literal(value), x + MENU_W - 4 - font.width(value), rowY,
-                    row.active() ? TEXT_DARK : TEXT_MUTED);
+                    row.active() ? TEXT_MAIN : TEXT_MUTED);
         }
     }
 
@@ -548,7 +550,7 @@ public final class ChestTrackerScreen extends Screen {
 
         if (containers.isEmpty()) {
             gfx.text(font, Component.literal(containersPending ? "Looking..." : "Nothing holds that."),
-                    x, y, TEXT_DARK);
+                    x, y, TEXT_MAIN);
             return;
         }
 
@@ -557,7 +559,7 @@ public final class ChestTrackerScreen extends Screen {
             boolean hovered = mouseX >= x && mouseX <= panelX + panelW - 10
                     && mouseY >= y && mouseY < y + DETAIL_ROW;
             if (hovered) gfx.fill(x - 1, y - 1, panelX + panelW - 10, y + DETAIL_ROW - 1, ROW_HOVER);
-            gfx.text(font, Component.literal(describe(hit)), x, y, TEXT_DARK);
+            gfx.text(font, Component.literal(describe(hit)), x, y, TEXT_MAIN);
             y += DETAIL_ROW;
         }
         hoverLabel = "Click to be guided  -  right-click to go back";
