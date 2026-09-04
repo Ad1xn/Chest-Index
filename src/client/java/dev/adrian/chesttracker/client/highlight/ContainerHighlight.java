@@ -10,6 +10,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 
@@ -30,6 +31,8 @@ public final class ContainerHighlight {
     private long pos;
     private String dimensionId;
     private String label;
+
+    private int turnTicksLeft;
 
     private static final double DRAW_RADIUS = 160.0;
 
@@ -62,6 +65,7 @@ public final class ContainerHighlight {
         LocalPlayer player = Minecraft.getInstance().player;
         double distance = player == null ? 0 : distanceTo(player);
         timer.start(distance, System.currentTimeMillis());
+        turnTicksLeft = ChestTrackerConfig.get().turnToTarget ? TURN_TICKS : 0;
     }
 
     public void clear() {
@@ -73,6 +77,14 @@ public final class ContainerHighlight {
 
     private static final double MAX_GROW = 3.0;
 
+    private static final double GUIDE_MIN_DISTANCE = 12.0;
+
+    private static final double GUIDE_START = 3.0;
+
+    private static final double GUIDE_DROP = 0.6;
+
+    private static final int TURN_TICKS = 7;
+
     private static final float BASE_LINE_WIDTH = 2.5f;
     private static final float LINE_WIDTH_PER_BLOCK = 0.06f;
     private static final float MAX_LINE_WIDTH = 8.0f;
@@ -83,6 +95,8 @@ public final class ContainerHighlight {
     }
 
     public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        drawGuideLine(pose, lines, eye);
+
         int drawn = 0;
         for (Long position : positions) {
             if (drawn >= MAX_BOXES) break;
@@ -110,6 +124,42 @@ public final class ContainerHighlight {
                     0.9f, grow, width);
             drawn++;
         }
+    }
+
+    private void turnTowards(LocalPlayer player) {
+        if (turnTicksLeft <= 0) return;
+
+        double dx = BlockKey.x(pos) + 0.5 - player.getX();
+        double dy = BlockKey.y(pos) + 0.5 - player.getEyeY();
+        double dz = BlockKey.z(pos) + 0.5 - player.getZ();
+
+        float wantYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float wantPitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
+
+        float yawGap = Mth.wrapDegrees(wantYaw - player.getYRot());
+        float pitchGap = wantPitch - player.getXRot();
+        float step = 1.0f / turnTicksLeft;
+
+        player.setYRot(player.getYRot() + yawGap * step);
+        player.setXRot(player.getXRot() + pitchGap * step);
+        turnTicksLeft--;
+    }
+
+    private void drawGuideLine(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        if (positions.isEmpty() || !ChestTrackerConfig.get().guideLine) return;
+
+        double tx = BlockKey.x(pos) + 0.5 - eye.x;
+        double ty = BlockKey.y(pos) + 0.5 - eye.y;
+        double tz = BlockKey.z(pos) + 0.5 - eye.z;
+
+        double length = Math.sqrt(tx * tx + ty * ty + tz * tz);
+        if (length < GUIDE_MIN_DISTANCE || length > DRAW_RADIUS) return;
+
+        double scale = GUIDE_START / length;
+        HighlightBox.line(pose, lines,
+                tx * scale, ty * scale - GUIDE_DROP, tz * scale,
+                tx, ty, tz,
+                1.0f, 0.82f, 0.2f, 0.65f, 3.0f);
     }
 
     private void followNearest(LocalPlayer player) {
@@ -141,6 +191,7 @@ public final class ContainerHighlight {
         }
 
         followNearest(player);
+        turnTowards(player);
 
         double distance = distanceTo(player);
         if (!timer.update(distance, System.currentTimeMillis())) {

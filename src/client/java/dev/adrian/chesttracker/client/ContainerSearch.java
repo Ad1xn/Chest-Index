@@ -4,13 +4,20 @@ import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
 import dev.adrian.chesttracker.client.platform.ClientCompat;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.net.QueryDto;
+import dev.adrian.chesttracker.core.util.BlockKey;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.Container;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
@@ -55,6 +62,7 @@ public final class ContainerSearch {
                     ContainerHighlight.get().select(
                             hits.stream().map(QueryDto.ContainerHit::pos).toList(),
                             dimensionId, label);
+                    openIfInReach(hits, now);
                 }));
         return true;
     }
@@ -65,7 +73,33 @@ public final class ContainerSearch {
 
     private static QueryDto.Filters filters() {
         ChestTrackerConfig config = ChestTrackerConfig.get();
-        return new QueryDto.Filters(config.includeNested, false, QueryDto.Filters.ORIGIN_ANY);
+        return new QueryDto.Filters(config.includeNested, config.showMachines, config.originFilter);
+    }
+
+    private static boolean openIfInReach(List<QueryDto.ContainerHit> hits, LocalPlayer player) {
+        if (!ChestTrackerConfig.get().openInReach) return false;
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null || ClientCompat.currentScreen() != null) return false;
+
+        double reach = player.blockInteractionRange();
+        QueryDto.ContainerHit best = null;
+        BlockPos bestPos = null;
+
+        for (QueryDto.ContainerHit hit : hits) {
+            BlockPos pos = new BlockPos(BlockKey.x(hit.pos()), BlockKey.y(hit.pos()), BlockKey.z(hit.pos()));
+            if (player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > reach * reach) continue;
+            if (!(client.level.getBlockEntity(pos) instanceof Container)) continue;
+            if (best == null || hit.matchedCount() > best.matchedCount()) {
+                best = hit;
+                bestPos = pos;
+            }
+        }
+
+        if (best == null) return false;
+
+        BlockHitResult where = new BlockHitResult(Vec3.atCenterOf(bestPos), Direction.UP, bestPos, false);
+        client.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, where);
+        return true;
     }
 
     private static String unavailableMessage() {

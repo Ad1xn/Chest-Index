@@ -94,6 +94,12 @@ public final class ChestTrackerConfig {
         return Display.parse(highlightDisplay);
     }
 
+    public boolean openInReach = true;
+
+    public boolean turnToTarget = true;
+
+    public boolean guideLine = true;
+
     public int highlightSeconds = 45;
 
     public int highlightRecedingGraceSeconds = 10;
