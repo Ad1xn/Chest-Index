@@ -84,17 +84,17 @@ public final class ContainerHighlight {
         this.searchedItemId = itemId;
     }
 
-    private static final double GROW_PER_BLOCK = 0.004;
+    private static final double GROW_PER_BLOCK = 0.002;
 
     private static final double FAR_FROM = 200.0;
 
-    private static final double FAR_GROW_PER_BLOCK = 0.012;
+    private static final double FAR_GROW_PER_BLOCK = 0.004;
 
-    private static final double GROW_STEP = 0.5;
+    private static final double GROW_STEP = 0.25;
 
     private static final double GROW_FROM = 24.0;
 
-    private static final double MAX_GROW = 4.0;
+    private static final double MAX_GROW = 0.75;
 
     private static final double BEAM_MIN_DISTANCE = 8.0;
 
