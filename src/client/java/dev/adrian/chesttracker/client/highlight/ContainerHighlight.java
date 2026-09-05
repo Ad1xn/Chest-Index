@@ -34,7 +34,9 @@ public final class ContainerHighlight {
 
     private String searchedItemId;
 
-    private int turnTicksLeft;
+    private float turnSecondsLeft;
+
+    private long turnLastFrameAt;
 
     private static final double DRAW_RADIUS = 512.0;
 
@@ -67,7 +69,8 @@ public final class ContainerHighlight {
         LocalPlayer player = Minecraft.getInstance().player;
         double distance = player == null ? 0 : distanceTo(player);
         timer.start(distance, System.currentTimeMillis());
-        turnTicksLeft = ChestTrackerConfig.get().turnToTarget ? TURN_MAX_TICKS : 0;
+        turnSecondsLeft = ChestTrackerConfig.get().turnToTarget ? TURN_MAX_SECONDS : 0.0f;
+        turnLastFrameAt = System.nanoTime();
     }
 
     public void clear() {
@@ -104,13 +107,15 @@ public final class ContainerHighlight {
 
     private static final double MAX_BEAM_HEIGHT = 420.0;
 
-    private static final float TURN_EASE = 0.28f;
+    private static final float TURN_EASE_PER_SECOND = 6.0f;
 
     private static final float TURN_DONE_DEGREES = 0.75f;
 
-    private static final float TURN_MAX_STEP = 7.0f;
+    private static final float TURN_MAX_PER_SECOND = 150.0f;
 
-    private static final int TURN_MAX_TICKS = 30;
+    private static final float MAX_FRAME_SECONDS = 0.1f;
+
+    private static final float TURN_MAX_SECONDS = 1.5f;
 
     private static final float BASE_LINE_WIDTH = 2.0f;
     private static final float LINE_WIDTH_PER_BLOCK = 0.02f;
@@ -182,8 +187,20 @@ public final class ContainerHighlight {
         return Math.round(grow / GROW_STEP) * GROW_STEP;
     }
 
-    private void turnTowards(LocalPlayer player) {
-        if (turnTicksLeft <= 0) return;
+    public void turnTowardsTarget() {
+        if (turnSecondsLeft <= 0.0f) return;
+
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null || positions.isEmpty() || !timer.isActive()) {
+            turnSecondsLeft = 0.0f;
+            return;
+        }
+
+        long now = System.nanoTime();
+        float seconds = Math.min(MAX_FRAME_SECONDS, (now - turnLastFrameAt) / 1_000_000_000.0f);
+        turnLastFrameAt = now;
+        if (seconds <= 0.0f) return;
+        turnSecondsLeft -= seconds;
 
         double dx = BlockKey.x(pos) + 0.5 - player.getX();
         double dy = BlockKey.y(pos) + 0.5 - player.getEyeY();
@@ -196,15 +213,15 @@ public final class ContainerHighlight {
         float pitchGap = wantPitch - player.getXRot();
 
         if (Math.abs(yawGap) < TURN_DONE_DEGREES && Math.abs(pitchGap) < TURN_DONE_DEGREES) {
-            turnTicksLeft = 0;
+            turnSecondsLeft = 0.0f;
             return;
         }
 
-        player.setYRot(player.getYRot()
-                + Mth.clamp(yawGap * TURN_EASE, -TURN_MAX_STEP, TURN_MAX_STEP));
-        player.setXRot(player.getXRot()
-                + Mth.clamp(pitchGap * TURN_EASE, -TURN_MAX_STEP, TURN_MAX_STEP));
-        turnTicksLeft--;
+        float ease = Math.min(1.0f, TURN_EASE_PER_SECOND * seconds);
+        float limit = TURN_MAX_PER_SECOND * seconds;
+
+        player.setYRot(player.getYRot() + Mth.clamp(yawGap * ease, -limit, limit));
+        player.setXRot(player.getXRot() + Mth.clamp(pitchGap * ease, -limit, limit));
     }
 
     private void followNearest(LocalPlayer player) {
@@ -236,7 +253,6 @@ public final class ContainerHighlight {
         }
 
         followNearest(player);
-        turnTowards(player);
 
         double distance = distanceTo(player);
         if (!timer.update(distance, System.currentTimeMillis())) {

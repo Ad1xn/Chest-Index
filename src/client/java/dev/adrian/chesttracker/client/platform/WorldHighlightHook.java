@@ -13,6 +13,7 @@ public final class WorldHighlightHook {
         //? if >=26.1 {
         /*net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN
                 .register(context -> {
+                    ContainerHighlight.get().turnTowardsTarget();
                     if (!ContainerHighlight.get().hasBoxes()) return;
                     context.submitNodeCollector().submitCustomGeometry(
                             context.poseStack(), RenderTypes.lines(),
@@ -24,6 +25,7 @@ public final class WorldHighlightHook {
         *///?} else {
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AFTER_ENTITIES
                 .register(context -> {
+                    ContainerHighlight.get().turnTowardsTarget();
                     if (!ContainerHighlight.get().hasBoxes()) return;
                     Camera camera = context.gameRenderer().getMainCamera();
                     ContainerHighlight.get().drawBoxes(

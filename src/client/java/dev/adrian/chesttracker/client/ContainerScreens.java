@@ -23,7 +23,6 @@ public final class ContainerScreens {
     private static final long DEBOUNCE_MS = 300;
 
     private static KeyMapping searchKey;
-    private static boolean keyWasDown;
     private static long lastTrigger;
 
     private static SearchButton button;
@@ -59,31 +58,16 @@ public final class ContainerScreens {
                     SlotHighlight.draw(gfx, container,
                             access.chesttracker$leftPos(), access.chesttracker$topPos()));
 
-            ScreenKeyboardEvents.beforeKeyPress(screen).register((ignored, keyEvent) -> {
-                if (searchHovered.matches(keyEvent)) trigger(container, "screen event");
+            ScreenKeyboardEvents.allowKeyPress(screen).register((ignored, keyEvent) -> {
+                if (!searchHovered.matches(keyEvent)) return true;
+                trigger(container);
+                return false;
             });
         });
     }
 
     public static void tick() {
-        Minecraft client = Minecraft.getInstance();
-        AbstractContainerScreen<?> container =
-                ClientCompat.currentScreen() instanceof AbstractContainerScreen<?> open ? open : null;
-        if (container == null || searchKey == null || client.getWindow() == null) {
-            keyWasDown = false;
-            return;
-        }
-
-        InputConstants.Key key = ((KeyMappingAccessor) searchKey).chesttracker$key();
-        boolean down = key != null
-                && key.getType() == InputConstants.Type.KEYSYM
-                && key.getValue() >= 0
-                && InputConstants.isKeyDown(client.getWindow(), key.getValue());
-
-        if (down && !keyWasDown) trigger(container, "poll");
-        keyWasDown = down;
-
-        dragButton(client);
+        dragButton(Minecraft.getInstance());
     }
 
     private static void dragButton(Minecraft client) {
@@ -119,12 +103,10 @@ public final class ContainerScreens {
         rightWasDown = down;
     }
 
-    private static void trigger(AbstractContainerScreen<?> container, String via) {
+    private static void trigger(AbstractContainerScreen<?> container) {
         long now = System.currentTimeMillis();
         if (now - lastTrigger < DEBOUNCE_MS) return;
         lastTrigger = now;
-
-        ChestTracker.LOG.info("Container search key fired via {}", via);
 
         Slot hovered = ((ContainerScreenAccessor) container).chesttracker$hoveredSlot();
         if (hovered == null || !hovered.hasItem()) {
