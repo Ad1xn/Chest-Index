@@ -5,6 +5,7 @@ import dev.adrian.chesttracker.client.platform.Gfx;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -61,14 +62,17 @@ public final class ConfigScreen extends Screen {
         int y = rowY();
 
         place(toggle(x, y, "Scan world on join",
+                "Reads the world off disk in the background when you join, so containers in\nchunks you have never visited are found too. Costs some throughput for a\nfew seconds on a large world.",
                 () -> config.scanOnWorldJoin, value -> config.scanOnWorldJoin = value));
 
         x = columnX(); y = rowY();
         place(toggle(x, y, "Count items inside shulker boxes",
+                "Whether a shulker box in a chest contributes its contents to that chest,\nor only counts as a shulker box.",
                 () -> config.includeNested, value -> config.includeNested = value));
 
         x = columnX(); y = rowY();
         place(toggle(x, y, "Show machines by default",
+                "Hoppers, furnaces, droppers and the like. Always indexed; this is only\nwhether the search screen starts with them shown.",
                 () -> config.showMachines, value -> config.showMachines = value));
 
         x = columnX(); y = rowY();
@@ -117,18 +121,22 @@ public final class ConfigScreen extends Screen {
 
         x = columnX(); y = rowY();
         place(toggle(x, y, "Trail of marks above matches",
+                "Stands a column of fading marks on every match. This is the part that\nstill works past render distance, where there is no terrain drawn to place\na box against.",
                 () -> config.guideBeam, value -> config.guideBeam = value));
 
         x = columnX(); y = rowY();
         place(toggle(x, y, "Open a match already in reach",
+                "If a container you just searched for is within normal reach, open it\ninstead of pointing at it. Sends the same interaction as right-clicking,\nso a server checks the distance as usual.",
                 () -> config.openInReach, value -> config.openInReach = value));
 
         x = columnX(); y = rowY();
         place(toggle(x, y, "Turn to face a match",
+                "Turns your view towards the nearest match when a search lands. Worth\nknowing on a server you do not run: a client that moves the view is the\nshape of thing some anti-cheats watch for.",
                 () -> config.turnToTarget, value -> config.turnToTarget = value));
 
         x = columnX(); y = rowY();
         place(toggle(x, y, "Search button on containers",
+                "A small magnifier on chests and other container windows. Left-click opens\nthe search screen; right-drag moves the button and remembers where.",
                 () -> config.containerSearchButton, value -> config.containerSearchButton = value));
 
         x = columnX(); y = rowY();
@@ -185,10 +193,18 @@ public final class ConfigScreen extends Screen {
     private Button toggle(int x, int y, String label,
                           java.util.function.BooleanSupplier getter,
                           java.util.function.Consumer<Boolean> setter) {
-        return Button.builder(Component.literal(label + ": " + onOff(getter.getAsBoolean())), button -> {
+        return toggle(x, y, label, null, getter, setter);
+    }
+
+    private Button toggle(int x, int y, String label, String help,
+                          java.util.function.BooleanSupplier getter,
+                          java.util.function.Consumer<Boolean> setter) {
+        Button button = Button.builder(Component.literal(label + ": " + onOff(getter.getAsBoolean())), it -> {
             setter.accept(!getter.getAsBoolean());
-            button.setMessage(Component.literal(label + ": " + onOff(getter.getAsBoolean())));
+            it.setMessage(Component.literal(label + ": " + onOff(getter.getAsBoolean())));
         }).bounds(x, y, WIDGET_WIDTH, 20).build();
+        if (help != null) button.setTooltip(Tooltip.create(Component.literal(help)));
+        return button;
     }
 
     private Button displayCycle(int x, int y) {

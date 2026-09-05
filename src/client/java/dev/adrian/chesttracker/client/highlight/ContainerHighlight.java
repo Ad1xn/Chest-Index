@@ -36,7 +36,7 @@ public final class ContainerHighlight {
 
     private static final double DRAW_RADIUS = 512.0;
 
-    private static final int MAX_BOXES = 96;
+    private static final int MAX_BOXES = 32;
 
     private ContainerHighlight() {}
 
@@ -65,7 +65,7 @@ public final class ContainerHighlight {
         LocalPlayer player = Minecraft.getInstance().player;
         double distance = player == null ? 0 : distanceTo(player);
         timer.start(distance, System.currentTimeMillis());
-        turnTicksLeft = ChestTrackerConfig.get().turnToTarget ? TURN_TICKS : 0;
+        turnTicksLeft = ChestTrackerConfig.get().turnToTarget ? TURN_MAX_TICKS : 0;
     }
 
     public void clear() {
@@ -75,15 +75,25 @@ public final class ContainerHighlight {
 
     private static final double GROW_PER_BLOCK = 0.008;
 
+    private static final double FAR_FROM = 200.0;
+
+    private static final double FAR_GROW_PER_BLOCK = 0.04;
+
+    private static final double GROW_STEP = 0.5;
+
     private static final double GROW_FROM = 24.0;
 
-    private static final double MAX_GROW = 1.0;
+    private static final double MAX_GROW = 8.0;
 
     private static final double BEAM_MIN_DISTANCE = 8.0;
 
     private static final double BEAM_HEIGHT = 32.0;
 
-    private static final int TURN_TICKS = 7;
+    private static final float TURN_EASE = 0.28f;
+
+    private static final float TURN_DONE_DEGREES = 0.75f;
+
+    private static final int TURN_MAX_TICKS = 30;
 
     private static final float BASE_LINE_WIDTH = 2.0f;
     private static final float LINE_WIDTH_PER_BLOCK = 0.02f;
@@ -95,6 +105,8 @@ public final class ContainerHighlight {
     }
 
     public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        boolean beams = ChestTrackerConfig.get().guideBeam;
+
         int drawn = 0;
         for (Long position : positions) {
             if (drawn >= MAX_BOXES) break;
@@ -110,10 +122,9 @@ public final class ContainerHighlight {
             if (distSq > DRAW_RADIUS * DRAW_RADIUS) continue;
 
             double distance = Math.sqrt(distSq);
-            double beyond = Math.max(0.0, distance - GROW_FROM);
-            double grow = Math.min(MAX_GROW, beyond * GROW_PER_BLOCK);
-            float width = (float) Math.min(MAX_LINE_WIDTH,
-                    BASE_LINE_WIDTH + beyond * LINE_WIDTH_PER_BLOCK);
+            double grow = growthAt(distance);
+            float width = (float) Math.round(Math.min(MAX_LINE_WIDTH,
+                    BASE_LINE_WIDTH + Math.max(0.0, distance - GROW_FROM) * LINE_WIDTH_PER_BLOCK));
 
             boolean nearest = position == pos;
             HighlightBox.emit(pose, lines, x - eye.x, y - eye.y, z - eye.z,
@@ -122,7 +133,7 @@ public final class ContainerHighlight {
                     nearest ? 0.2f : 1.0f,
                     0.9f, grow, width);
 
-            if (ChestTrackerConfig.get().guideBeam && distance > BEAM_MIN_DISTANCE) {
+            if (beams && distance > BEAM_MIN_DISTANCE) {
                 HighlightBox.beam(pose, lines,
                         x - eye.x + 0.5, y - eye.y + 1.0, z - eye.z + 0.5, BEAM_HEIGHT,
                         nearest ? 1.0f : 0.25f,
@@ -132,6 +143,13 @@ public final class ContainerHighlight {
             }
             drawn++;
         }
+    }
+
+    private static double growthAt(double distance) {
+        double grow = Math.max(0.0, distance - GROW_FROM) * GROW_PER_BLOCK;
+        if (distance > FAR_FROM) grow += (distance - FAR_FROM) * FAR_GROW_PER_BLOCK;
+        grow = Math.min(MAX_GROW, grow);
+        return Math.round(grow / GROW_STEP) * GROW_STEP;
     }
 
     private void turnTowards(LocalPlayer player) {
@@ -146,10 +164,14 @@ public final class ContainerHighlight {
 
         float yawGap = Mth.wrapDegrees(wantYaw - player.getYRot());
         float pitchGap = wantPitch - player.getXRot();
-        float step = 1.0f / turnTicksLeft;
 
-        player.setYRot(player.getYRot() + yawGap * step);
-        player.setXRot(player.getXRot() + pitchGap * step);
+        if (Math.abs(yawGap) < TURN_DONE_DEGREES && Math.abs(pitchGap) < TURN_DONE_DEGREES) {
+            turnTicksLeft = 0;
+            return;
+        }
+
+        player.setYRot(player.getYRot() + yawGap * TURN_EASE);
+        player.setXRot(player.getXRot() + pitchGap * TURN_EASE);
         turnTicksLeft--;
     }
 
