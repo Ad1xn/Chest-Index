@@ -1,6 +1,7 @@
 package dev.adrian.chesttracker.server.scan;
 
 import dev.adrian.chesttracker.ChestTracker;
+import dev.adrian.chesttracker.core.store.ScanLog;
 import dev.adrian.chesttracker.core.anvil.ChunkExtractor;
 import dev.adrian.chesttracker.core.anvil.NbtCompound;
 import dev.adrian.chesttracker.core.anvil.OriginClassifier;
@@ -12,6 +13,7 @@ import dev.adrian.chesttracker.core.util.BlockKey;
 import dev.adrian.chesttracker.server.TrackerService;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -65,6 +67,35 @@ public final class RegionScanner {
                 containersFound.get(), chunksSkippedLoaded.get(), chunksFailed.get());
     }
 
+    private static long sizeOf(Path file) {
+        try {
+            return Files.size(file);
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    private static long modifiedAt(Path file) {
+        try {
+            return Files.getLastModifiedTime(file).toMillis();
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    private static void writeLog(ScanLog log, Path file) {
+        try {
+            log.write(file);
+        } catch (IOException e) {
+            ChestTracker.LOG.warn("Could not write the scan log {}: {}", file, e.toString());
+        }
+    }
+
+    public void forgetScanned(Path logFile) {
+        ScanLog log = new ScanLog();
+        writeLog(log, logFile);
+    }
+
     public void cancel() {
         cancelled.set(true);
         Thread current = worker;
@@ -99,6 +130,8 @@ public final class RegionScanner {
         return true;
     }
 
+    private static final int LOG_EVERY = 25;
+
     private void scanWorld(Path worldRoot, long tick) throws IOException {
         List<WorldLayout.DimensionRegions> dimensions = WorldLayout.discover(worldRoot);
         if (dimensions.isEmpty()) {
@@ -115,19 +148,51 @@ public final class RegionScanner {
             }
         }
         regionsTotal.set(allRegions.size());
-        ChestTracker.LOG.info("Region scan starting: {} region files across {} dimension(s)",
-                allRegions.size(), dimensions.size());
+
+        Path logFile = tracker.scanLogFile();
+        ScanLog log = ScanLog.read(logFile);
+
+        List<Path> pending = new ArrayList<>();
+        List<String> pendingOwners = new ArrayList<>();
+        for (int i = 0; i < allRegions.size(); i++) {
+            Path file = allRegions.get(i);
+            if (log.isCurrent(file.toString(), sizeOf(file), modifiedAt(file))) {
+                regionsRead.incrementAndGet();
+                continue;
+            }
+            pending.add(file);
+            pendingOwners.add(owners.get(i));
+        }
+
+        ChestTracker.LOG.info("Region scan starting: {} of {} region files need reading "
+                        + "across {} dimension(s)",
+                pending.size(), allRegions.size(), dimensions.size());
 
         Set<String> trackedIds = tracker.containerTypes().known();
 
-        for (int i = 0; i < allRegions.size() && !cancelled.get(); i++) {
-            scanRegion(allRegions.get(i), owners.get(i), trackedIds, tick);
+        int sinceWrite = 0;
+        for (int i = 0; i < pending.size() && !cancelled.get(); i++) {
+            Path file = pending.get(i);
+            long size = sizeOf(file);
+            long modifiedAt = modifiedAt(file);
+
+            scanRegion(file, pendingOwners.get(i), trackedIds, tick);
             regionsRead.incrementAndGet();
+
+            log.mark(file.toString(), size, modifiedAt);
+            if (++sinceWrite >= LOG_EVERY) {
+                sinceWrite = 0;
+                writeLog(log, logFile);
+            }
         }
 
-        ChestTracker.LOG.info("Region scan {}: {} chunks, {} containers, {} failed",
+        writeLog(log, logFile);
+
+        ChestTracker.LOG.info("Region scan {}: {} chunks, {} containers, {} failed, "
+                        + "{} regions skipped as unchanged",
                 cancelled.get() ? "cancelled" : "complete",
-                chunksRead.get(), containersFound.get(), chunksFailed.get());
+                chunksRead.get(), containersFound.get(), chunksFailed.get(),
+                allRegions.size() - pending.size());
     }
 
     private void scanRegion(Path file, String dimensionId, Set<String> trackedIds, long tick) {

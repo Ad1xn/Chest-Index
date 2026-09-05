@@ -141,6 +141,15 @@ public final class TrackerService {
                 record.customName(), record.lastSeenTick(), contents);
     }
 
+    public void clearIndexes() {
+        byDimension.clear();
+        generations.values().forEach(java.util.concurrent.atomic.AtomicLong::incrementAndGet);
+    }
+
+    public Path scanLogFile() {
+        return storageRoot.resolve("scanned-regions.txt");
+    }
+
     public void save() {
         for (Map.Entry<String, WorldIndex> entry : byDimension.entrySet()) {
             try {
