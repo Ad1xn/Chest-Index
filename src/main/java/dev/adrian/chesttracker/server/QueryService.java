@@ -73,7 +73,7 @@ public final class QueryService {
             String itemId = tracker.palette().value(summary.itemId());
             if (itemId == null) continue;
             items.add(new QueryDto.ItemSummary(itemId, summary.totalCount(),
-                    summary.containerCount(), summary.nearestDistSq()));
+                    summary.containerCount(), summary.nestedCount(), summary.nearestDistSq()));
         }
         return QueryDto.SummaryResponse.of(request.requestId(), items);
     }

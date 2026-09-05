@@ -100,6 +100,35 @@ public final class ChestTrackerConfig {
 
     public boolean guideBeam = true;
 
+    public enum Nested {
+        MARK,
+        TOOLTIP,
+        BOTH,
+        NONE;
+
+        public static Nested parse(String value) {
+            if (value == null) return BOTH;
+            for (Nested nested : values()) {
+                if (nested.name().equalsIgnoreCase(value.trim())) return nested;
+            }
+            return BOTH;
+        }
+
+        public boolean marks() {
+            return this == MARK || this == BOTH;
+        }
+
+        public boolean tooltips() {
+            return this == TOOLTIP || this == BOTH;
+        }
+    }
+
+    public String nestedDisplay = Nested.BOTH.name();
+
+    public Nested nestedDisplay() {
+        return Nested.parse(nestedDisplay);
+    }
+
     public int highlightSeconds = 45;
 
     public int highlightRecedingGraceSeconds = 10;

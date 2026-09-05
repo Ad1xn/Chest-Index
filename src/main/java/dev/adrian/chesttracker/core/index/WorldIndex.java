@@ -193,7 +193,8 @@ public final class WorldIndex {
         return matches;
     }
 
-    public record ItemSummary(int itemId, int totalCount, int containerCount, double nearestDistSq)
+    public record ItemSummary(int itemId, int totalCount, int containerCount,
+                              int nestedCount, double nearestDistSq)
             implements Comparable<ItemSummary> {
         @Override
         public int compareTo(ItemSummary other) {
@@ -215,8 +216,9 @@ public final class WorldIndex {
                 if (!query.includeNested() && entry.isNested()) continue;
                 if (!query.itemIds().isEmpty() && !query.itemIds().contains(entry.itemId())) continue;
 
-                int[] totalsFor = totals.computeIfAbsent(entry.itemId(), id -> new int[2]);
+                int[] totalsFor = totals.computeIfAbsent(entry.itemId(), id -> new int[3]);
                 totalsFor[0] += entry.count();
+                if (entry.isNested()) totalsFor[2] += entry.count();
                 if (seenHere.add(entry.itemId())) totalsFor[1]++;
 
                 nearest.merge(entry.itemId(), result.distanceSq(), Math::min);
@@ -225,7 +227,8 @@ public final class WorldIndex {
 
         List<ItemSummary> summaries = new ArrayList<>(totals.size());
         totals.forEach((itemId, counts) -> summaries.add(new ItemSummary(
-                itemId, counts[0], counts[1], nearest.getOrDefault(itemId, Double.MAX_VALUE))));
+                itemId, counts[0], counts[1], counts[2],
+                nearest.getOrDefault(itemId, Double.MAX_VALUE))));
         Collections.sort(summaries);
         return summaries;
     }

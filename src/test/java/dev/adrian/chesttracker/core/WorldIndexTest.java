@@ -291,6 +291,37 @@ class WorldIndexTest {
     }
 
     @Test
+    void summaryCountsWhatIsSealedInsideShulkersSeparately() {
+        index.put(chest(0, 64, 0,
+                new StackEntry(DIAMOND, 12),
+                new StackEntry(DIAMOND, 64, 1)));
+
+        WorldIndex.ItemSummary diamonds = index.summarise(IndexQuery.builder().build()).get(0);
+        assertEquals(76, diamonds.totalCount());
+        assertEquals(64, diamonds.nestedCount());
+        assertEquals(1, diamonds.containerCount());
+    }
+
+    @Test
+    void nothingIsNestedWhenEveryStackIsLoose() {
+        index.put(chest(0, 64, 0, new StackEntry(DIAMOND, 30)));
+        index.put(chest(9, 64, 0, new StackEntry(DIAMOND, 12)));
+
+        WorldIndex.ItemSummary diamonds = index.summarise(IndexQuery.builder().build()).get(0);
+        assertEquals(42, diamonds.totalCount());
+        assertEquals(0, diamonds.nestedCount());
+    }
+
+    @Test
+    void excludingNestedStacksLeavesNothingNestedToReport() {
+        index.put(chest(0, 64, 0, new StackEntry(DIAMOND, 64, 1)));
+
+        List<WorldIndex.ItemSummary> summary =
+                index.summarise(IndexQuery.builder().includeNested(false).build());
+        assertTrue(summary.isEmpty() || summary.get(0).nestedCount() == 0);
+    }
+
+    @Test
     void summaryCountsAContainerOnceEvenWithSeveralStacks() {
         index.put(chest(0, 64, 0, new StackEntry(DIAMOND, 64), new StackEntry(DIAMOND, 32)));
 

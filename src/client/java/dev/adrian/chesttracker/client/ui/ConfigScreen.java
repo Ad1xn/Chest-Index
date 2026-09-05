@@ -21,7 +21,7 @@ public final class ConfigScreen extends Screen {
 
     private static final int COLUMN_GAP = 8;
 
-    private static final int ROWS_PER_COLUMN = 6;
+    private static final int ROWS_PER_COLUMN = 7;
 
     private static final int MAX_RESULTS_CEILING = 2000;
     private static final int RESULTS_STEP = 50;
@@ -132,6 +132,9 @@ public final class ConfigScreen extends Screen {
                 () -> config.containerSearchButton, value -> config.containerSearchButton = value));
 
         x = columnX(); y = rowY();
+        place(nestedCycle(x, y));
+
+        x = columnX(); y = rowY();
         place(accessCycle(x, y));
 
         int bottom = 40 + ROWS_PER_COLUMN * ROW_HEIGHT + 12;
@@ -205,6 +208,25 @@ public final class ConfigScreen extends Screen {
             case NONE -> "nothing";
         };
         return "Show found containers as: " + mode;
+    }
+
+    private Button nestedCycle(int x, int y) {
+        return Button.builder(Component.literal(nestedLabel()), button -> {
+            ChestTrackerConfig.Nested[] modes = ChestTrackerConfig.Nested.values();
+            int next = (config.nestedDisplay().ordinal() + 1) % modes.length;
+            config.nestedDisplay = modes[next].name();
+            button.setMessage(Component.literal(nestedLabel()));
+        }).bounds(x, y, WIDGET_WIDTH, 20).build();
+    }
+
+    private String nestedLabel() {
+        String mode = switch (config.nestedDisplay()) {
+            case MARK -> "a corner mark";
+            case TOOLTIP -> "a hover panel";
+            case BOTH -> "mark and panel";
+            case NONE -> "not at all";
+        };
+        return "Items in shulkers: " + mode;
     }
 
     private Button accessCycle(int x, int y) {

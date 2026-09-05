@@ -34,7 +34,8 @@ public final class QueryDto {
 
     public record SummaryRequest(int requestId, String text, Filters filters, int limit) {}
 
-    public record ItemSummary(String itemId, int totalCount, int containerCount, double nearestDistSq) {}
+    public record ItemSummary(String itemId, int totalCount, int containerCount,
+                              int nestedCount, double nearestDistSq) {}
 
     public record SummaryResponse(int requestId, boolean permitted, List<ItemSummary> items) {
         public SummaryResponse {
