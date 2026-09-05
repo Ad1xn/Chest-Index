@@ -93,6 +93,8 @@ public final class ContainerHighlight {
 
     private static final float TURN_DONE_DEGREES = 0.75f;
 
+    private static final float TURN_MAX_STEP = 7.0f;
+
     private static final int TURN_MAX_TICKS = 30;
 
     private static final float BASE_LINE_WIDTH = 2.0f;
@@ -105,7 +107,10 @@ public final class ContainerHighlight {
     }
 
     public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
-        boolean beams = ChestTrackerConfig.get().guideBeam;
+        ChestTrackerConfig config = ChestTrackerConfig.get();
+        boolean beams = config.guideBeam;
+        float[] nearestColour = config.nearestRgb();
+        float[] otherColour = config.otherRgb();
 
         int drawn = 0;
         for (Long position : positions) {
@@ -119,30 +124,38 @@ public final class ContainerHighlight {
             double dy = y + 0.5 - eye.y;
             double dz = z + 0.5 - eye.z;
             double distSq = dx * dx + dy * dy + dz * dz;
-            if (distSq > DRAW_RADIUS * DRAW_RADIUS) continue;
-
             double distance = Math.sqrt(distSq);
+
+            double limit = horizon();
+            double pull = distance > limit ? limit / distance : 1.0;
+
             double grow = growthAt(distance);
             float width = (float) Math.round(Math.min(MAX_LINE_WIDTH,
                     BASE_LINE_WIDTH + Math.max(0.0, distance - GROW_FROM) * LINE_WIDTH_PER_BLOCK));
 
             boolean nearest = position == pos;
-            HighlightBox.emit(pose, lines, x - eye.x, y - eye.y, z - eye.z,
-                    nearest ? 1.0f : 0.25f,
-                    nearest ? 0.82f : 0.85f,
-                    nearest ? 0.2f : 1.0f,
-                    0.9f, grow, width);
+            float[] colour = nearest ? nearestColour : otherColour;
+
+            double drawX = dx * pull - 0.5;
+            double drawY = dy * pull - 0.5;
+            double drawZ = dz * pull - 0.5;
+
+            HighlightBox.emit(pose, lines, drawX, drawY, drawZ,
+                    colour[0], colour[1], colour[2], 0.9f, grow, width);
 
             if (beams && distance > BEAM_MIN_DISTANCE) {
                 HighlightBox.beam(pose, lines,
-                        x - eye.x + 0.5, y - eye.y + 1.0, z - eye.z + 0.5, BEAM_HEIGHT,
-                        nearest ? 1.0f : 0.25f,
-                        nearest ? 0.82f : 0.85f,
-                        nearest ? 0.2f : 1.0f,
-                        0.75f, width);
+                        drawX + 0.5, drawY + 1.5, drawZ + 0.5, BEAM_HEIGHT * pull,
+                        colour[0], colour[1], colour[2], 0.75f, width);
             }
             drawn++;
         }
+    }
+
+    private static double horizon() {
+        Minecraft client = Minecraft.getInstance();
+        int chunks = client.options == null ? 8 : client.options.getEffectiveRenderDistance();
+        return Math.max(48.0, chunks * 16.0 * 0.85);
     }
 
     private static double growthAt(double distance) {
@@ -170,8 +183,10 @@ public final class ContainerHighlight {
             return;
         }
 
-        player.setYRot(player.getYRot() + yawGap * TURN_EASE);
-        player.setXRot(player.getXRot() + pitchGap * TURN_EASE);
+        player.setYRot(player.getYRot()
+                + Mth.clamp(yawGap * TURN_EASE, -TURN_MAX_STEP, TURN_MAX_STEP));
+        player.setXRot(player.getXRot()
+                + Mth.clamp(pitchGap * TURN_EASE, -TURN_MAX_STEP, TURN_MAX_STEP));
         turnTicksLeft--;
     }
 

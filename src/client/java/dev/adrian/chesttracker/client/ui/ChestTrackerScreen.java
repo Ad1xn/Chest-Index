@@ -67,10 +67,6 @@ public final class ChestTrackerScreen extends Screen {
     private static final int ROW_HOVER = 0x40000000;
     private static final int BUTTON_ON = 0xFF6A9A4A;
 
-    private static final int NESTED_MARK_EDGE = 0xFF2B1B33;
-    private static final int NESTED_MARK = 0xFF8A5A8A;
-    private static final int NESTED_MARK_LID = 0xFFC49AC4;
-
     private static final int TOOLTIP_BG = 0xF0100010;
     private static final int TOOLTIP_EDGE = 0xFF5000FF;
 
@@ -485,7 +481,7 @@ public final class ChestTrackerScreen extends Screen {
 
     private void drawGrid(Gfx gfx, int mouseX, int mouseY) {
         int hovered = slotAt(mouseX, mouseY);
-        ChestTrackerConfig.Nested nested = ChestTrackerConfig.get().nestedDisplay();
+        boolean panel = ChestTrackerConfig.get().nestedTooltip;
 
         for (int row = 0; row < ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
@@ -498,9 +494,6 @@ public final class ChestTrackerScreen extends Screen {
 
                 gfx.item(iconFor(summary.itemId()), x, y);
                 drawCount(gfx, summary.totalCount(), x, y);
-                if (summary.nestedCount() > 0 && nested.marks()) {
-                    drawNestedMark(gfx, x, y);
-                }
                 if (index == hovered) gfx.fill(x, y, x + 16, y + 16, SLOT_HOVER);
             }
         }
@@ -509,8 +502,8 @@ public final class ChestTrackerScreen extends Screen {
             QueryDto.ItemSummary summary = items.get(hovered);
             hoverLabel = String.format("%s  %,d in %d  -  %s",
                     displayName(summary.itemId()), summary.totalCount(), summary.containerCount(),
-                    nested.tooltips() && !shiftHeld() ? "shift for detail" : "right-click to list");
-            if (nested.tooltips() && shiftHeld()) {
+                    panel && !shiftHeld() ? "shift for detail" : "right-click to list");
+            if (panel && shiftHeld()) {
                 drawItemTooltip(gfx, summary, mouseX, mouseY);
             }
         } else if (items.isEmpty()) {
@@ -523,14 +516,6 @@ public final class ChestTrackerScreen extends Screen {
         if (minecraft == null || minecraft.getWindow() == null) return false;
         return InputConstants.isKeyDown(minecraft.getWindow(), GLFW.GLFW_KEY_LEFT_SHIFT)
                 || InputConstants.isKeyDown(minecraft.getWindow(), GLFW.GLFW_KEY_RIGHT_SHIFT);
-    }
-
-    private void drawNestedMark(Gfx gfx, int slotX, int slotY) {
-        int x = slotX + 1;
-        int y = slotY + 10;
-        gfx.fill(x, y, x + 6, y + 6, NESTED_MARK_EDGE);
-        gfx.fill(x + 1, y + 1, x + 5, y + 5, NESTED_MARK);
-        gfx.fill(x + 1, y + 1, x + 5, y + 2, NESTED_MARK_LID);
     }
 
     private void drawItemTooltip(Gfx gfx, QueryDto.ItemSummary summary, int mouseX, int mouseY) {
