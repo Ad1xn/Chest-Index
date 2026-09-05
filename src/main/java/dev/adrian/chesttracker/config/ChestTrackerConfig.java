@@ -102,6 +102,8 @@ public final class ChestTrackerConfig {
 
     public boolean nestedTooltip = true;
 
+    public boolean highlightFoundSlots = true;
+
     public int nearestColour = 0xFF2BD0;
 
     public int otherColour = 0xB478FF;

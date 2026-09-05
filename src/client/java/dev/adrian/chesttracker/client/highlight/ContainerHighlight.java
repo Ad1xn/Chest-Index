@@ -32,6 +32,8 @@ public final class ContainerHighlight {
     private String dimensionId;
     private String label;
 
+    private String searchedItemId;
+
     private int turnTicksLeft;
 
     private static final double DRAW_RADIUS = 512.0;
@@ -71,6 +73,15 @@ public final class ContainerHighlight {
     public void clear() {
         timer.clear();
         positions = List.of();
+        searchedItemId = null;
+    }
+
+    public String searchedItemId() {
+        return searchedItemId;
+    }
+
+    public void searchingFor(String itemId) {
+        this.searchedItemId = itemId;
     }
 
     private static final double GROW_PER_BLOCK = 0.008;

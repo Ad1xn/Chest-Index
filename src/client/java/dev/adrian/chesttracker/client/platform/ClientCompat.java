@@ -41,6 +41,20 @@ public final class ClientCompat {
         Minecraft.getInstance().setScreenAndShow(screen);
     }
 
+    public interface ScreenDraw {
+        void draw(Gfx gfx, int mouseX, int mouseY);
+    }
+
+    public static void afterScreenRender(Screen screen, ScreenDraw draw) {
+        //? if >=26.1 {
+        /*net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.afterExtract(screen).register(
+                (target, graphics, mouseX, mouseY, tick) -> draw.draw(new Gfx(graphics), mouseX, mouseY));
+        *///?} else {
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.afterRender(screen).register(
+                (target, graphics, mouseX, mouseY, tick) -> draw.draw(new Gfx(graphics), mouseX, mouseY));
+        //?}
+    }
+
     public static void addWidget(Screen screen, AbstractWidget widget) {
         //? if >=26.1 {
         /*net.fabricmc.fabric.api.client.screen.v1.Screens.getWidgets(screen).add(widget);
