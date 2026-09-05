@@ -10,12 +10,16 @@ import dev.adrian.chesttracker.core.net.QueryDto;
 import dev.adrian.chesttracker.core.util.BlockKey;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
+import dev.adrian.chesttracker.platform.ItemContentsCompat;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.BundleContents;
+import net.minecraft.world.item.component.ItemContainerContents;
 
 import java.util.HashSet;
 import java.util.List;
@@ -154,22 +158,42 @@ public final class QueryService {
 
         Map<String, int[]> totals = new java.util.LinkedHashMap<>();
         Container ender = player.getEnderChestInventory();
+        boolean nested = request.filters().includeNested();
         for (int slot = 0; slot < ender.getContainerSize(); slot++) {
-            ItemStack stack = ender.getItem(slot);
-            if (stack.isEmpty()) continue;
-            Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-            if (id == null) continue;
-            totals.computeIfAbsent(id.toString(), key -> new int[1])[0] += stack.getCount();
+            collectEnderStack(totals, ender.getItem(slot), nested, false);
         }
 
         String needle = normalise(request.text());
         List<QueryDto.ItemSummary> items = new java.util.ArrayList<>(totals.size());
-        totals.forEach((itemId, count) -> {
+        totals.forEach((itemId, counts) -> {
             if (!needle.isEmpty() && !itemId.toLowerCase(java.util.Locale.ROOT).contains(needle)) return;
-            items.add(new QueryDto.ItemSummary(itemId, count[0], 1, 0, 0.0));
+            items.add(new QueryDto.ItemSummary(itemId, counts[0], 1, counts[1], 0.0));
         });
         items.sort((a, b) -> Integer.compare(b.totalCount(), a.totalCount()));
         return QueryDto.SummaryResponse.of(request.requestId(), items);
+    }
+
+    private static void collectEnderStack(Map<String, int[]> totals, ItemStack stack,
+                                          boolean includeNested, boolean isNested) {
+        if (stack.isEmpty()) return;
+
+        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (id != null) {
+            int[] counts = totals.computeIfAbsent(id.toString(), key -> new int[2]);
+            counts[0] += stack.getCount();
+            if (isNested) counts[1] += stack.getCount();
+        }
+        if (!includeNested) return;
+
+        ItemContainerContents contents = stack.get(DataComponents.CONTAINER);
+        if (contents != null) {
+            ItemContentsCompat.stacks(contents)
+                    .forEach(inner -> collectEnderStack(totals, inner, true, true));
+        }
+        BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
+        if (bundle != null) {
+            bundle.itemCopyStream().forEach(inner -> collectEnderStack(totals, inner, true, true));
+        }
     }
 
     private static boolean hasEnderChestContents(ServerPlayer player) {

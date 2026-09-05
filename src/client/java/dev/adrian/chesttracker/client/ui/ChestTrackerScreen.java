@@ -225,7 +225,7 @@ public final class ChestTrackerScreen extends Screen {
         lastStatusAsk = now;
         ClientTracker.status().thenAccept(response -> minecraft.execute(() -> {
             status = response;
-            if (!viewing.isEmpty() && status.dimensions().stream()
+            if (!viewing.isEmpty() && shownDimensions().stream()
                     .noneMatch(entry -> entry.dimensionId().equals(viewing))) {
                 viewing = "";
                 refreshItems();
@@ -471,7 +471,7 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private void drawDimensions(Gfx gfx, int mouseX, int mouseY) {
-        List<QueryDto.DimensionSummary> dimensions = status.dimensions();
+        List<QueryDto.DimensionSummary> dimensions = shownDimensions();
         if (dimensions.size() < 2) return;
 
         int y = panelY + panelH - BOTTOM_H - 1;
@@ -500,6 +500,15 @@ public final class ChestTrackerScreen extends Screen {
             String glyph = dimensionGlyph(dimension.dimensionId());
             gfx.text(font, glyph, x + (DIMENSION_W - font.width(glyph)) / 2, y + 2, TEXT_DARK_ON_BUTTON);
         }
+    }
+
+    private List<QueryDto.DimensionSummary> shownDimensions() {
+        if (ChestTrackerConfig.get().enderChestView) return status.dimensions();
+        List<QueryDto.DimensionSummary> shown = new ArrayList<>(status.dimensions().size());
+        for (QueryDto.DimensionSummary dimension : status.dimensions()) {
+            if (!QueryDto.ENDER_CHEST.equals(dimension.dimensionId())) shown.add(dimension);
+        }
+        return shown;
     }
 
     private int dimensionX(int index) {
@@ -531,7 +540,7 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private boolean clickDimension(int mouseX, int mouseY) {
-        List<QueryDto.DimensionSummary> dimensions = status.dimensions();
+        List<QueryDto.DimensionSummary> dimensions = shownDimensions();
         if (dimensions.size() < 2) return false;
 
         int y = panelY + panelH - BOTTOM_H - 1;

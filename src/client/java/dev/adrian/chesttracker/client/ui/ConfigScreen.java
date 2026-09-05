@@ -17,12 +17,14 @@ import net.minecraft.client.gui.GuiGraphics;
 
 public final class ConfigScreen extends Screen {
 
-    private static final int ROW_HEIGHT = 24;
+    private static final int ROW_HEIGHT = 22;
     private static final int WIDGET_WIDTH = 200;
 
     private static final int COLUMN_GAP = 8;
 
-    private static final int ROWS_PER_COLUMN = 7;
+    private static final int ROWS_PER_COLUMN = 8;
+
+    private static final int TOP = 30;
 
     private static final int MAX_RESULTS_CEILING = 2000;
     private static final int RESULTS_STEP = 50;
@@ -46,7 +48,7 @@ public final class ConfigScreen extends Screen {
     }
 
     private int rowY() {
-        return 40 + (placed % ROWS_PER_COLUMN) * ROW_HEIGHT;
+        return TOP + (placed % ROWS_PER_COLUMN) * ROW_HEIGHT;
     }
 
     private <T extends net.minecraft.client.gui.components.AbstractWidget> T place(T widget) {
@@ -140,6 +142,11 @@ public final class ConfigScreen extends Screen {
                 () -> config.containerSearchButton, value -> config.containerSearchButton = value));
 
         x = columnX(); y = rowY();
+        place(toggle(x, y, "Ender chest view",
+                "Offers your ender chest as a view of its own, beside the dimension\nbuttons. It lists only what is in there - never mixed with a\ndimension - and appears only when it is not empty.",
+                () -> config.enderChestView, value -> config.enderChestView = value));
+
+        x = columnX(); y = rowY();
         place(toggle(x, y, "Shift shows item detail",
                 "Holding shift over an item in the search grid describes it: how many\nthere are, in how many containers, how many are sealed inside shulker\nboxes, and how far the nearest is.",
                 () -> config.nestedTooltip, value -> config.nestedTooltip = value));
@@ -155,7 +162,7 @@ public final class ConfigScreen extends Screen {
         x = columnX(); y = rowY();
         place(accessCycle(x, y));
 
-        int bottom = 40 + ROWS_PER_COLUMN * ROW_HEIGHT + 12;
+        int bottom = TOP + ROWS_PER_COLUMN * ROW_HEIGHT + 10;
         addRenderableWidget(Button.builder(Component.literal("Done"), button -> onClose())
                 .bounds(width / 2 - 60, bottom, 120, 20).build());
     }

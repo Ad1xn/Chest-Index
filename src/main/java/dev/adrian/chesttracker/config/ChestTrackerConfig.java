@@ -37,6 +37,8 @@ public final class ChestTrackerConfig {
 
     public String searchText = "";
 
+    public boolean enderChestView = true;
+
     public boolean containerSearchButton = true;
 
     public int searchButtonX = -15;
