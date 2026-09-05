@@ -72,6 +72,6 @@ public final class QueryDto {
 
     public record Hello(int protocolVersion, boolean canQuery) {
 
-        public static final int PROTOCOL_VERSION = 2;
+        public static final int PROTOCOL_VERSION = 3;
     }
 }
