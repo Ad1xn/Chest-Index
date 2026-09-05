@@ -90,6 +90,8 @@ public final class QueryDto {
         }
     }
 
+    public static final String ENDER_CHEST = "chest-tracker:ender_chest";
+
     public record StatusRequest(int requestId) {}
 
     public record DimensionSummary(String dimensionId, int containers) {}

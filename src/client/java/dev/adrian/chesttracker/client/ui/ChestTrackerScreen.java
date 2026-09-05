@@ -494,8 +494,7 @@ public final class ChestTrackerScreen extends Screen {
             gfx.fill(x, y, x + 1, y + DIMENSION_H - 1, BEVEL_LIGHT);
             if (hovered) {
                 gfx.fill(x + 1, y + 1, x + DIMENSION_W - 1, y + DIMENSION_H - 1, SLOT_HOVER);
-                hoverLabel = shortName(dimension.dimensionId())
-                        + "  -  " + String.format("%,d containers", dimension.containers());
+                hoverLabel = dimensionLabel(dimension);
             }
 
             String glyph = dimensionGlyph(dimension.dimensionId());
@@ -508,6 +507,7 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private static String dimensionGlyph(String dimensionId) {
+        if (QueryDto.ENDER_CHEST.equals(dimensionId)) return "e";
         String name = shortName(dimensionId);
         return switch (name) {
             case "overworld" -> "O";
@@ -515,6 +515,14 @@ public final class ChestTrackerScreen extends Screen {
             case "the_end" -> "E";
             default -> name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(java.util.Locale.ROOT);
         };
+    }
+
+    private String dimensionLabel(QueryDto.DimensionSummary dimension) {
+        if (QueryDto.ENDER_CHEST.equals(dimension.dimensionId())) {
+            return "your ender chest";
+        }
+        return shortName(dimension.dimensionId())
+                + "  -  " + String.format("%,d containers", dimension.containers());
     }
 
     private String currentDimensionId() {

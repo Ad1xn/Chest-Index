@@ -10,11 +10,16 @@ import dev.adrian.chesttracker.core.net.QueryDto;
 import dev.adrian.chesttracker.core.util.BlockKey;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 
@@ -51,6 +56,10 @@ public final class QueryService {
 
         if (!mayQuery(player, access)) return QueryDto.SummaryResponse.refused(request.requestId());
 
+        if (QueryDto.ENDER_CHEST.equals(request.dimensionId())) {
+            return enderChestSummary(player, request);
+        }
+
         String dimensionId = requestedDimension(tracker, player, request.dimensionId());
         IndexQuery.Builder builder = IndexQuery.builder()
                 .center(centreOf(player))
@@ -84,6 +93,10 @@ public final class QueryService {
 
         int id = request.requestId();
         if (!mayQuery(player, access)) return QueryDto.ContainerResponse.refused(id);
+
+        if (QueryDto.ENDER_CHEST.equals(request.dimensionId())) {
+            return QueryDto.ContainerResponse.of(id, List.of());
+        }
 
         int itemId = tracker.palette().lookup(request.itemId());
         if (itemId < 0) return QueryDto.ContainerResponse.of(id, List.of());
@@ -136,6 +149,37 @@ public final class QueryService {
         return BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
     }
 
+    private static QueryDto.SummaryResponse enderChestSummary(
+            ServerPlayer player, QueryDto.SummaryRequest request) {
+
+        Map<String, int[]> totals = new java.util.LinkedHashMap<>();
+        Container ender = player.getEnderChestInventory();
+        for (int slot = 0; slot < ender.getContainerSize(); slot++) {
+            ItemStack stack = ender.getItem(slot);
+            if (stack.isEmpty()) continue;
+            Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            if (id == null) continue;
+            totals.computeIfAbsent(id.toString(), key -> new int[1])[0] += stack.getCount();
+        }
+
+        String needle = normalise(request.text());
+        List<QueryDto.ItemSummary> items = new java.util.ArrayList<>(totals.size());
+        totals.forEach((itemId, count) -> {
+            if (!needle.isEmpty() && !itemId.toLowerCase(java.util.Locale.ROOT).contains(needle)) return;
+            items.add(new QueryDto.ItemSummary(itemId, count[0], 1, 0, 0.0));
+        });
+        items.sort((a, b) -> Integer.compare(b.totalCount(), a.totalCount()));
+        return QueryDto.SummaryResponse.of(request.requestId(), items);
+    }
+
+    private static boolean hasEnderChestContents(ServerPlayer player) {
+        Container ender = player.getEnderChestInventory();
+        for (int slot = 0; slot < ender.getContainerSize(); slot++) {
+            if (!ender.getItem(slot).isEmpty()) return true;
+        }
+        return false;
+    }
+
     private static String requestedDimension(TrackerService tracker, ServerPlayer player, String asked) {
         String here = Trackers.dimensionId(player.level());
         if (asked == null || asked.isBlank()) return here;
@@ -154,6 +198,10 @@ public final class QueryService {
             if (containers > 0) dimensions.add(new QueryDto.DimensionSummary(dimensionId, containers));
         }
         dimensions.sort(java.util.Comparator.comparing(QueryDto.DimensionSummary::dimensionId));
+
+        if (hasEnderChestContents(player)) {
+            dimensions.add(new QueryDto.DimensionSummary(QueryDto.ENDER_CHEST, 1));
+        }
 
         dev.adrian.chesttracker.server.scan.RegionScanner scanner = Trackers.regionScanner();
         dev.adrian.chesttracker.server.scan.RegionScanner.Progress progress =
