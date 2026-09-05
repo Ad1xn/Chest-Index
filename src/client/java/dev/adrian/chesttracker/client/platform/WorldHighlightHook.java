@@ -14,10 +14,12 @@ public final class WorldHighlightHook {
         /*net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN
                 .register(context -> {
                     if (!ContainerHighlight.get().hasBoxes()) return;
-                    Vec3 eye = context.gameRenderer().mainCamera().position();
                     context.submitNodeCollector().submitCustomGeometry(
                             context.poseStack(), RenderTypes.lines(),
-                            (pose, lines) -> ContainerHighlight.get().drawBoxes(pose, lines, eye));
+                            (pose, lines) -> ContainerHighlight.get().drawBoxes(
+                                    pose, lines,
+                                    net.minecraft.client.Minecraft.getInstance()
+                                            .gameRenderer.mainCamera().position()));
                 });
         *///?} else {
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AFTER_ENTITIES

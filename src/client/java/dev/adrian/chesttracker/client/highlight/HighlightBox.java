@@ -33,17 +33,20 @@ public final class HighlightBox {
         ring(pose, lines, x0, x1, y1, z0, z1, red, green, blue, alpha, lineWidth);
     }
 
-    private static final double BEAM_SPACING = 2.5;
+    private static final int BEAM_MARKS = 14;
 
-    private static final double BEAM_MARK = 0.45;
+    private static final double BEAM_DUTY = 0.18;
 
     public static void beam(PoseStack.Pose pose, VertexConsumer lines,
                             double x, double y, double z, double height,
                             float red, float green, float blue, float alpha, float lineWidth) {
-        for (double at = 0; at < height; at += BEAM_SPACING) {
-            float fade = alpha * (float) (1.0 - at / height);
+        double step = height / BEAM_MARKS;
+        double mark = step * BEAM_DUTY;
+        for (int i = 0; i < BEAM_MARKS; i++) {
+            double at = i * step;
+            float fade = alpha * (1.0f - (float) i / BEAM_MARKS);
             if (fade <= 0.02f) break;
-            line(pose, lines, x, y + at, z, x, y + at + BEAM_MARK, z,
+            line(pose, lines, x, y + at, z, x, y + at + mark, z,
                     red, green, blue, fade, lineWidth);
         }
     }

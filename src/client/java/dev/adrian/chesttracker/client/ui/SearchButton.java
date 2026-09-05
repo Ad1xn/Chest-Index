@@ -28,8 +28,6 @@ public final class SearchButton extends AbstractWidget {
     private final int anchorX;
     private final int anchorY;
 
-    private boolean dragging;
-
     public SearchButton(int anchorX, int anchorY) {
         super(0, 0, SIZE, SIZE, Component.literal("Search containers"));
         this.anchorX = anchorX;
@@ -67,39 +65,24 @@ public final class SearchButton extends AbstractWidget {
         gfx.fill(x + 5, y + 5, x + 8, y + 8, ICON);
     }
 
+    public int anchorX() {
+        return anchorX;
+    }
+
+    public int anchorY() {
+        return anchorY;
+    }
+
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (!visible || !isMouseOver(event.x(), event.y())) return false;
 
-        if (event.button() == 1) {
-            dragging = true;
-            return true;
-        }
         if (event.button() == 0) {
             playDownSound(net.minecraft.client.Minecraft.getInstance().getSoundManager());
             ClientCompat.openScreen(new ChestTrackerScreen());
             return true;
         }
         return false;
-    }
-
-    @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-        if (!dragging) return false;
-        setX(getX() + (int) dragX);
-        setY(getY() + (int) dragY);
-        return true;
-    }
-
-    @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
-        if (!dragging) return false;
-        dragging = false;
-        ChestTrackerConfig config = ChestTrackerConfig.get();
-        config.searchButtonX = getX() - anchorX;
-        config.searchButtonY = getY() - anchorY;
-        config.save();
-        return true;
     }
 
     @Override

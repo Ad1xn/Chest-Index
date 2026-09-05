@@ -84,21 +84,25 @@ public final class ContainerHighlight {
         this.searchedItemId = itemId;
     }
 
-    private static final double GROW_PER_BLOCK = 0.008;
+    private static final double GROW_PER_BLOCK = 0.004;
 
     private static final double FAR_FROM = 200.0;
 
-    private static final double FAR_GROW_PER_BLOCK = 0.04;
+    private static final double FAR_GROW_PER_BLOCK = 0.012;
 
     private static final double GROW_STEP = 0.5;
 
     private static final double GROW_FROM = 24.0;
 
-    private static final double MAX_GROW = 8.0;
+    private static final double MAX_GROW = 4.0;
 
     private static final double BEAM_MIN_DISTANCE = 8.0;
 
-    private static final double BEAM_HEIGHT = 32.0;
+    private static final double BEAM_HEIGHT = 48.0;
+
+    private static final double BEAM_HEIGHT_PER_BLOCK = 0.6;
+
+    private static final double MAX_BEAM_HEIGHT = 420.0;
 
     private static final float TURN_EASE = 0.28f;
 
@@ -155,8 +159,10 @@ public final class ContainerHighlight {
                     colour[0], colour[1], colour[2], 0.9f, grow, width);
 
             if (beams && distance > BEAM_MIN_DISTANCE) {
+                double beamHeight = Math.min(MAX_BEAM_HEIGHT,
+                        BEAM_HEIGHT + distance * BEAM_HEIGHT_PER_BLOCK);
                 HighlightBox.beam(pose, lines,
-                        drawX + 0.5, drawY + 1.5, drawZ + 0.5, BEAM_HEIGHT * pull,
+                        drawX + 0.5, drawY + 1.5, drawZ + 0.5, beamHeight * pull,
                         colour[0], colour[1], colour[2], 0.75f, width);
             }
             drawn++;

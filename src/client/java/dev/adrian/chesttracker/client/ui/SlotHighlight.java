@@ -9,6 +9,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
@@ -27,6 +28,9 @@ public final class SlotHighlight {
         String wanted = ContainerHighlight.get().searchedItemId();
         if (wanted == null || !ContainerHighlight.get().isActive()) return;
 
+        Item target = BuiltInRegistries.ITEM.getValue(Identifier.parse(wanted));
+        if (target == null) return;
+
         ChestTrackerConfig config = ChestTrackerConfig.get();
         int direct = alpha(0xFF000000 | config.nearestColour);
         int inside = alpha(0xFF000000 | config.otherColour);
@@ -36,9 +40,9 @@ public final class SlotHighlight {
             if (stack.isEmpty()) continue;
 
             int colour;
-            if (matches(stack, wanted)) {
+            if (stack.getItem() == target) {
                 colour = direct;
-            } else if (holds(stack, wanted, MAX_DEPTH)) {
+            } else if (holds(stack, target, MAX_DEPTH)) {
                 colour = inside;
             } else {
                 continue;
@@ -59,23 +63,18 @@ public final class SlotHighlight {
         return (colour & 0x00FFFFFF) | ((int) (wave * 255) << 24);
     }
 
-    private static boolean matches(ItemStack stack, String wanted) {
-        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        return id != null && id.toString().equals(wanted);
-    }
-
-    private static boolean holds(ItemStack stack, String wanted, int depth) {
+    private static boolean holds(ItemStack stack, Item target, int depth) {
         if (depth <= 0) return false;
 
         ItemContainerContents contents = stack.get(DataComponents.CONTAINER);
         if (contents != null
                 && ItemContentsCompat.stacks(contents)
-                        .anyMatch(inner -> matches(inner, wanted) || holds(inner, wanted, depth - 1))) {
+                        .anyMatch(inner -> inner.getItem() == target || holds(inner, target, depth - 1))) {
             return true;
         }
 
         BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         return bundle != null && bundle.itemCopyStream()
-                .anyMatch(inner -> matches(inner, wanted) || holds(inner, wanted, depth - 1));
+                .anyMatch(inner -> inner.getItem() == target || holds(inner, target, depth - 1));
     }
 }

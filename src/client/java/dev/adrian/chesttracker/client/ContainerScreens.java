@@ -1,6 +1,7 @@
 package dev.adrian.chesttracker.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import org.lwjgl.glfw.GLFW;
 import dev.adrian.chesttracker.ChestTracker;
 import dev.adrian.chesttracker.client.platform.ClientCompat;
 import dev.adrian.chesttracker.client.ui.SearchButton;
@@ -25,6 +26,11 @@ public final class ContainerScreens {
     private static boolean keyWasDown;
     private static long lastTrigger;
 
+    private static SearchButton button;
+
+    private static boolean rightWasDown;
+    private static boolean draggingButton;
+
     private static boolean reportedInit;
 
     public static void register(KeyMapping searchHovered) {
@@ -35,10 +41,12 @@ public final class ContainerScreens {
 
             ContainerScreenAccessor access = (ContainerScreenAccessor) container;
 
+            button = null;
             if (ChestTrackerConfig.get().containerSearchButton) {
-                ClientCompat.addWidget(screen, new SearchButton(
+                button = new SearchButton(
                         access.chesttracker$leftPos() + access.chesttracker$imageWidth(),
-                        access.chesttracker$topPos()));
+                        access.chesttracker$topPos());
+                ClientCompat.addWidget(screen, button);
             }
 
             if (!reportedInit) {
@@ -74,6 +82,41 @@ public final class ContainerScreens {
 
         if (down && !keyWasDown) trigger(container, "poll");
         keyWasDown = down;
+
+        dragButton(client);
+    }
+
+    private static void dragButton(Minecraft client) {
+        SearchButton target = button;
+        if (target == null || client.getWindow() == null) {
+            rightWasDown = false;
+            draggingButton = false;
+            return;
+        }
+
+        boolean down = GLFW.glfwGetMouseButton(
+                client.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+
+        double scaleX = client.getWindow().getGuiScaledWidth()
+                / (double) client.getWindow().getScreenWidth();
+        double scaleY = client.getWindow().getGuiScaledHeight()
+                / (double) client.getWindow().getScreenHeight();
+        int mouseX = (int) (client.mouseHandler.xpos() * scaleX);
+        int mouseY = (int) (client.mouseHandler.ypos() * scaleY);
+
+        if (down && !rightWasDown && target.isMouseOver(mouseX, mouseY)) draggingButton = true;
+        if (draggingButton && down) {
+            target.setX(mouseX - SearchButton.SIZE / 2);
+            target.setY(mouseY - SearchButton.SIZE / 2);
+        }
+        if (draggingButton && !down) {
+            draggingButton = false;
+            ChestTrackerConfig config = ChestTrackerConfig.get();
+            config.searchButtonX = target.getX() - target.anchorX();
+            config.searchButtonY = target.getY() - target.anchorY();
+            config.save();
+        }
+        rightWasDown = down;
     }
 
     private static void trigger(AbstractContainerScreen<?> container, String via) {
