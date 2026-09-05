@@ -51,7 +51,7 @@ public final class QueryService {
 
         if (!mayQuery(player, access)) return QueryDto.SummaryResponse.refused(request.requestId());
 
-        String dimensionId = Trackers.dimensionId(player.level());
+        String dimensionId = requestedDimension(tracker, player, request.dimensionId());
         IndexQuery.Builder builder = IndexQuery.builder()
                 .center(centreOf(player))
                 .owner(ownerLimit(player, access));
@@ -88,7 +88,7 @@ public final class QueryService {
         int itemId = tracker.palette().lookup(request.itemId());
         if (itemId < 0) return QueryDto.ContainerResponse.of(id, List.of());
 
-        String dimensionId = Trackers.dimensionId(player.level());
+        String dimensionId = requestedDimension(tracker, player, request.dimensionId());
         IndexQuery.Builder builder = IndexQuery.builder()
                 .item(itemId)
                 .center(centreOf(player))
@@ -134,6 +134,37 @@ public final class QueryService {
     private static long centreOf(ServerPlayer player) {
         BlockPos pos = player.blockPosition();
         return BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private static String requestedDimension(TrackerService tracker, ServerPlayer player, String asked) {
+        String here = Trackers.dimensionId(player.level());
+        if (asked == null || asked.isBlank()) return here;
+        return tracker.dimensions().contains(asked) ? asked : here;
+    }
+
+    public static QueryDto.StatusResponse status(
+            TrackerService tracker, ServerPlayer player,
+            QueryDto.StatusRequest request, ChestTrackerConfig.Access access) {
+
+        if (!mayQuery(player, access)) return QueryDto.StatusResponse.empty(request.requestId());
+
+        List<QueryDto.DimensionSummary> dimensions = new java.util.ArrayList<>();
+        for (String dimensionId : tracker.dimensions()) {
+            int containers = tracker.index(dimensionId).stats().containers();
+            if (containers > 0) dimensions.add(new QueryDto.DimensionSummary(dimensionId, containers));
+        }
+        dimensions.sort(java.util.Comparator.comparing(QueryDto.DimensionSummary::dimensionId));
+
+        dev.adrian.chesttracker.server.scan.RegionScanner scanner = Trackers.regionScanner();
+        dev.adrian.chesttracker.server.scan.RegionScanner.Progress progress =
+                scanner == null ? null : scanner.progress();
+        boolean scanning = progress != null && progress.running();
+
+        return new QueryDto.StatusResponse(request.requestId(), scanning,
+                progress == null ? 0 : progress.regionsRead(),
+                progress == null ? 0 : progress.regionsTotal(),
+                progress == null ? 0 : progress.chunksRead(),
+                dimensions);
     }
 
     private static String normalise(String text) {

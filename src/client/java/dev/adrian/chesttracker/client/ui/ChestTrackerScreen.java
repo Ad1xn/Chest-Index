@@ -67,6 +67,11 @@ public final class ChestTrackerScreen extends Screen {
     private static final int ROW_HOVER = 0x40000000;
     private static final int BUTTON_ON = 0xFF6A9A4A;
 
+    private static final int TEXT_DARK_ON_BUTTON = 0xFF202020;
+
+    private static final int DIMENSION_W = 12;
+    private static final int DIMENSION_H = 12;
+
     private static final int TOOLTIP_BG = 0xF0100010;
     private static final int TOOLTIP_EDGE = 0xFF5000FF;
 
@@ -76,6 +81,13 @@ public final class ChestTrackerScreen extends Screen {
     private static final int MENU_ROW_H = 12;
 
     private static final long AUTO_REFRESH_MIN_MS = 400;
+
+    private static final long STATUS_INTERVAL_MS = 1000;
+
+    private static final int SCAN_BAR_H = 3;
+
+    private static final int SCAN_BAR_BG = 0xFF373737;
+    private static final int SCAN_BAR_FILL = 0xFF6A9A4A;
 
     private static final long REFUSED_RETRY_MS = 2000;
 
@@ -140,6 +152,12 @@ public final class ChestTrackerScreen extends Screen {
 
     private String hoverLabel;
 
+    private QueryDto.StatusResponse status = QueryDto.StatusResponse.empty(0);
+
+    private long lastStatusAsk;
+
+    private String viewing = "";
+
     public ChestTrackerScreen() {
         super(Component.literal("Chest Tracker"));
     }
@@ -201,9 +219,24 @@ public final class ChestTrackerScreen extends Screen {
         refreshItems(true);
     }
 
+    private void pollStatus() {
+        long now = System.currentTimeMillis();
+        if (now - lastStatusAsk < STATUS_INTERVAL_MS || !mayAttempt()) return;
+        lastStatusAsk = now;
+        ClientTracker.status().thenAccept(response -> minecraft.execute(() -> {
+            status = response;
+            if (!viewing.isEmpty() && status.dimensions().stream()
+                    .noneMatch(entry -> entry.dimensionId().equals(viewing))) {
+                viewing = "";
+                refreshItems();
+            }
+        }));
+    }
+
     private void refreshItems(boolean resetView) {
         if (!mayAttempt()) return;
-        ClientTracker.summarise(pending, filters(), ChestTrackerConfig.get().resultLimit()).thenAccept(response ->
+        ClientTracker.summarise(pending, filters(), ChestTrackerConfig.get().resultLimit(), viewing)
+                .thenAccept(response ->
                 minecraft.execute(() -> {
                     if (response.requestId() <= newestItemsReply) return;
                     newestItemsReply = response.requestId();
@@ -221,7 +254,7 @@ public final class ChestTrackerScreen extends Screen {
     private void refreshContainers() {
         String itemId = selectedItemId;
         if (itemId == null || !mayAttempt()) return;
-        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS).thenAccept(response ->
+        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS, viewing).thenAccept(response ->
                 minecraft.execute(() -> {
                     if (!itemId.equals(selectedItemId)) return;
                     if (response.requestId() <= newestContainersReply) return;
@@ -279,9 +312,11 @@ public final class ChestTrackerScreen extends Screen {
     private void highlightItem(String itemId) {
         if (!mayAttempt()) return;
         String label = displayName(itemId);
-        String dimensionId = minecraft.player.level().dimension().identifier().toString();
+        String dimensionId = viewing.isEmpty()
+                ? minecraft.player.level().dimension().identifier().toString()
+                : viewing;
 
-        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS).thenAccept(response ->
+        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS, viewing).thenAccept(response ->
                 minecraft.execute(() -> {
                     if (response.hits().isEmpty()) {
                         ClientCompat.actionBar(Component.literal("Nothing indexed holds " + label));
@@ -395,6 +430,10 @@ public final class ChestTrackerScreen extends Screen {
             return;
         }
 
+        pollStatus();
+        drawScanBar(gfx);
+        drawDimensions(gfx, mouseX, mouseY);
+
         if (selectedItemId == null) {
             drawGrid(gfx, mouseX, mouseY);
             drawScrollbar(gfx, scrollRow, maxScrollRow(), gridRows(), ROWS);
@@ -410,6 +449,97 @@ public final class ChestTrackerScreen extends Screen {
         gfx.text(font, Component.literal(truncate(title, available)), panelX + 8, panelY + 6, TEXT_MAIN);
 
         drawMenu(gfx, mouseX, mouseY);
+    }
+
+    private void drawScanBar(Gfx gfx) {
+        if (!status.scanning()) return;
+
+        int x = panelX + 8;
+        int width = SLOTS_W - 10;
+        int y = panelY + TOP_H + SEARCH_H - SCAN_BAR_H - 1;
+
+        gfx.fill(x, y, x + width, y + SCAN_BAR_H, SCAN_BAR_BG);
+        float fraction = status.progress();
+        if (fraction > 0) {
+            gfx.fill(x, y, x + (int) (width * fraction), y + SCAN_BAR_H, SCAN_BAR_FILL);
+        }
+        if (hoverLabel == null) {
+            hoverLabel = fraction > 0
+                    ? String.format("Indexing the world... %d%%", Math.round(fraction * 100))
+                    : String.format("Indexing the world... %,d chunks", status.chunksRead());
+        }
+    }
+
+    private void drawDimensions(Gfx gfx, int mouseX, int mouseY) {
+        List<QueryDto.DimensionSummary> dimensions = status.dimensions();
+        if (dimensions.size() < 2) return;
+
+        int y = panelY + panelH - BOTTOM_H - 1;
+        for (int i = 0; i < dimensions.size(); i++) {
+            QueryDto.DimensionSummary dimension = dimensions.get(i);
+            int x = dimensionX(i);
+            boolean selected = viewing.isEmpty()
+                    ? dimension.dimensionId().equals(currentDimensionId())
+                    : dimension.dimensionId().equals(viewing);
+            boolean hovered = mouseX >= x && mouseX < x + DIMENSION_W
+                    && mouseY >= y && mouseY < y + DIMENSION_H;
+
+            gfx.fill(x, y, x + DIMENSION_W, y + DIMENSION_H, BEVEL_DARK);
+            if (selected) {
+                gfx.fill(x, y, x + DIMENSION_W - 1, y + DIMENSION_H - 1, BUTTON_ON);
+            } else {
+                fillFromTexture(gfx, x, y, DIMENSION_W - 1, DIMENSION_H - 1);
+            }
+            gfx.fill(x, y, x + DIMENSION_W - 1, y + 1, BEVEL_LIGHT);
+            gfx.fill(x, y, x + 1, y + DIMENSION_H - 1, BEVEL_LIGHT);
+            if (hovered) {
+                gfx.fill(x + 1, y + 1, x + DIMENSION_W - 1, y + DIMENSION_H - 1, SLOT_HOVER);
+                hoverLabel = shortName(dimension.dimensionId())
+                        + "  -  " + String.format("%,d containers", dimension.containers());
+            }
+
+            String glyph = dimensionGlyph(dimension.dimensionId());
+            gfx.text(font, glyph, x + (DIMENSION_W - font.width(glyph)) / 2, y + 2, TEXT_DARK_ON_BUTTON);
+        }
+    }
+
+    private int dimensionX(int index) {
+        return panelX + 8 + index * (DIMENSION_W + 2);
+    }
+
+    private static String dimensionGlyph(String dimensionId) {
+        String name = shortName(dimensionId);
+        return switch (name) {
+            case "overworld" -> "O";
+            case "the_nether" -> "N";
+            case "the_end" -> "E";
+            default -> name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(java.util.Locale.ROOT);
+        };
+    }
+
+    private String currentDimensionId() {
+        return minecraft.player == null ? ""
+                : minecraft.player.level().dimension().identifier().toString();
+    }
+
+    private boolean clickDimension(int mouseX, int mouseY) {
+        List<QueryDto.DimensionSummary> dimensions = status.dimensions();
+        if (dimensions.size() < 2) return false;
+
+        int y = panelY + panelH - BOTTOM_H - 1;
+        if (mouseY < y || mouseY >= y + DIMENSION_H) return false;
+
+        for (int i = 0; i < dimensions.size(); i++) {
+            int x = dimensionX(i);
+            if (mouseX < x || mouseX >= x + DIMENSION_W) continue;
+
+            String picked = dimensions.get(i).dimensionId();
+            viewing = picked.equals(currentDimensionId()) ? "" : picked;
+            back();
+            refreshItems();
+            return true;
+        }
+        return false;
     }
 
     private String unavailableMessage() {
@@ -761,6 +891,7 @@ public final class ChestTrackerScreen extends Screen {
         }
 
         if (event.button() == 0 && clickButton(mouseX, mouseY)) return true;
+        if (event.button() == 0 && clickDimension(mouseX, mouseY)) return true;
         if (!canQuery()) return super.mouseClicked(event, doubleClick);
 
         if (event.button() == 1) {

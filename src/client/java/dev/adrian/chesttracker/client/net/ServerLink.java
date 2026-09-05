@@ -64,6 +64,10 @@ public final class ServerLink {
                 });
 
         ClientPlayNetworking.registerGlobalReceiver(
+                ChestTrackerPayloads.StatusResponsePayload.TYPE,
+                (payload, context) -> deliver(payload.response().requestId(), payload.response()));
+
+        ClientPlayNetworking.registerGlobalReceiver(
                 ChestTrackerPayloads.IndexChangedPayload.TYPE,
                 (payload, context) -> CHANGE_TOKEN.incrementAndGet());
 
@@ -127,6 +131,12 @@ public final class ServerLink {
         return send(request.requestId(), QueryDto.SummaryResponse.class,
                 new ChestTrackerPayloads.SummaryRequestPayload(request),
                 QueryDto.SummaryResponse.of(request.requestId(), List.of()));
+    }
+
+    public static CompletableFuture<QueryDto.StatusResponse> status(QueryDto.StatusRequest request) {
+        return send(request.requestId(), QueryDto.StatusResponse.class,
+                new ChestTrackerPayloads.StatusRequestPayload(request),
+                QueryDto.StatusResponse.empty(request.requestId()));
     }
 
     public static CompletableFuture<QueryDto.ContainerResponse> containers(QueryDto.ContainerRequest request) {

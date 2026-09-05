@@ -32,7 +32,17 @@ public final class QueryDto {
         }
     }
 
-    public record SummaryRequest(int requestId, String text, Filters filters, int limit) {}
+    public record SummaryRequest(int requestId, String text, Filters filters, int limit,
+                                 String dimensionId) {
+
+        public SummaryRequest {
+            if (dimensionId == null) dimensionId = "";
+        }
+
+        public SummaryRequest(int requestId, String text, Filters filters, int limit) {
+            this(requestId, text, filters, limit, "");
+        }
+    }
 
     public record ItemSummary(String itemId, int totalCount, int containerCount,
                               int nestedCount, double nearestDistSq) {}
@@ -51,7 +61,17 @@ public final class QueryDto {
         }
     }
 
-    public record ContainerRequest(int requestId, String itemId, Filters filters, int limit) {}
+    public record ContainerRequest(int requestId, String itemId, Filters filters, int limit,
+                                   String dimensionId) {
+
+        public ContainerRequest {
+            if (dimensionId == null) dimensionId = "";
+        }
+
+        public ContainerRequest(int requestId, String itemId, Filters filters, int limit) {
+            this(requestId, itemId, filters, limit, "");
+        }
+    }
 
     public record ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
                                boolean nested, boolean natural, boolean contentsKnown) {}
@@ -70,8 +90,29 @@ public final class QueryDto {
         }
     }
 
+    public record StatusRequest(int requestId) {}
+
+    public record DimensionSummary(String dimensionId, int containers) {}
+
+    public record StatusResponse(int requestId, boolean scanning,
+                                 int regionsRead, int regionsTotal, int chunksRead,
+                                 List<DimensionSummary> dimensions) {
+
+        public StatusResponse {
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        }
+
+        public static StatusResponse empty(int requestId) {
+            return new StatusResponse(requestId, false, 0, 0, 0, List.of());
+        }
+
+        public float progress() {
+            return regionsTotal <= 0 ? 0.0f : Math.min(1.0f, regionsRead / (float) regionsTotal);
+        }
+    }
+
     public record Hello(int protocolVersion, boolean canQuery) {
 
-        public static final int PROTOCOL_VERSION = 3;
+        public static final int PROTOCOL_VERSION = 4;
     }
 }

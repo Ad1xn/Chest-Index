@@ -60,9 +60,15 @@ public final class ClientTracker {
 
     public static CompletableFuture<QueryDto.SummaryResponse> summarise(
             String text, QueryDto.Filters filters, int limit) {
+        return summarise(text, filters, limit, "");
+    }
+
+    public static CompletableFuture<QueryDto.SummaryResponse> summarise(
+            String text, QueryDto.Filters filters, int limit, String dimensionId) {
 
         int requestId = ServerLink.nextRequestId();
-        QueryDto.SummaryRequest request = new QueryDto.SummaryRequest(requestId, text, filters, limit);
+        QueryDto.SummaryRequest request =
+                new QueryDto.SummaryRequest(requestId, text, filters, limit, dimensionId);
 
         if (!hasLocalIndex()) return ServerLink.summarise(request);
 
@@ -73,15 +79,32 @@ public final class ClientTracker {
 
     public static CompletableFuture<QueryDto.ContainerResponse> containers(
             String itemId, QueryDto.Filters filters, int limit) {
+        return containers(itemId, filters, limit, "");
+    }
+
+    public static CompletableFuture<QueryDto.ContainerResponse> containers(
+            String itemId, QueryDto.Filters filters, int limit, String dimensionId) {
 
         int requestId = ServerLink.nextRequestId();
-        QueryDto.ContainerRequest request = new QueryDto.ContainerRequest(requestId, itemId, filters, limit);
+        QueryDto.ContainerRequest request =
+                new QueryDto.ContainerRequest(requestId, itemId, filters, limit, dimensionId);
 
         if (!hasLocalIndex()) return ServerLink.containers(request);
 
         return onServerThread(
                 (tracker, player) -> QueryService.containers(tracker, player, request, localAccess()),
                 QueryDto.ContainerResponse.of(requestId, List.of()));
+    }
+
+    public static CompletableFuture<QueryDto.StatusResponse> status() {
+        int requestId = ServerLink.nextRequestId();
+        QueryDto.StatusRequest request = new QueryDto.StatusRequest(requestId);
+
+        if (!hasLocalIndex()) return ServerLink.status(request);
+
+        return onServerThread(
+                (tracker, player) -> QueryService.status(tracker, player, request, localAccess()),
+                QueryDto.StatusResponse.empty(requestId));
     }
 
     private static ChestTrackerConfig.Access localAccess() {
