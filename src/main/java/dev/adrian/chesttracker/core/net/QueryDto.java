@@ -9,7 +9,8 @@ public final class QueryDto {
 
     private QueryDto() {}
 
-    public record Filters(boolean includeNested, boolean includeMachines, int originFilter) {
+    public record Filters(boolean includeNested, boolean includeMachines,
+                          boolean includeUtility, boolean includeEntities, int originFilter) {
 
         public static final int ORIGIN_ANY = 0;
         public static final int ORIGIN_PLAYER_PLACED = 1;
@@ -20,7 +21,7 @@ public final class QueryDto {
         }
 
         public static Filters defaults() {
-            return new Filters(true, false, ORIGIN_ANY);
+            return new Filters(true, false, false, true, ORIGIN_ANY);
         }
 
         public Set<Origin> origins() {
@@ -61,20 +62,51 @@ public final class QueryDto {
         }
     }
 
-    public record ContainerRequest(int requestId, String itemId, Filters filters, int limit,
-                                   String dimensionId) {
+    public record ContainerRequest(int requestId, List<String> itemIds, Filters filters, int limit,
+                                   String dimensionId, String text) {
+
+        public static final int MAX_ITEMS = 256;
 
         public ContainerRequest {
             if (dimensionId == null) dimensionId = "";
+            if (text == null) text = "";
+            itemIds = itemIds == null ? List.of() : List.copyOf(itemIds);
+            if (itemIds.size() > MAX_ITEMS) itemIds = List.copyOf(itemIds.subList(0, MAX_ITEMS));
+        }
+
+        public ContainerRequest(int requestId, List<String> itemIds, Filters filters, int limit,
+                                String dimensionId) {
+            this(requestId, itemIds, filters, limit, dimensionId, "");
+        }
+        public ContainerRequest(int requestId, String itemId, Filters filters, int limit,
+                                String dimensionId) {
+            this(requestId, itemId == null ? List.of() : List.of(itemId), filters, limit, dimensionId, "");
         }
 
         public ContainerRequest(int requestId, String itemId, Filters filters, int limit) {
             this(requestId, itemId, filters, limit, "");
         }
+
+        public String soleItemId() {
+            return itemIds.size() == 1 ? itemIds.get(0) : null;
+        }
     }
 
     public record ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
-                               boolean nested, boolean natural, boolean contentsKnown) {}
+                               boolean nested, boolean natural, boolean contentsKnown,
+                               int entityId) {
+
+        public static final int NOT_AN_ENTITY = 0;
+
+        public ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
+                            boolean nested, boolean natural, boolean contentsKnown) {
+            this(typeId, pos, matchedCount, distanceSq, nested, natural, contentsKnown, NOT_AN_ENTITY);
+        }
+
+        public boolean isEntity() {
+            return entityId != NOT_AN_ENTITY;
+        }
+    }
 
     public record ContainerResponse(int requestId, boolean permitted, List<ContainerHit> hits) {
         public ContainerResponse {
@@ -115,6 +147,6 @@ public final class QueryDto {
 
     public record Hello(int protocolVersion, boolean canQuery) {
 
-        public static final int PROTOCOL_VERSION = 4;
+        public static final int PROTOCOL_VERSION = 7;
     }
 }

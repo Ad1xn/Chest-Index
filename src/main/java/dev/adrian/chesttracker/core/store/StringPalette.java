@@ -1,6 +1,7 @@
 package dev.adrian.chesttracker.core.store;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,10 @@ public final class StringPalette {
 
     public List<String> entries() {
         return List.copyOf(byId);
+    }
+
+    public List<String> view() {
+        return Collections.unmodifiableList(byId);
     }
 
     public static StringPalette fromEntries(List<String> entries) {

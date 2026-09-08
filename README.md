@@ -55,21 +55,51 @@ configurations — a parallel build path to maintain, not a version bump.
 - **Left-click** an item to outline every container holding it and close the screen.
 - **Right-click** an item for the list of places, nearest first, with distances.
 - **Hold shift** over an item for the detail panel: totals, how many containers, how many are sealed
-  inside shulker boxes, and how far the nearest one is.
-- **Buttons along the bottom** switch dimension — only for dimensions that actually hold something,
-  plus your **ender chest** when it isn't empty.
+  inside shulker boxes, and how far the nearest one is. The `Item detail` setting switches this
+  between *holding shift* (the default), *always* and *never*.
+- **A button at the bottom left** shows which view you're reading. Hover it and the rest fan out to
+  the right — your **ender chest** first, then overworld, Nether, End, then anything a mod added.
+  Only views that actually hold something appear, and whichever you pick is still selected the next
+  time you open the screen.
 - A **bar under the search field** appears while the world is still being read.
 
+Typing matches **words, in any order**: `blue wool` finds `light_blue_wool`, and so does
+`wool blue`.
+
 **In any container window**, a small magnifier sits at the top right. Left-click opens the search
-screen; **right-drag** moves it and remembers where you put it.
+screen; **right-drag** moves it. Each kind of window remembers its own position, so the button can
+sit in the middle of a hopper's title bar and in the corner of a double chest.
 
 **Once you find something**, ChestTracker marks it in the world: a box on each container, a trail of
 marks rising from it so it's findable across a base, and the nearest one picked out in a second
-colour. Containers past render distance are drawn at the horizon rather than not at all. When you
-arrive and open the chest, the slot holding your item pulses — and if it's inside a shulker box, the
-shulker pulses instead, then the item once you open that.
+colour. A double chest gets one box across both halves. Containers past render distance are drawn at
+the horizon rather than not at all. When you arrive and open the chest, the slot holding your item
+pulses — and if it's inside a shulker box, the shulker pulses instead, then the item once you open
+that, and the bundle inside that if that's where it ended up.
+
+**If it's in your ender chest**, that whole trail still works: the nearest ender chest in the world
+is boxed, an ender chest *item* in whatever you have open is marked, and the item itself is marked
+once the chest is open.
+
+**If it isn't in this dimension**, the search says where it is rather than saying you don't have
+any — the ender chest is checked first, then every other dimension the index knows about.
 
 Everything above is configurable through Mod Menu, including the marker colours.
+
+### With Litematica
+
+If Litematica is installed, its material list grows two buttons of its own:
+
+- **Search items** highlights every container holding anything the schematic still needs. From
+  there the highlight narrows itself — each material drops out as you pick up enough of it, and it
+  clears and says so when the last one goes. A material that has once been satisfied stays that
+  way, so laying the blocks back down doesn't relight the chests you got them from.
+- **One item…** opens the material list as a list of searches, for when the question is *"where is
+  the rest of the stone brick stairs"* rather than *"where is all forty of these"*.
+
+**Right-drag** moves both. That screen belongs to malilib rather than to vanilla, its buttons are
+laid out by code this mod can't measure, and every Litematica release is free to move them — so
+rather than guess again when the button lands on top of one of theirs, you can just move it.
 
 ## Where it works
 
@@ -80,14 +110,46 @@ fact decides what's possible in each setup:
 |---|---|---|---|
 | Singleplayer / LAN host | yes | yes | yes |
 | Server with ChestTracker installed | yes | yes (permission-gated) | yes |
-| Vanilla server (no mod on the server) | nothing yet | nothing yet | no |
+| Vanilla server (no mod on the server) | chunks you've visited | containers you've opened | no |
 
 Singleplayer gets everything, because there the client *is* the server.
 
-**On a vanilla server the mod currently indexes nothing.** It detects that the server doesn't have
-it and says so — "No index here yet." — rather than appearing broken, but that is all it does there
-today. Mapping container locations from loaded chunks, and remembering what you've seen inside,
-would be a client-side index that does not exist yet.
+**On a vanilla server the mod keeps its own index, on your machine.** It notices the server doesn't
+have the mod and falls back to what this client can see for itself:
+
+- **Where containers are**, from the chunks the server has already sent you. A chunk packet carries
+  every block entity in it, so the moment your client can draw a chest, it knows one is there.
+- **What is inside one**, from containers *you opened yourself*. The stacks in an open menu are
+  already on your screen; recording them is reading your own client's memory.
+
+A chest therefore holds nothing here until you open it once. There is no way around that — chunk
+data carries block states and never inventories — so the screen says so rather than looking broken.
+
+**Nothing is sent to the server, and nothing is automated.** No packet leaves that wouldn't have
+left with the mod uninstalled: no scanning, no probing, no containers opened for you, and your view
+is never moved. A vanilla server cannot tell the mod is running, which is the point — the servers
+this exists for are the ones that would ban you for the alternative.
+
+The two features that *do* move you — turning to face a match, and opening a container already
+within reach — are off on anyone else's server for exactly that reason. They look like aim-assist
+and auto-interact from the far end, and the far end doesn't get to hear why. In your own world
+(including hosting a LAN game) they work as before. On a server they need naming that server under
+**Servers those two are allowed on**, which is the setting to prefer — `assistOnServers` turns them
+on for *every* server you ever join, which means answering for the strictest one.
+
+The client-side index is kept per server address under `config/chest-tracker/servers/`, and can be
+turned off with `clientSideIndex`.
+
+### Switching it off
+
+**ChestTracker: off** stops everything — no search screen, no button on containers, no key, nothing
+indexed, nothing drawn. Not hidden: stopped.
+
+**Servers it stays off on** does the same automatically for the addresses listed, for as long as
+you're connected to one. It ships with `donutsmp.net`, `gommehd.net`, `mcpvp.com` and `mcpvp.club`,
+because those are strict enough that off is the safe default — remove any of them if you'd rather
+decide for yourself. Matching is by host, so `example.net` covers `eu.example.net` and a port makes
+no difference.
 
 **Client and server must run the same version.** The two speak a versioned protocol and refuse each
 other when it doesn't match, rather than silently misreading one another.

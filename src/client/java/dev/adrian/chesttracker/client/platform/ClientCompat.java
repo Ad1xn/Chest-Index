@@ -20,6 +20,22 @@ public final class ClientCompat {
         //?}
     }
 
+    public static void toast(Component title, Component message) {
+        Minecraft client = Minecraft.getInstance();
+        //? if >=26.1 {
+        /*if (client.gui == null) return;
+        net.minecraft.client.gui.components.toasts.SystemToast.add(
+                client.gui.toastManager(),
+                net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                title, message);
+        *///?} else {
+        net.minecraft.client.gui.components.toasts.SystemToast.add(
+                client.getToastManager(),
+                net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                title, message);
+        //?}
+    }
+
     public static KeyMapping registerKeyMapping(KeyMapping mapping) {
         //? if >=26.1 {
         /*return net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper.registerKeyMapping(mapping);
@@ -39,6 +55,15 @@ public final class ClientCompat {
 
     public static void openScreen(Screen screen) {
         Minecraft.getInstance().setScreenAndShow(screen);
+    }
+
+    public static void openScreenFromContainer(Screen screen) {
+        Minecraft client = Minecraft.getInstance();
+        if (currentScreen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>
+                && client.player != null) {
+            client.player.closeContainer();
+        }
+        client.setScreenAndShow(screen);
     }
 
     public interface ScreenDraw {

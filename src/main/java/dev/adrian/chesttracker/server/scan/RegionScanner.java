@@ -33,6 +33,7 @@ public final class RegionScanner {
 
     private final TrackerService tracker;
     private final Queue<Batch> pending = new ConcurrentLinkedQueue<>();
+    private final AtomicInteger queueDepth = new AtomicInteger();
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean cancelled = new AtomicBoolean();
 
@@ -236,11 +237,12 @@ public final class RegionScanner {
             List<ContainerRecord> classified = OriginClassifier.classify(entry.getValue(), regionBoxes);
             containersFound.addAndGet(classified.size());
             pending.add(new Batch(dimensionId, entry.getKey(), classified, localPalette));
+            queueDepth.incrementAndGet();
         }
     }
 
     private void throttle() {
-        while (pending.size() > 512 && !cancelled.get()) {
+        while (queueDepth.get() > 512 && !cancelled.get()) {
             try {
                 Thread.sleep(20);
             } catch (InterruptedException interrupted) {
@@ -260,6 +262,7 @@ public final class RegionScanner {
         Batch batch;
         while (applied < APPLY_BUDGET_PER_TICK && (batch = pending.poll()) != null) {
             applied++;
+            queueDepth.decrementAndGet();
 
             if (isChunkLoaded.test(batch.dimensionId(), batch.chunkKey())) {
                 liveScanChunk.accept(batch.dimensionId(), batch.chunkKey());
@@ -280,6 +283,6 @@ public final class RegionScanner {
     }
 
     public int queuedBatches() {
-        return pending.size();
+        return queueDepth.get();
     }
 }

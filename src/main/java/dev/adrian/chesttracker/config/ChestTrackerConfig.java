@@ -10,6 +10,11 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public final class ChestTrackerConfig {
 
@@ -17,9 +22,62 @@ public final class ChestTrackerConfig {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    public boolean enabled = true;
+
+    public List<String> disabledServers = new ArrayList<>(List.of(
+            "donutsmp.net", "gommehd.net", "mcpvp.com", "mcpvp.club"));
+
+    public boolean disabledOn(String address) {
+        return matchesHost(disabledServers, address);
+    }
+
+    public static boolean matchesHost(List<String> hosts, String address) {
+        if (hosts == null || hosts.isEmpty() || address == null || address.isBlank()) return false;
+        String host = host(address);
+        for (String entry : hosts) {
+            if (entry == null || entry.isBlank()) continue;
+            String candidate = host(entry);
+            if (host.equals(candidate) || host.endsWith("." + candidate)) return true;
+        }
+        return false;
+    }
+
+    public static String host(String address) {
+        String text = address.trim().toLowerCase(Locale.ROOT);
+        int slash = text.indexOf('/');
+        if (slash >= 0) text = text.substring(0, slash);
+        if (text.startsWith("[")) {
+            int close = text.indexOf(']');
+            if (close > 0) text = text.substring(1, close);
+        } else {
+            int colon = text.lastIndexOf(':');
+            if (colon > 0 && text.indexOf(':') == colon) text = text.substring(0, colon);
+        }
+        while (text.endsWith(".")) text = text.substring(0, text.length() - 1);
+        return text;
+    }
+
     public boolean scanOnWorldJoin = true;
 
     public boolean showMachines = false;
+
+    public boolean showUtility = false;
+
+    public boolean trackEntityContainers = true;
+
+    public boolean showEntities = true;
+
+    public boolean entityContainersOnVanillaServers = false;
+
+    public List<String> machineTypes = new ArrayList<>(List.of(
+            "minecraft:hopper", "minecraft:dropper", "minecraft:dispenser",
+            "minecraft:crafter"));
+
+    public List<String> utilityTypes = new ArrayList<>(List.of(
+            "minecraft:furnace", "minecraft:blast_furnace", "minecraft:smoker",
+            "minecraft:brewing_stand", "minecraft:campfire", "minecraft:soul_campfire",
+            "minecraft:jukebox", "minecraft:lectern", "minecraft:decorated_pot",
+            "minecraft:chiseled_bookshelf"));
 
     public int maxResults = 900;
 
@@ -39,11 +97,37 @@ public final class ChestTrackerConfig {
 
     public boolean enderChestView = true;
 
+    public boolean searchShulkerContents = true;
+
+    public boolean litematicaButton = true;
+
     public boolean containerSearchButton = true;
 
     public int searchButtonX = -15;
 
     public int searchButtonY = 4;
+
+    public Map<String, int[]> searchButtonPositions = new LinkedHashMap<>();
+
+    public int[] searchButtonOffset(String menuKey) {
+        if (menuKey != null && searchButtonPositions != null) {
+            int[] stored = searchButtonPositions.get(menuKey);
+            if (stored != null && stored.length == 2) return stored;
+        }
+        return new int[] {searchButtonX, searchButtonY};
+    }
+
+    public void setSearchButtonOffset(String menuKey, int x, int y) {
+        if (menuKey == null || menuKey.isBlank()) {
+            searchButtonX = x;
+            searchButtonY = y;
+            return;
+        }
+        if (searchButtonPositions == null) searchButtonPositions = new LinkedHashMap<>();
+        if (machineTypes == null) machineTypes = new ArrayList<>();
+        if (utilityTypes == null) utilityTypes = new ArrayList<>();
+        searchButtonPositions.put(menuKey, new int[] {x, y});
+    }
 
     public enum Access {
         ALL,
@@ -67,15 +151,19 @@ public final class ChestTrackerConfig {
 
     public int serverHelloTimeoutMs = 3000;
 
+    public boolean clientSideIndex = true;
+
     public enum Display {
         BOXES,
         ACTION_BAR,
         BOTH,
         NONE;
 
+        private static final Display[] VALUES = values();
+
         public static Display parse(String value) {
             if (value == null) return BOXES;
-            for (Display display : values()) {
+            for (Display display : VALUES) {
                 if (display.name().equalsIgnoreCase(value.trim())) return display;
             }
             return BOXES;
@@ -100,22 +188,101 @@ public final class ChestTrackerConfig {
 
     public boolean turnToTarget = true;
 
+    public boolean assistOnServers = false;
+
+    public List<String> assistServers = new ArrayList<>();
+
+    public boolean assistAllowedOn(String address) {
+        return assistOnServers || matchesHost(assistServers, address);
+    }
+
     public boolean guideBeam = true;
 
-    public boolean nestedTooltip = true;
+    public enum Detail {
+        ALWAYS,
+        SHIFT,
+        OFF;
+
+        private static final Detail[] VALUES = values();
+
+        public static Detail parse(String value) {
+            if (value == null) return SHIFT;
+            for (Detail detail : VALUES) {
+                if (detail.name().equalsIgnoreCase(value.trim())) return detail;
+            }
+            return SHIFT;
+        }
+    }
+
+    public String itemDetail = Detail.SHIFT.name();
+
+    public Detail itemDetail() {
+        return Detail.parse(itemDetail);
+    }
 
     public boolean highlightFoundSlots = true;
+
+    public String slotHighlightStyle = SlotStyle.OUTLINE.name();
+
+    public SlotStyle slotHighlightStyle() {
+        return SlotStyle.parse(slotHighlightStyle);
+    }
+
+    public enum SlotStyle {
+        OUTLINE,
+        BACKGROUND,
+        BOTH;
+
+        private static final SlotStyle[] VALUES = values();
+
+        public static SlotStyle parse(String value) {
+            if (value == null) return OUTLINE;
+            for (SlotStyle style : VALUES) {
+                if (style.name().equalsIgnoreCase(value.trim())) return style;
+            }
+            return OUTLINE;
+        }
+
+        public boolean drawsOutline() {
+            return this == OUTLINE || this == BOTH;
+        }
+
+        public boolean drawsBackground() {
+            return this == BACKGROUND || this == BOTH;
+        }
+
+        public String label() {
+            return switch (this) {
+                case OUTLINE -> "outline";
+                case BACKGROUND -> "background";
+                case BOTH -> "both";
+            };
+        }
+    }
 
     public int nearestColour = 0xFF2BD0;
 
     public int otherColour = 0xB478FF;
 
+    private transient int nearestRgbFor;
+    private transient float[] nearestRgb;
+    private transient int otherRgbFor;
+    private transient float[] otherRgb;
+
     public float[] nearestRgb() {
-        return rgb(nearestColour);
+        if (nearestRgb == null || nearestRgbFor != nearestColour) {
+            nearestRgbFor = nearestColour;
+            nearestRgb = rgb(nearestColour);
+        }
+        return nearestRgb;
     }
 
     public float[] otherRgb() {
-        return rgb(otherColour);
+        if (otherRgb == null || otherRgbFor != otherColour) {
+            otherRgbFor = otherColour;
+            otherRgb = rgb(otherColour);
+        }
+        return otherRgb;
     }
 
     private static float[] rgb(int packed) {
@@ -148,11 +315,23 @@ public final class ChestTrackerConfig {
         }
         try (Reader reader = Files.newBufferedReader(path)) {
             ChestTrackerConfig loaded = GSON.fromJson(reader, ChestTrackerConfig.class);
-            return loaded == null ? new ChestTrackerConfig() : loaded;
+            if (loaded == null) return new ChestTrackerConfig();
+            loaded.normalise();
+            return loaded;
         } catch (IOException | RuntimeException e) {
             ChestTracker.LOG.warn("Could not read {}, using defaults: {}", path, e.toString());
             return new ChestTrackerConfig();
         }
+    }
+
+    private void normalise() {
+        if (disabledServers == null) disabledServers = new ArrayList<>();
+        if (assistServers == null) assistServers = new ArrayList<>();
+        if (searchButtonPositions == null) searchButtonPositions = new LinkedHashMap<>();
+        if (machineTypes == null) machineTypes = new ArrayList<>();
+        if (utilityTypes == null) utilityTypes = new ArrayList<>();
+        if (searchText == null) searchText = "";
+        if (sortMode == null) sortMode = "COUNT";
     }
 
     public void save() {

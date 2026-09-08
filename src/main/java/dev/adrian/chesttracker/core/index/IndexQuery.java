@@ -10,6 +10,7 @@ public record IndexQuery(
         Set<Origin> origins,
         Set<Integer> typeIds,
         Set<Integer> excludedTypeIds,
+        Set<Integer> detailIds,
         boolean unlootedOnly,
         boolean knownContentsOnly,
         UUID owner,
@@ -24,6 +25,7 @@ public record IndexQuery(
         origins = origins == null ? Set.of() : Set.copyOf(origins);
         typeIds = typeIds == null ? Set.of() : Set.copyOf(typeIds);
         excludedTypeIds = excludedTypeIds == null ? Set.of() : Set.copyOf(excludedTypeIds);
+        detailIds = detailIds == null ? Set.of() : Set.copyOf(detailIds);
     }
 
     public boolean hasDistanceLimit() {
@@ -43,6 +45,7 @@ public record IndexQuery(
         private Set<Origin> origins = Set.of();
         private Set<Integer> typeIds = Set.of();
         private Set<Integer> excludedTypeIds = Set.of();
+        private Set<Integer> detailIds = Set.of();
         private boolean unlootedOnly;
         private boolean knownContentsOnly;
         private UUID owner;
@@ -57,6 +60,7 @@ public record IndexQuery(
         public Builder origin(Origin o) { this.origins = Set.of(o); return this; }
         public Builder types(Set<Integer> ids) { this.typeIds = ids; return this; }
         public Builder excludeTypes(Set<Integer> ids) { this.excludedTypeIds = ids; return this; }
+        public Builder details(Set<Integer> ids) { this.detailIds = ids; return this; }
         public Builder unlootedOnly(boolean v) { this.unlootedOnly = v; return this; }
         public Builder knownContentsOnly(boolean v) { this.knownContentsOnly = v; return this; }
         public Builder owner(UUID id) { this.owner = id; return this; }
@@ -66,7 +70,7 @@ public record IndexQuery(
         public Builder limit(int n) { this.limit = n; return this; }
 
         public IndexQuery build() {
-            return new IndexQuery(itemIds, origins, typeIds, excludedTypeIds, unlootedOnly,
+            return new IndexQuery(itemIds, origins, typeIds, excludedTypeIds, detailIds, unlootedOnly,
                     knownContentsOnly, owner, includeNested, center, maxDistance, limit);
         }
     }

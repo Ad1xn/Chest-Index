@@ -10,7 +10,10 @@ import dev.adrian.chesttracker.core.util.BlockKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -359,5 +362,109 @@ class WorldIndexTest {
         assertEquals(2, stats.containers());
         assertEquals(1, stats.withKnownContents());
         assertEquals(1, stats.byOrigin().get(Origin.NATURAL));
+    }
+
+    @Test
+    void theFastSummaryAgreesWithSummarisingRankedResults() {
+        for (int i = 0; i < 60; i++) {
+            index.put(chest(i * 3, 64, i,
+                    new StackEntry(DIAMOND, 1 + i % 7),
+                    new StackEntry(STONE, 2 + i % 5, i % 3 == 0 ? 1 : 0),
+                    new StackEntry(EMERALD, 1 + i % 3)));
+        }
+
+        for (IndexQuery query : List.of(
+                IndexQuery.builder().center(BlockKey.pack(0, 64, 0)).build(),
+                IndexQuery.builder().center(BlockKey.pack(90, 64, 30)).build(),
+                IndexQuery.builder().items(Set.of(DIAMOND)).build(),
+                IndexQuery.builder().items(Set.of(DIAMOND, STONE, EMERALD)).build(),
+                IndexQuery.builder().includeNested(false).build(),
+                IndexQuery.builder().maxDistance(40).center(BlockKey.pack(0, 64, 0)).build())) {
+
+            Map<Integer, int[]> expected = new HashMap<>();
+            Map<Integer, Double> nearest = new HashMap<>();
+            for (SearchResult result : index.query(query)) {
+                if (!result.container().contentsKnown()) continue;
+                Set<Integer> seenHere = new HashSet<>();
+                for (StackEntry entry : result.container().contents()) {
+                    if (!query.includeNested() && entry.isNested()) continue;
+                    if (!query.itemIds().isEmpty() && !query.itemIds().contains(entry.itemId())) continue;
+                    int[] totals = expected.computeIfAbsent(entry.itemId(), id -> new int[3]);
+                    totals[0] += entry.count();
+                    if (entry.isNested()) totals[2] += entry.count();
+                    if (seenHere.add(entry.itemId())) totals[1]++;
+                    nearest.merge(entry.itemId(), result.distanceSq(), Math::min);
+                }
+            }
+
+            List<WorldIndex.ItemSummary> actual = index.summarise(query);
+            assertEquals(expected.size(), actual.size());
+            for (WorldIndex.ItemSummary summary : actual) {
+                int[] totals = expected.get(summary.itemId());
+                assertNotNull(totals);
+                assertEquals(totals[0], summary.totalCount());
+                assertEquals(totals[1], summary.containerCount());
+                assertEquals(totals[2], summary.nestedCount());
+                assertEquals(nearest.get(summary.itemId()), summary.nearestDistSq(), 1e-9);
+            }
+        }
+    }
+
+    @Test
+    void aContainerHoldingSeveralWantedItemsIsCountedOnce() {
+        index.put(chest(0, 64, 0,
+                new StackEntry(DIAMOND, 5), new StackEntry(STONE, 5), new StackEntry(EMERALD, 5)));
+
+        List<WorldIndex.ItemSummary> summary =
+                index.summarise(IndexQuery.builder().items(Set.of(DIAMOND, STONE, EMERALD)).build());
+
+        assertEquals(3, summary.size());
+        for (WorldIndex.ItemSummary entry : summary) {
+            assertEquals(5, entry.totalCount());
+            assertEquals(1, entry.containerCount());
+        }
+    }
+
+    @Test
+    void aDetailFilterPicksOutOneStackOfTwoOfTheSameItem() {
+        int pickaxe = 7;
+        int mending = 40;
+        int unbreaking = 41;
+
+        WorldIndex index = new WorldIndex(0);
+        index.put(new ContainerRecord(BlockKey.pack(0, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(pickaxe, 1, 0, null, List.of(mending)))));
+        index.put(new ContainerRecord(BlockKey.pack(10, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(pickaxe, 1, 0, null, List.of(unbreaking)))));
+        index.put(new ContainerRecord(BlockKey.pack(20, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(pickaxe, 1, 0, null))));
+
+        List<SearchResult> mended = index.query(IndexQuery.builder()
+                .details(java.util.Set.of(mending))
+                .build());
+
+        assertEquals(1, mended.size());
+        assertEquals(BlockKey.pack(0, 64, 0), mended.get(0).container().pos());
+
+        List<WorldIndex.ItemSummary> summary = index.summarise(IndexQuery.builder()
+                .details(java.util.Set.of(mending))
+                .build());
+        assertEquals(1, summary.size());
+        assertEquals(1, summary.get(0).totalCount());
+    }
+
+    @Test
+    void noDetailFilterStillFindsEverything() {
+        WorldIndex index = new WorldIndex(0);
+        index.put(new ContainerRecord(BlockKey.pack(0, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(7, 1, 0, null, List.of(40)),
+                        new StackEntry(8, 3, 0, null))));
+
+        assertEquals(1, index.query(IndexQuery.builder().build()).size());
+        assertEquals(2, index.summarise(IndexQuery.builder().build()).size());
     }
 }

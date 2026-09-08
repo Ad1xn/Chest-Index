@@ -1,5 +1,6 @@
 package dev.adrian.chesttracker.mixin;
 
+import dev.adrian.chesttracker.platform.ClientBlockChanges;
 import dev.adrian.chesttracker.server.Trackers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -17,6 +18,11 @@ public abstract class LevelMixin {
     private void chesttracker$afterSetBlock(BlockPos pos, BlockState state, int flags, int recursionLeft,
                                             CallbackInfoReturnable<Boolean> cir) {
         if (!cir.getReturnValueZ()) return;
-        Trackers.onBlockChanged((Level) (Object) this, pos);
+        Level level = (Level) (Object) this;
+        if (level.isClientSide()) {
+            ClientBlockChanges.fire(level, pos);
+            return;
+        }
+        Trackers.onBlockChanged(level, pos);
     }
 }

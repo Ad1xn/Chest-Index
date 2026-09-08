@@ -63,8 +63,13 @@ public final class TrackerService {
         ContainerRecord previous = index(dimensionId).get(container.pos());
         ContainerRecord merged = container.inheriting(previous);
 
+        if (previous != null && previous.sameDataAs(merged)) {
+            index(dimensionId).touch(merged);
+            return;
+        }
+
         index(dimensionId).put(merged);
-        if (previous == null || !previous.sameDataAs(merged)) bump(dimensionId);
+        bump(dimensionId);
     }
 
     public ContainerRecord remove(String dimensionId, long pos) {
@@ -133,12 +138,23 @@ public final class TrackerService {
         for (StackEntry entry : record.contents()) {
             String itemId = from.value(entry.itemId());
             if (itemId == null) continue;
-            contents.add(new StackEntry(palette.intern(itemId), entry.count(), entry.depth(), entry.customName()));
+            contents.add(new StackEntry(palette.intern(itemId), entry.count(), entry.depth(),
+                    entry.customName(), remapDetails(entry.details(), from)));
         }
 
         return new ContainerRecord(record.pos(), palette.intern(dimensionId), palette.intern(typeId),
                 record.origin(), record.owner(), record.unlooted(), record.contentsKnown(),
                 record.customName(), record.lastSeenTick(), contents);
+    }
+
+    private List<Integer> remapDetails(List<Integer> details, StringPalette from) {
+        if (details.isEmpty()) return List.of();
+        List<Integer> remapped = new java.util.ArrayList<>(details.size());
+        for (int detailId : details) {
+            String detail = from.value(detailId);
+            if (detail != null) remapped.add(palette.intern(detail));
+        }
+        return remapped;
     }
 
     public void clearIndexes() {

@@ -51,11 +51,19 @@ public final class Trackers {
                 .hasChunk(BlockKey.chunkX(chunkKey), BlockKey.chunkZ(chunkKey));
     }
 
+    private static final Map<String, ServerLevel> LEVELS = new ConcurrentHashMap<>();
+
     public static ServerLevel levelFor(String dimensionId) {
         net.minecraft.server.MinecraftServer current = server;
         if (current == null) return null;
+
+        ServerLevel cached = LEVELS.get(dimensionId);
+        if (cached != null) return cached;
+
         for (ServerLevel level : current.getAllLevels()) {
-            if (dimensionId(level).equals(dimensionId)) return level;
+            String id = dimensionId(level);
+            LEVELS.putIfAbsent(id, level);
+            if (id.equals(dimensionId)) return level;
         }
         return null;
     }
@@ -71,6 +79,7 @@ public final class Trackers {
         server = null;
         current = null;
         DIMENSION_IDS.clear();
+        LEVELS.clear();
     }
 
     public static String dimensionId(Level level) {
@@ -112,6 +121,8 @@ public final class Trackers {
         if (tracker == null || DIRTY.isEmpty()) return 0;
 
         int done = 0;
+        var scanner = new dev.adrian.chesttracker.server.scan.LiveScanner(tracker);
+
         for (Map.Entry<String, java.util.Set<Long>> entry : DIRTY.entrySet()) {
             ServerLevel level = levelFor(entry.getKey());
             java.util.Set<Long> positions = entry.getValue();
@@ -120,7 +131,6 @@ public final class Trackers {
                 continue;
             }
 
-            var scanner = new dev.adrian.chesttracker.server.scan.LiveScanner(tracker);
             var iterator = positions.iterator();
             while (iterator.hasNext() && done < DIRTY_BUDGET_PER_TICK) {
                 long pos = iterator.next();

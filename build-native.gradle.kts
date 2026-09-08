@@ -61,4 +61,9 @@ tasks.processResources {
     filesMatching(listOf("fabric.mod.json", "*.mixins.json")) { expand(resourceProps) }
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    maxHeapSize = "4g"
+    environment("CT_BENCH", System.getenv("CT_BENCH") ?: "")
+    testLogging { showStandardStreams = System.getenv("CT_BENCH") == "1" }
+}

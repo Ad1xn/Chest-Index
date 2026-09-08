@@ -5,7 +5,8 @@
   "compatibilityLevel": "${mixin_compat}",
   "client": [
     "ContainerScreenAccessor",
-    "KeyMappingAccessor"
+    "KeyMappingAccessor",
+    "MalilibScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

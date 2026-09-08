@@ -26,11 +26,14 @@ public final class ChestTrackerPayloads {
         QueryDto.Filters effective = filters == null ? QueryDto.Filters.defaults() : filters;
         buf.writeBoolean(effective.includeNested());
         buf.writeBoolean(effective.includeMachines());
+        buf.writeBoolean(effective.includeUtility());
+        buf.writeBoolean(effective.includeEntities());
         buf.writeVarInt(effective.originFilter());
     }
 
     private static QueryDto.Filters readFilters(FriendlyByteBuf buf) {
-        return new QueryDto.Filters(buf.readBoolean(), buf.readBoolean(), buf.readVarInt());
+        return new QueryDto.Filters(buf.readBoolean(), buf.readBoolean(),
+                buf.readBoolean(), buf.readBoolean(), buf.readVarInt());
     }
 
     private static <T> List<T> readList(FriendlyByteBuf buf, java.util.function.Function<FriendlyByteBuf, T> reader) {
@@ -156,14 +159,23 @@ public final class ChestTrackerPayloads {
                         (buf, payload) -> {
                             QueryDto.ContainerRequest request = payload.request();
                             buf.writeVarInt(request.requestId());
-                            buf.writeUtf(request.itemId() == null ? "" : request.itemId(), MAX_ID);
+                            buf.writeVarInt(request.itemIds().size());
+                            for (String itemId : request.itemIds()) buf.writeUtf(itemId, MAX_ID);
                             writeFilters(buf, request.filters());
                             buf.writeVarInt(request.limit());
                             buf.writeUtf(request.dimensionId(), MAX_ID);
+                            buf.writeUtf(request.text(), MAX_TEXT);
                         },
-                        buf -> new ContainerRequestPayload(new QueryDto.ContainerRequest(
-                                buf.readVarInt(), buf.readUtf(MAX_ID), readFilters(buf),
-                                buf.readVarInt(), buf.readUtf(MAX_ID))));
+                        buf -> {
+                            int requestId = buf.readVarInt();
+                            int count = Math.min(Math.max(0, buf.readVarInt()),
+                                    QueryDto.ContainerRequest.MAX_ITEMS);
+                            java.util.List<String> itemIds = new java.util.ArrayList<>(count);
+                            for (int i = 0; i < count; i++) itemIds.add(buf.readUtf(MAX_ID));
+                            return new ContainerRequestPayload(new QueryDto.ContainerRequest(
+                                    requestId, itemIds, readFilters(buf),
+                                    buf.readVarInt(), buf.readUtf(MAX_ID), buf.readUtf(MAX_TEXT)));
+                        });
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -190,6 +202,7 @@ public final class ChestTrackerPayloads {
                                 buf.writeBoolean(hit.nested());
                                 buf.writeBoolean(hit.natural());
                                 buf.writeBoolean(hit.contentsKnown());
+                                buf.writeVarInt(hit.entityId());
                             }
                         },
                         buf -> {
@@ -198,7 +211,7 @@ public final class ChestTrackerPayloads {
                             return new ContainerResponsePayload(new QueryDto.ContainerResponse(requestId, permitted,
                                     readList(buf, b -> new QueryDto.ContainerHit(
                                             b.readUtf(MAX_ID), b.readLong(), b.readVarInt(), b.readDouble(),
-                                            b.readBoolean(), b.readBoolean(), b.readBoolean()))));
+                                            b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readVarInt()))));
                         });
 
         @Override

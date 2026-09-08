@@ -13,27 +13,26 @@ class QueryDtoTest {
     @Test
     void originFilterMapsToTheMatchingOrigin() {
         assertEquals(Set.of(Origin.PLAYER_PLACED, Origin.UNKNOWN),
-                new QueryDto.Filters(true, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins());
+                new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins());
         assertEquals(Set.of(Origin.NATURAL),
-                new QueryDto.Filters(true, false, QueryDto.Filters.ORIGIN_NATURAL).origins());
+                new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_NATURAL).origins());
     }
 
     @Test
     void anyOriginMeansNoConstraint() {
-        assertTrue(new QueryDto.Filters(true, false, QueryDto.Filters.ORIGIN_ANY).origins().isEmpty());
+        assertTrue(new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_ANY).origins().isEmpty());
     }
 
     @Test
     void outOfRangeOriginFallsBackToAny() {
-        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, 99).originFilter());
-        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, -3).originFilter());
-        assertTrue(new QueryDto.Filters(true, false, 99).origins().isEmpty());
+        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, false, false, 99).originFilter());
+        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, false, false, -3).originFilter());
+        assertTrue(new QueryDto.Filters(true, false, false, false, 99).origins().isEmpty());
     }
 
     @Test
     void theBuiltFilterKeepsContainersWhosePlacementWasNeverSeen() {
-        Set<Origin> built = new QueryDto.Filters(true, false,
-                QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins();
+        Set<Origin> built = new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins();
 
         assertTrue(built.contains(Origin.PLAYER_PLACED));
         assertTrue(built.contains(Origin.UNKNOWN));
@@ -42,8 +41,7 @@ class QueryDtoTest {
 
     @Test
     void theGeneratedFilterStaysExact() {
-        Set<Origin> generated = new QueryDto.Filters(true, false,
-                QueryDto.Filters.ORIGIN_NATURAL).origins();
+        Set<Origin> generated = new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_NATURAL).origins();
 
         assertEquals(Set.of(Origin.NATURAL), generated);
     }

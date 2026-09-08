@@ -2,6 +2,7 @@ package dev.adrian.chesttracker.core.anvil;
 
 import dev.adrian.chesttracker.core.model.ContainerRecord;
 import dev.adrian.chesttracker.core.model.Origin;
+import dev.adrian.chesttracker.core.model.StackDetail;
 import dev.adrian.chesttracker.core.model.StackEntry;
 import dev.adrian.chesttracker.core.store.StringPalette;
 import dev.adrian.chesttracker.core.util.BlockKey;
@@ -82,6 +83,7 @@ public final class ChunkExtractor {
         for (NbtCompound item : items) {
             String itemId = item.getString("id");
             if (itemId == null) continue;
+            if (itemId.equals("minecraft:air") || itemId.equals("air")) continue;
 
             int count = item.getInt("count", item.getInt("Count", 1));
 
@@ -89,7 +91,8 @@ public final class ChunkExtractor {
             String customName = components == null ? null
                     : PlainText.of(components.getString("minecraft:custom_name"));
 
-            out.add(new StackEntry(palette.intern(itemId), count, depth, customName));
+            out.add(new StackEntry(palette.intern(itemId), count, depth, customName,
+                    detailsOf(components, customName, palette)));
 
             if (components != null) {
                 for (NbtCompound slot : components.getCompoundList("minecraft:container")) {
@@ -99,6 +102,72 @@ public final class ChunkExtractor {
                 collectItems(components.getCompoundList("minecraft:bundle_contents"), out, depth + 1, palette);
             }
         }
+    }
+
+    private static List<Integer> detailsOf(NbtCompound components, String customName, StringPalette palette) {
+        if (components == null && customName == null) return List.of();
+
+        List<Integer> details = new ArrayList<>(2);
+        if (components != null) {
+            addEnchantments(components.getCompound("minecraft:enchantments"), details, palette);
+            addEnchantments(components.getCompound("minecraft:stored_enchantments"), details, palette);
+            addPotion(components.getCompound("minecraft:potion_contents"), details, palette);
+            addPotion(components, "minecraft:potion_contents", details, palette);
+            addLore(components, details, palette);
+        }
+        add(details, palette, StackDetail.name(customName));
+        return details;
+    }
+
+    private static void addEnchantments(NbtCompound enchantments, List<Integer> details, StringPalette palette) {
+        if (enchantments == null) return;
+
+        NbtCompound levels = enchantments.getCompound("levels");
+        NbtCompound source = levels != null ? levels : enchantments;
+        for (String id : source.keys()) {
+            if ("levels".equals(id) || "show_in_tooltip".equals(id)) continue;
+            add(details, palette, StackDetail.enchantment(id));
+        }
+    }
+
+    private static void addPotion(NbtCompound contents, List<Integer> details, StringPalette palette) {
+        if (contents == null) return;
+        add(details, palette, StackDetail.potion(contents.getString("potion")));
+    }
+
+    private static void addPotion(NbtCompound components, String key,
+                                  List<Integer> details, StringPalette palette) {
+        if (components.getCompound(key) != null) return;
+        add(details, palette, StackDetail.potion(unquote(components.getString(key))));
+    }
+
+    private static void addLore(NbtCompound components, List<Integer> details, StringPalette palette) {
+        List<Object> lines = components.getList("minecraft:lore");
+        if (lines == null) return;
+
+        int kept = 0;
+        for (Object line : lines) {
+            if (kept >= StackDetail.MAX_LORE_LINES) break;
+            String text = PlainText.of(line == null ? null : line.toString());
+            if (text == null) continue;
+            add(details, palette, StackDetail.lore(text));
+            kept++;
+        }
+    }
+
+    private static void add(List<Integer> details, StringPalette palette, String detail) {
+        if (detail == null) return;
+        int id = palette.intern(detail);
+        if (!details.contains(id)) details.add(id);
+    }
+
+    private static String unquote(String raw) {
+        if (raw == null) return null;
+        String value = raw.trim();
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 
     private static List<StructureBox> extractStructureBoxes(NbtCompound chunk) {

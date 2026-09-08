@@ -2,12 +2,14 @@ package dev.adrian.chesttracker.client.ui;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chesttracker.client.ClientTracker;
+import dev.adrian.chesttracker.client.SearchCategories;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
-import dev.adrian.chesttracker.client.platform.ClientCompat;
+import dev.adrian.chesttracker.client.ActionBar;
 import dev.adrian.chesttracker.client.platform.Gfx;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.net.QueryDto;
 import dev.adrian.chesttracker.core.util.BlockKey;
+import dev.adrian.chesttracker.core.util.SearchQuery;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -69,11 +71,14 @@ public final class ChestTrackerScreen extends Screen {
 
     private static final int TEXT_DARK_ON_BUTTON = 0xFF202020;
 
+    private static final int ENDER_GLYPH = 0xFF5A2D82;
+
     private static final int DIMENSION_W = 12;
     private static final int DIMENSION_H = 12;
 
     private static final int TOOLTIP_BG = 0xF0100010;
-    private static final int TOOLTIP_EDGE = 0xFF5000FF;
+    private static final int TOOLTIP_EDGE_TOP = 0x505000FF;
+    private static final int TOOLTIP_EDGE_BOTTOM = 0x5028007F;
 
     private static final int BUTTON_SIZE = 12;
     private static final int TOOLBAR_BUTTONS = 2;
@@ -97,6 +102,8 @@ public final class ChestTrackerScreen extends Screen {
     private static final int LIST_PAD = 3;
 
     private static final Map<String, ItemStack> ICON_CACHE = new HashMap<>();
+
+    private static final Map<String, String> NAME_CACHE = new HashMap<>();
 
     private enum Sort {
         COUNT("Most"), NEAREST("Nearest"), NAME("A-Z");
@@ -132,6 +139,7 @@ public final class ChestTrackerScreen extends Screen {
 
     private int newestItemsReply;
     private int newestContainersReply;
+    private int newestStatusReply;
 
     private boolean containersPending;
 
@@ -143,6 +151,8 @@ public final class ChestTrackerScreen extends Screen {
     private Sort sort = Sort.parse(ChestTrackerConfig.get().sortMode);
     private boolean includeNested = ChestTrackerConfig.get().includeNested;
     private boolean includeMachines = ChestTrackerConfig.get().showMachines;
+    private boolean includeUtility = ChestTrackerConfig.get().showUtility;
+    private boolean includeEntities = ChestTrackerConfig.get().showEntities;
     private int originIndex = Math.max(0, Math.min(2, ChestTrackerConfig.get().originFilter));
 
     private int panelX;
@@ -152,11 +162,36 @@ public final class ChestTrackerScreen extends Screen {
 
     private String hoverLabel;
 
+    private QueryDto.ItemSummary pendingTooltip;
+
+    private List<String> pendingHint;
+
     private QueryDto.StatusResponse status = QueryDto.StatusResponse.empty(0);
 
     private long lastStatusAsk;
 
-    private String viewing = "";
+    private static String viewing = "";
+
+    private boolean dimensionsExpanded;
+
+    private List<String> suggestions = List.of();
+
+    private int suggestionIndex;
+
+    private boolean searchWasFocused;
+    private int searchCursorWas = -1;
+
+    private static final int SUGGESTION_H = 11;
+
+    private static final int HELP_GAP = 6;
+
+    private static final int MIN_HELP_WIDTH = 24;
+
+    private static final int SUGGESTIONS_VISIBLE = 6;
+
+    private int suggestionScroll;
+
+    private boolean categoriesAsked;
 
     public ChestTrackerScreen() {
         super(Component.literal("Chest Tracker"));
@@ -164,27 +199,43 @@ public final class ChestTrackerScreen extends Screen {
 
     @Override
     protected void init() {
+        boolean reopening = search != null;
+        int cursor = reopening ? search.getCursorPosition() : -1;
+
         panelW = GUI_W + SCROLL_COL;
         panelH = TOP_H + SEARCH_H + ROWS_H + BOTTOM_H;
         panelX = (width - panelW) / 2;
         panelY = (height - panelH) / 2;
 
-        search = new EditBox(font, panelX + 8, panelY + TOP_H + 3, SLOTS_W - 10, 12,
+        search = new EditBox(font, panelX + 11, panelY + TOP_H + 2, panelW - 22, 12,
                 Component.literal("Search"));
+        search.setBordered(false);
         search.setMaxLength(64);
         search.setHint(Component.literal("Search"));
         search.setValue(pending);
+        if (reopening) {
+            int at = Math.min(cursor, pending.length());
+            search.setCursorPosition(at);
+            search.setHighlightPos(at);
+        } else {
+            search.moveCursorToEnd(false);
+            search.setHighlightPos(0);
+        }
         search.setResponder(value -> {
             pending = value;
+            refreshSuggestions();
             refreshItems();
         });
         addRenderableWidget(search);
         setInitialFocus(search);
 
+        detailRows = null;
+        menuRowsChanged();
+
         availability = ClientTracker.availability();
         lastChangeToken = ClientTracker.changeToken();
         ClientTracker.setWatching(true);
-        refreshItems();
+        refreshItems(!reopening);
     }
 
     @Override
@@ -198,6 +249,8 @@ public final class ChestTrackerScreen extends Screen {
         ChestTrackerConfig config = ChestTrackerConfig.get();
         boolean changed = config.includeNested != includeNested
                 || config.showMachines != includeMachines
+                || config.showUtility != includeUtility
+                || config.showEntities != includeEntities
                 || config.originFilter != originIndex
                 || !config.sortMode.equals(sort.name())
                 || !config.searchText.equals(pending);
@@ -205,6 +258,8 @@ public final class ChestTrackerScreen extends Screen {
 
         config.includeNested = includeNested;
         config.showMachines = includeMachines;
+        config.showUtility = includeUtility;
+        config.showEntities = includeEntities;
         config.originFilter = originIndex;
         config.sortMode = sort.name();
         config.searchText = pending;
@@ -212,7 +267,8 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private QueryDto.Filters filters() {
-        return new QueryDto.Filters(includeNested, includeMachines, originIndex);
+        return new QueryDto.Filters(includeNested, includeMachines, includeUtility,
+                includeEntities, originIndex);
     }
 
     private void refreshItems() {
@@ -224,6 +280,8 @@ public final class ChestTrackerScreen extends Screen {
         if (now - lastStatusAsk < STATUS_INTERVAL_MS || !mayAttempt()) return;
         lastStatusAsk = now;
         ClientTracker.status().thenAccept(response -> minecraft.execute(() -> {
+            if (response.requestId() <= newestStatusReply) return;
+            newestStatusReply = response.requestId();
             status = response;
             if (!viewing.isEmpty() && shownDimensions().stream()
                     .noneMatch(entry -> entry.dimensionId().equals(viewing))) {
@@ -240,7 +298,7 @@ public final class ChestTrackerScreen extends Screen {
                 minecraft.execute(() -> {
                     if (response.requestId() <= newestItemsReply) return;
                     newestItemsReply = response.requestId();
-                    items = sorted(response.items());
+                    items = sorted(withoutOtherTabs(response.items()));
                     itemsStale = false;
                     if (!resetView) {
                         scrollRow = Math.min(scrollRow, maxScrollRow());
@@ -254,8 +312,8 @@ public final class ChestTrackerScreen extends Screen {
     private void refreshContainers() {
         String itemId = selectedItemId;
         if (itemId == null || !mayAttempt()) return;
-        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS, viewing).thenAccept(response ->
-                minecraft.execute(() -> {
+        ClientTracker.containers(List.of(itemId), filters(), MAX_CONTAINERS, viewing, pending)
+                .thenAccept(response -> minecraft.execute(() -> {
                     if (!itemId.equals(selectedItemId)) return;
                     if (response.requestId() <= newestContainersReply) return;
                     newestContainersReply = response.requestId();
@@ -292,11 +350,23 @@ public final class ChestTrackerScreen extends Screen {
 
     private boolean canQuery() {
         return availability == ClientTracker.Availability.LOCAL
-                || availability == ClientTracker.Availability.SERVER;
+                || availability == ClientTracker.Availability.SERVER
+                || availability == ClientTracker.Availability.CLIENT_ONLY;
     }
 
     private boolean mayAttempt() {
         return canQuery() || availability == ClientTracker.Availability.NOT_PERMITTED;
+    }
+
+    private List<QueryDto.ItemSummary> withoutOtherTabs(List<QueryDto.ItemSummary> source) {
+        SearchQuery query = SearchQuery.parse(pending);
+        if (query.valuesOf(SearchQuery.Category.TAB).isEmpty()) return source;
+
+        List<QueryDto.ItemSummary> kept = new ArrayList<>(source.size());
+        for (QueryDto.ItemSummary item : source) {
+            if (SearchCategories.allows(query, item.itemId())) kept.add(item);
+        }
+        return kept;
     }
 
     private List<QueryDto.ItemSummary> sorted(List<QueryDto.ItemSummary> source) {
@@ -312,25 +382,46 @@ public final class ChestTrackerScreen extends Screen {
     private void highlightItem(String itemId) {
         if (!mayAttempt()) return;
         String label = displayName(itemId);
+
+        if (QueryDto.ENDER_CHEST.equals(viewing)) {
+            markInEnderChest(itemId, label);
+            return;
+        }
         String dimensionId = viewing.isEmpty()
                 ? minecraft.player.level().dimension().identifier().toString()
                 : viewing;
 
-        ClientTracker.containers(itemId, filters(), MAX_CONTAINERS, viewing).thenAccept(response ->
+        ClientTracker.containers(List.of(itemId), filters(), MAX_CONTAINERS, viewing, pending)
+                .thenAccept(response ->
                 minecraft.execute(() -> {
                     if (response.hits().isEmpty()) {
-                        ClientCompat.actionBar(Component.literal("Nothing indexed holds " + label));
+                        ActionBar.say(
+                                Component.literal("Nothing indexed holds " + label));
                         return;
                     }
-                    List<Long> positions = new ArrayList<>(response.hits().size());
-                    for (QueryDto.ContainerHit hit : response.hits()) positions.add(hit.pos());
-                    ContainerHighlight.get().select(positions, dimensionId, label);
+                    ContainerHighlight.get().selectHits(response.hits(), dimensionId, label);
                     ContainerHighlight.get().searchingFor(itemId);
                 }));
         onClose();
     }
 
+    private void markInEnderChest(String itemId, String label) {
+        java.util.List<Long> chests = dev.adrian.chesttracker.client.EnderChests.nearby();
+        String dimensionId = minecraft.player == null ? null
+                : minecraft.player.level().dimension().identifier().toString();
+
+        ContainerHighlight.get().markCarried(itemId, label, chests, dimensionId);
+        ActionBar.say(Component.literal(chests.isEmpty()
+                ? "Open your ender chest - " + label + " will be marked"
+                : "Nearest ender chest marked - " + label + " is inside"));
+        onClose();
+    }
+
     private void selectItem(String itemId) {
+        if (QueryDto.ENDER_CHEST.equals(viewing)) {
+            highlightItem(itemId);
+            return;
+        }
         selectedItemId = itemId;
         containers = List.of();
         containersPending = true;
@@ -411,7 +502,10 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private void draw(Gfx gfx, int mouseX, int mouseY) {
+        followSearchCursor();
         hoverLabel = null;
+        pendingTooltip = null;
+        pendingHint = null;
         drawButtons(gfx, mouseX, mouseY);
 
         ClientTracker.Availability now = ClientTracker.availability();
@@ -426,7 +520,7 @@ public final class ChestTrackerScreen extends Screen {
         }
 
         if (!canQuery()) {
-            gfx.text(font, Component.literal(unavailableMessage()), gridX(), gridY() + 4, TEXT_MAIN);
+            drawMessage(gfx, unavailableMessage());
             return;
         }
 
@@ -443,19 +537,26 @@ public final class ChestTrackerScreen extends Screen {
                     containers.size(), listRowsVisible());
         }
 
+        labelMenuRow(mouseX, mouseY);
+
         String title = hoverLabel != null ? hoverLabel
                 : selectedItemId != null ? displayName(selectedItemId) : "Chest Tracker";
-        int available = buttonX(0) - (panelX + 8) - 4;
-        gfx.text(font, Component.literal(truncate(title, available)), panelX + 8, panelY + 6, TEXT_MAIN);
+        gfx.text(font, Component.literal(truncate(title, titleWidth())),
+                panelX + 8, panelY + 6, TEXT_MAIN);
+
+        if (pendingTooltip != null) drawItemTooltip(gfx, pendingTooltip, mouseX, mouseY);
 
         drawMenu(gfx, mouseX, mouseY);
+        drawSuggestions(gfx, mouseX, mouseY);
+
+        if (pendingHint != null) drawTextTooltip(gfx, pendingHint, mouseX, mouseY);
     }
 
     private void drawScanBar(Gfx gfx) {
         if (!status.scanning()) return;
 
         int x = panelX + 8;
-        int width = SLOTS_W - 10;
+        int width = panelW - 16;
         int y = panelY + TOP_H + SEARCH_H - SCAN_BAR_H - 1;
 
         gfx.fill(x, y, x + width, y + SCAN_BAR_H, SCAN_BAR_BG);
@@ -464,9 +565,9 @@ public final class ChestTrackerScreen extends Screen {
             gfx.fill(x, y, x + (int) (width * fraction), y + SCAN_BAR_H, SCAN_BAR_FILL);
         }
         if (hoverLabel == null) {
-            hoverLabel = fraction > 0
-                    ? String.format("Indexing the world... %d%%", Math.round(fraction * 100))
-                    : String.format("Indexing the world... %,d chunks", status.chunksRead());
+            setHoverLabel("Indexing the world...", fraction > 0
+                    ? String.format("%d%%", Math.round(fraction * 100))
+                    : String.format("%,d chunks", status.chunksRead()));
         }
     }
 
@@ -474,41 +575,111 @@ public final class ChestTrackerScreen extends Screen {
         List<QueryDto.DimensionSummary> dimensions = shownDimensions();
         if (dimensions.size() < 2) return;
 
-        int y = panelY + panelH - BOTTOM_H - 1;
+        int y = dimensionRowY();
+        int selected = selectedDimensionIndex(dimensions);
+
+        boolean over = mouseY >= y && mouseY < y + DIMENSION_H
+                && mouseX >= dimensionX(0)
+                && mouseX < dimensionX(dimensionsExpanded ? dimensions.size() - 1 : 0) + DIMENSION_W;
+        dimensionsExpanded = dimensions.size() > 1 && over;
+
+        if (!dimensionsExpanded) {
+            drawDimensionButton(gfx, dimensions.get(selected), dimensionX(0), y, true,
+                    over, dimensions.size() > 1);
+            return;
+        }
         for (int i = 0; i < dimensions.size(); i++) {
-            QueryDto.DimensionSummary dimension = dimensions.get(i);
             int x = dimensionX(i);
-            boolean selected = viewing.isEmpty()
-                    ? dimension.dimensionId().equals(currentDimensionId())
-                    : dimension.dimensionId().equals(viewing);
-            boolean hovered = mouseX >= x && mouseX < x + DIMENSION_W
-                    && mouseY >= y && mouseY < y + DIMENSION_H;
-
-            gfx.fill(x, y, x + DIMENSION_W, y + DIMENSION_H, BEVEL_DARK);
-            if (selected) {
-                gfx.fill(x, y, x + DIMENSION_W - 1, y + DIMENSION_H - 1, BUTTON_ON);
-            } else {
-                fillFromTexture(gfx, x, y, DIMENSION_W - 1, DIMENSION_H - 1);
-            }
-            gfx.fill(x, y, x + DIMENSION_W - 1, y + 1, BEVEL_LIGHT);
-            gfx.fill(x, y, x + 1, y + DIMENSION_H - 1, BEVEL_LIGHT);
-            if (hovered) {
-                gfx.fill(x + 1, y + 1, x + DIMENSION_W - 1, y + DIMENSION_H - 1, SLOT_HOVER);
-                hoverLabel = dimensionLabel(dimension);
-            }
-
-            String glyph = dimensionGlyph(dimension.dimensionId());
-            gfx.text(font, glyph, x + (DIMENSION_W - font.width(glyph)) / 2, y + 2, TEXT_DARK_ON_BUTTON);
+            boolean hovered = mouseX >= x && mouseX < x + DIMENSION_W;
+            drawDimensionButton(gfx, dimensions.get(i), x, y, i == selected, hovered, false);
         }
     }
 
+    private void drawDimensionButton(Gfx gfx, QueryDto.DimensionSummary dimension,
+                                     int x, int y, boolean selected, boolean hovered,
+                                     boolean collapsed) {
+        gfx.fill(x, y, x + DIMENSION_W, y + DIMENSION_H, BEVEL_DARK);
+        if (selected) {
+            gfx.fill(x, y, x + DIMENSION_W - 1, y + DIMENSION_H - 1, BUTTON_ON);
+        } else {
+            fillFromTexture(gfx, x, y, DIMENSION_W - 1, DIMENSION_H - 1);
+        }
+        gfx.fill(x, y, x + DIMENSION_W - 1, y + 1, BEVEL_LIGHT);
+        gfx.fill(x, y, x + 1, y + DIMENSION_H - 1, BEVEL_LIGHT);
+        boolean ender = QueryDto.ENDER_CHEST.equals(dimension.dimensionId());
+        if (hovered) {
+            gfx.fill(x + 1, y + 1, x + DIMENSION_W - 1, y + DIMENSION_H - 1, SLOT_HOVER);
+            if (collapsed) {
+                setHoverLabel(dimensionName(dimension),
+                        viewing.isEmpty() ? "follows you" : "pinned",
+                        "hover for the others");
+            } else {
+                labelDimension(dimension);
+            }
+            describeDimension(dimension, ender);
+        }
+
+        String glyph = dimensionGlyph(dimension.dimensionId());
+        gfx.text(font, glyph, x + (DIMENSION_W - font.width(glyph)) / 2, y + 2,
+                ender ? ENDER_GLYPH : TEXT_DARK_ON_BUTTON);
+    }
+
+    private void describeDimension(QueryDto.DimensionSummary dimension, boolean ender) {
+        String head = ender ? "Your ender chest" : shortName(dimension.dimensionId());
+        String detail = ender
+                ? "The same six slots wherever you open one - carried with you, not left behind."
+                : String.format("%,d containers indexed here.", dimension.containers());
+        String action = viewing.equals(dimension.dimensionId())
+                ? "Pinned here. Click the one you are standing in to follow you again."
+                : "Click to pin the view here.";
+        pendingHint = List.of(head, detail, action);
+    }
+
+    private int dimensionRowY() {
+        return panelY + panelH - BOTTOM_H - 1;
+    }
+
+    private int selectedDimensionIndex(List<QueryDto.DimensionSummary> dimensions) {
+        String wanted = viewing.isEmpty() ? currentDimensionId() : viewing;
+        for (int i = 0; i < dimensions.size(); i++) {
+            if (dimensions.get(i).dimensionId().equals(wanted)) return i;
+        }
+        return 0;
+    }
+
     private List<QueryDto.DimensionSummary> shownDimensions() {
-        if (ChestTrackerConfig.get().enderChestView) return status.dimensions();
+        boolean ender = ChestTrackerConfig.get().enderChestView;
+        if (shownDimensions != null && shownDimensionsFrom == status && shownDimensionsEnder == ender) {
+            return shownDimensions;
+        }
+
         List<QueryDto.DimensionSummary> shown = new ArrayList<>(status.dimensions().size());
         for (QueryDto.DimensionSummary dimension : status.dimensions()) {
-            if (!QueryDto.ENDER_CHEST.equals(dimension.dimensionId())) shown.add(dimension);
+            if (ender || !QueryDto.ENDER_CHEST.equals(dimension.dimensionId())) shown.add(dimension);
         }
-        return shown;
+        shown.sort(DIMENSION_ORDER);
+
+        shownDimensionsFrom = status;
+        shownDimensionsEnder = ender;
+        shownDimensions = List.copyOf(shown);
+        return shownDimensions;
+    }
+
+    private static final Comparator<QueryDto.DimensionSummary> DIMENSION_ORDER =
+            Comparator.comparingInt(entry -> rankOf(entry.dimensionId()));
+
+    private List<QueryDto.DimensionSummary> shownDimensions;
+    private QueryDto.StatusResponse shownDimensionsFrom;
+    private boolean shownDimensionsEnder;
+
+    private static int rankOf(String dimensionId) {
+        if (QueryDto.ENDER_CHEST.equals(dimensionId)) return 0;
+        return switch (dimensionId) {
+            case "minecraft:overworld" -> 1;
+            case "minecraft:the_nether" -> 2;
+            case "minecraft:the_end" -> 3;
+            default -> 4;
+        };
     }
 
     private int dimensionX(int index) {
@@ -516,7 +687,7 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private static String dimensionGlyph(String dimensionId) {
-        if (QueryDto.ENDER_CHEST.equals(dimensionId)) return "e";
+        if (QueryDto.ENDER_CHEST.equals(dimensionId)) return "E";
         String name = shortName(dimensionId);
         return switch (name) {
             case "overworld" -> "O";
@@ -526,12 +697,27 @@ public final class ChestTrackerScreen extends Screen {
         };
     }
 
-    private String dimensionLabel(QueryDto.DimensionSummary dimension) {
+    private void labelDimension(QueryDto.DimensionSummary dimension) {
         if (QueryDto.ENDER_CHEST.equals(dimension.dimensionId())) {
-            return "your ender chest";
+            setHoverLabel("your ender chest");
+            return;
         }
-        return shortName(dimension.dimensionId())
-                + "  -  " + String.format("%,d containers", dimension.containers());
+        setHoverLabel(shortName(dimension.dimensionId()),
+                String.format("%,d containers", dimension.containers()));
+    }
+
+    private static String dimensionName(QueryDto.DimensionSummary dimension) {
+        return QueryDto.ENDER_CHEST.equals(dimension.dimensionId())
+                ? "your ender chest" : shortName(dimension.dimensionId());
+    }
+
+    public static void forgetPinnedDimension() {
+        viewing = "";
+    }
+
+    public static void forgetItemNames() {
+        ICON_CACHE.clear();
+        NAME_CACHE.clear();
     }
 
     private String currentDimensionId() {
@@ -543,12 +729,14 @@ public final class ChestTrackerScreen extends Screen {
         List<QueryDto.DimensionSummary> dimensions = shownDimensions();
         if (dimensions.size() < 2) return false;
 
-        int y = panelY + panelH - BOTTOM_H - 1;
+        int y = dimensionRowY();
         if (mouseY < y || mouseY >= y + DIMENSION_H) return false;
 
-        for (int i = 0; i < dimensions.size(); i++) {
+        int count = dimensionsExpanded ? dimensions.size() : 1;
+        for (int i = 0; i < count; i++) {
             int x = dimensionX(i);
             if (mouseX < x || mouseX >= x + DIMENSION_W) continue;
+            if (!dimensionsExpanded) return true;
 
             String picked = dimensions.get(i).dimensionId();
             viewing = picked.equals(currentDimensionId()) ? "" : picked;
@@ -563,7 +751,10 @@ public final class ChestTrackerScreen extends Screen {
         return switch (availability) {
             case CONNECTING -> "Asking the server...";
             case NOT_PERMITTED -> "This server does not allow searching.";
-            default -> "No index here yet.";
+            default -> ChestTrackerConfig.get().clientSideIndex && minecraft != null
+                    && !minecraft.hasSingleplayerServer()
+                    ? "Nothing seen yet - walk around, and open a chest."
+                    : "No index here yet.";
         };
     }
 
@@ -580,37 +771,32 @@ public final class ChestTrackerScreen extends Screen {
 
     private void drawBand(Gfx gfx, int srcV, int height, int destY) {
         gfx.blit(CONTAINER_TEXTURE, panelX, destY, 0, srcV, SLOTS_W, height, SHEET, SHEET);
-        for (int i = 0; i < SCROLL_COL; i++) {
-            gfx.blit(CONTAINER_TEXTURE, panelX + SLOTS_W + i, destY, FILLER_U, srcV, 1, height, SHEET, SHEET);
-        }
+        gfx.blitStretched(CONTAINER_TEXTURE, panelX + SLOTS_W, destY, FILLER_U, srcV,
+                SCROLL_COL, height, 1, height, SHEET, SHEET);
         gfx.blit(CONTAINER_TEXTURE, panelX + panelW - EDGE_W, destY,
                 GUI_W - EDGE_W, srcV, EDGE_W, height, SHEET, SHEET);
     }
 
     private void drawSlotBand(Gfx gfx, int destY) {
         gfx.blit(CONTAINER_TEXTURE, panelX, destY, 0, ROWS_V, SLOTS_W, ROWS_H, SHEET, SHEET);
-        for (int i = 0; i < SCROLL_COL; i++) {
-            gfx.blit(CONTAINER_TEXTURE, panelX + SLOTS_W + i, destY,
-                    SLOT_FILLER_U, ROWS_V, 1, ROWS_H, SHEET, SHEET);
-        }
+        gfx.blitStretched(CONTAINER_TEXTURE, panelX + SLOTS_W, destY, SLOT_FILLER_U, ROWS_V,
+                SCROLL_COL, ROWS_H, 1, ROWS_H, SHEET, SHEET);
         gfx.blit(CONTAINER_TEXTURE, panelX + panelW - EDGE_W, destY,
                 GUI_W - EDGE_W, ROWS_V, EDGE_W, ROWS_H, SHEET, SHEET);
     }
 
     private void drawSearchStrip(Gfx gfx, int searchY) {
         gfx.blit(CONTAINER_TEXTURE, panelX, searchY, 0, 30, EDGE_W, SEARCH_H, SHEET, SHEET);
-        for (int x = panelX + EDGE_W; x < panelX + panelW - EDGE_W; x++) {
-            gfx.blit(CONTAINER_TEXTURE, x, searchY, SLOT_FILLER_U, 30, 1, SEARCH_H, SHEET, SHEET);
-        }
+        gfx.blitStretched(CONTAINER_TEXTURE, panelX + EDGE_W, searchY, SLOT_FILLER_U, 30,
+                panelW - EDGE_W * 2, SEARCH_H, 1, SEARCH_H, SHEET, SHEET);
         gfx.blit(CONTAINER_TEXTURE, panelX + panelW - EDGE_W, searchY,
                 GUI_W - EDGE_W, 30, EDGE_W, SEARCH_H, SHEET, SHEET);
         drawGroove(gfx, panelX + 7, searchY + 2, panelW - 14, 12);
     }
 
     private void fillFromTexture(Gfx gfx, int x, int y, int w, int h) {
-        for (int i = 0; i < w; i++) {
-            gfx.blit(CONTAINER_TEXTURE, x + i, y, SLOT_FILLER_U, ROWS_V, 1, h, SHEET, SHEET);
-        }
+        if (w <= 0 || h <= 0) return;
+        gfx.blitStretched(CONTAINER_TEXTURE, x, y, SLOT_FILLER_U, ROWS_V, w, h, 1, h, SHEET, SHEET);
     }
 
     private void drawWell(Gfx gfx, int x, int y, int w, int h) {
@@ -629,7 +815,7 @@ public final class ChestTrackerScreen extends Screen {
 
     private void drawGrid(Gfx gfx, int mouseX, int mouseY) {
         int hovered = slotAt(mouseX, mouseY);
-        boolean panel = ChestTrackerConfig.get().nestedTooltip;
+        ChestTrackerConfig.Detail detail = ChestTrackerConfig.get().itemDetail();
 
         for (int row = 0; row < ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
@@ -648,16 +834,61 @@ public final class ChestTrackerScreen extends Screen {
 
         if (hovered >= 0) {
             QueryDto.ItemSummary summary = items.get(hovered);
-            hoverLabel = String.format("%s  %,d in %d  -  %s",
-                    displayName(summary.itemId()), summary.totalCount(), summary.containerCount(),
-                    panel && !shiftHeld() ? "shift for detail" : "right-click to list");
-            if (panel && shiftHeld()) {
-                drawItemTooltip(gfx, summary, mouseX, mouseY);
+            boolean shift = shiftHeld();
+            boolean hint = detail == ChestTrackerConfig.Detail.SHIFT && !shift;
+            setHoverLabel(
+                    displayName(summary.itemId()),
+                    String.format("%,d in %d", summary.totalCount(), summary.containerCount()),
+                    hint ? "shift for detail" : "right-click to list");
+
+            if (detail == ChestTrackerConfig.Detail.ALWAYS
+                    || (detail == ChestTrackerConfig.Detail.SHIFT && shift)) {
+                pendingTooltip = summary;
             }
         } else if (items.isEmpty()) {
-            gfx.text(font, Component.literal(pending.isBlank() ? "Nothing indexed yet" : "No match"),
-                    gridX(), gridY() + 4, TEXT_MAIN);
+            drawMessage(gfx, emptyGridMessage());
         }
+    }
+
+    private String emptyGridMessage() {
+        if (!pending.isBlank()) return "No match";
+        if (!viewing.isEmpty() && !viewing.equals(currentDimensionId())) {
+            return "Nothing here in " + (QueryDto.ENDER_CHEST.equals(viewing)
+                    ? "your ender chest" : shortName(viewing))
+                    + " - the view is pinned to it, click another to unpin";
+        }
+        if (availability == ClientTracker.Availability.CLIENT_ONLY) {
+            return "Open a chest to remember what is in it";
+        }
+        return "Nothing indexed yet";
+    }
+
+    private void drawMessage(Gfx gfx, String text) {
+        drawWell(gfx, listLeft(), listTop(), listWidth(), listHeight());
+
+        List<String> lines = wrap(text, listWidth() - 8);
+        int top = listTop() + (listHeight() - lines.size() * 10) / 2;
+        for (int i = 0; i < lines.size(); i++) {
+            String row = lines.get(i);
+            gfx.text(font, Component.literal(row),
+                    listLeft() + (listWidth() - font.width(row)) / 2, top + i * 10, TEXT_MAIN);
+        }
+    }
+
+    private List<String> wrap(String text, int maxWidth) {
+        List<String> lines = new ArrayList<>(3);
+        StringBuilder current = new StringBuilder();
+        for (String word : text.split(" ")) {
+            String candidate = current.isEmpty() ? word : current + " " + word;
+            if (!current.isEmpty() && font.width(candidate) > maxWidth) {
+                lines.add(current.toString());
+                current = new StringBuilder(word);
+            } else {
+                current = new StringBuilder(candidate);
+            }
+        }
+        if (!current.isEmpty()) lines.add(current.toString());
+        return lines;
     }
 
     private boolean shiftHeld() {
@@ -681,36 +912,65 @@ public final class ChestTrackerScreen extends Screen {
             lines.add(String.format("nearest %.0fm away", Math.sqrt(summary.nearestDistSq())));
         }
 
+        drawTextTooltip(gfx, lines, mouseX, mouseY);
+    }
+
+    private void drawTextTooltip(Gfx gfx, List<String> lines, int mouseX, int mouseY) {
         int textWidth = 0;
         for (String line : lines) textWidth = Math.max(textWidth, font.width(line));
+        int textHeight = lines.size() * 10 - 2;
 
-        int boxW = textWidth + 8;
-        int boxH = lines.size() * 10 + 6;
-        int boxX = mouseX + 10 + boxW > panelX + panelW ? mouseX - 10 - boxW : mouseX + 10;
-        int boxY = Math.min(mouseY, panelY + panelH - boxH - 2);
+        int textX = mouseX + 12 + textWidth + 4 > width ? mouseX - 16 - textWidth : mouseX + 12;
+        int textY = Math.max(8, Math.min(mouseY - 12, height - textHeight - 8));
 
-        gfx.fill(boxX, boxY, boxX + boxW, boxY + boxH, TOOLTIP_BG);
-        gfx.fill(boxX, boxY, boxX + boxW, boxY + 1, TOOLTIP_EDGE);
-        gfx.fill(boxX, boxY + boxH - 1, boxX + boxW, boxY + boxH, TOOLTIP_EDGE);
-        gfx.fill(boxX, boxY, boxX + 1, boxY + boxH, TOOLTIP_EDGE);
-        gfx.fill(boxX + boxW - 1, boxY, boxX + boxW, boxY + boxH, TOOLTIP_EDGE);
+        drawTooltipFrame(gfx, textX, textY, textWidth, textHeight);
 
         for (int i = 0; i < lines.size(); i++) {
             gfx.text(font, Component.literal(lines.get(i)),
-                    boxX + 4, boxY + 4 + i * 10, i == 0 ? TEXT_MAIN : TEXT_MUTED);
+                    textX, textY + i * 10, i == 0 ? TEXT_MAIN : TEXT_MUTED);
         }
     }
+
+    private void drawTooltipFrame(Gfx gfx, int x, int y, int textWidth, int textHeight) {
+        int left = x - 3;
+        int right = x + textWidth + 3;
+        int top = y - 3;
+        int bottom = y + textHeight + 3;
+
+        gfx.fill(left, top - 1, right, top, TOOLTIP_BG);
+        gfx.fill(left, bottom, right, bottom + 1, TOOLTIP_BG);
+        gfx.fill(left, top, right, bottom, TOOLTIP_BG);
+        gfx.fill(left - 1, top, left, bottom, TOOLTIP_BG);
+        gfx.fill(right, top, right + 1, bottom, TOOLTIP_BG);
+
+        gfx.fillGradient(left, top + 1, left + 1, bottom - 1, TOOLTIP_EDGE_TOP, TOOLTIP_EDGE_BOTTOM);
+        gfx.fillGradient(right - 1, top + 1, right, bottom - 1, TOOLTIP_EDGE_TOP, TOOLTIP_EDGE_BOTTOM);
+        gfx.fill(left, top, right, top + 1, TOOLTIP_EDGE_TOP);
+        gfx.fill(left, bottom - 1, right, bottom, TOOLTIP_EDGE_BOTTOM);
+    }
+
+    private static final int COUNT_WIDTH = 16;
 
     private void drawCount(Gfx gfx, int count, int slotX, int slotY) {
         if (count <= 1) return;
         String label = abbreviate(count);
-        gfx.text(font, label, slotX + 17 - font.width(label), slotY + 9, TEXT_LIGHT);
+
+        int width = font.width(label);
+        int right = slotX + 17;
+        int bottom = slotY + 9 + font.lineHeight;
+
+        if (width <= COUNT_WIDTH) {
+            gfx.text(font, label, right - width, slotY + 9, TEXT_LIGHT);
+            return;
+        }
+        gfx.textFromCorner(font, label, right, bottom, COUNT_WIDTH / (float) width, TEXT_LIGHT);
     }
 
     private static String abbreviate(int count) {
         if (count < 1000) return Integer.toString(count);
         if (count < 1_000_000) return (count / 1000) + "k";
-        return (count / 1_000_000) + "m";
+        if (count < 1_000_000_000) return (count / 1_000_000) + "m";
+        return (count / 1_000_000_000) + "b";
     }
 
     private void drawScrollbar(Gfx gfx, int scroll, int maxScroll, int totalRows, int visibleRows) {
@@ -731,19 +991,38 @@ public final class ChestTrackerScreen extends Screen {
         gfx.fill(x + 10, thumbY, x + 11, thumbY + thumbHeight, BEVEL_DARK);
     }
 
-    private record MenuRow(String label, String value, boolean active) {}
+    private record MenuRow(String label, String value, boolean active, String help) {}
 
     private List<MenuRow> menuRows() {
+        if (menuRows == null) menuRows = buildMenuRows();
+        return menuRows;
+    }
+
+    private void menuRowsChanged() {
+        menuRows = null;
+    }
+
+    private List<MenuRow> menuRows;
+
+    private List<MenuRow> buildMenuRows() {
         String origin = switch (originIndex) {
             case 1 -> "built";
             case 2 -> "generated";
             default -> "any";
         };
         return List.of(
-                new MenuRow("Sort by", sort.label, sort != Sort.COUNT),
-                new MenuRow("Origin", origin, originIndex != 0),
-                new MenuRow("Inside shulkers", includeNested ? "counted" : "ignored", includeNested),
-                new MenuRow("Machines", includeMachines ? "shown" : "hidden", includeMachines));
+                new MenuRow("Sort by", sort.label, sort != Sort.COUNT,
+                        "most, nearest, or A-Z"),
+                new MenuRow("Origin", origin, originIndex != 0,
+                        "built by players, or generated with the world"),
+                new MenuRow("Inside shulkers", includeNested ? "counted" : "ignored", includeNested,
+                        "whether a shulker's contents count as being in the chest"),
+                new MenuRow("Machines", includeMachines ? "shown" : "hidden", includeMachines,
+                        "hoppers, droppers, dispensers, crafters"),
+                new MenuRow("Functional blocks", includeUtility ? "shown" : "hidden", includeUtility,
+                        "furnaces, brewing stands, jukeboxes, lecterns, pots, bookshelves"),
+                new MenuRow("Moving containers", includeEntities ? "shown" : "hidden", includeEntities,
+                        "chest and hopper minecarts, chest boats - found only where loaded"));
     }
 
     private int buttonX(int index) {
@@ -793,6 +1072,24 @@ public final class ChestTrackerScreen extends Screen {
         }
     }
 
+    private void labelMenuRow(int mouseX, int mouseY) {
+        if (!menuOpen) return;
+
+        int x = menuX();
+        int y = menuY();
+        if (mouseX < x || mouseX >= x + MENU_W) return;
+
+        List<MenuRow> rows = menuRows();
+        for (int i = 0; i < rows.size(); i++) {
+            int rowY = y + 2 + i * MENU_ROW_H;
+            if (mouseY < rowY - 1 || mouseY >= rowY + MENU_ROW_H - 1) continue;
+            MenuRow row = rows.get(i);
+            hoverLabel = row.label();
+            pendingHint = List.of(row.label() + SEP + row.value(), row.help());
+            return;
+        }
+    }
+
     private void drawMenu(Gfx gfx, int mouseX, int mouseY) {
         if (!menuOpen) return;
 
@@ -819,11 +1116,163 @@ public final class ChestTrackerScreen extends Screen {
         }
     }
 
+    private void followSearchCursor() {
+        if (search == null) return;
+        boolean focused = search.isFocused();
+        int cursor = search.getCursorPosition();
+        if (focused == searchWasFocused && cursor == searchCursorWas) return;
+
+        searchWasFocused = focused;
+        searchCursorWas = cursor;
+        refreshSuggestions();
+    }
+
+    private void refreshSuggestions() {
+        if (search == null || !search.isFocused()) {
+            suggestions = List.of();
+            categoriesAsked = false;
+            return;
+        }
+        String word = wordAtCursor();
+        List<String> next = word.isEmpty()
+                ? (categoriesAsked ? categoryPrefixes() : List.of())
+                : SearchCategories.completionsFor(word);
+
+        if (!next.equals(suggestions)) {
+            suggestionIndex = 0;
+            suggestionScroll = 0;
+        }
+        suggestions = next;
+    }
+
+    private void scrollToSuggestion() {
+        if (suggestionIndex < suggestionScroll) {
+            suggestionScroll = suggestionIndex;
+        } else if (suggestionIndex >= suggestionScroll + SUGGESTIONS_VISIBLE) {
+            suggestionScroll = suggestionIndex - SUGGESTIONS_VISIBLE + 1;
+        }
+    }
+
+    private int suggestionRowsShown() {
+        return Math.min(SUGGESTIONS_VISIBLE, suggestions.size());
+    }
+
+    private static List<String> categoryPrefixes() {
+        List<String> rows = new ArrayList<>();
+        for (SearchQuery.Category category : SearchCategories.available()) rows.add(category.prefix());
+        return rows;
+    }
+
+    private String wordAtCursor() {
+        String text = search.getValue();
+        int cursor = Math.max(0, Math.min(search.getCursorPosition(), text.length()));
+        int start = text.lastIndexOf(' ', cursor - 1) + 1;
+        return text.substring(start, cursor);
+    }
+
+    private void applySuggestion(String chosen) {
+        String text = search.getValue();
+        int cursor = Math.max(0, Math.min(search.getCursorPosition(), text.length()));
+        int start = text.lastIndexOf(' ', cursor - 1) + 1;
+
+        boolean bare = SearchQuery.categoryOf(chosen) != null
+                && chosen.equals(SearchQuery.categoryOf(chosen).prefix());
+        String insert = bare ? chosen : chosen + " ";
+
+        search.setValue(text.substring(0, start) + insert + text.substring(cursor));
+        search.setCursorPosition(start + insert.length());
+        search.setHighlightPos(start + insert.length());
+        refreshSuggestions();
+    }
+
+    private int suggestionsX() {
+        return panelX + 7;
+    }
+
+    private int suggestionsY() {
+        return panelY + TOP_H + SEARCH_H;
+    }
+
+    private int suggestionsW() {
+        return SLOTS_W - 14;
+    }
+
+    private boolean overSuggestions(double mouseX, double mouseY) {
+        int y = suggestionsY();
+        return mouseX >= suggestionsX() && mouseX < suggestionsX() + suggestionsW()
+                && mouseY >= y && mouseY < y + suggestionRowsShown() * SUGGESTION_H + 2;
+    }
+
+    private int suggestionAt(double mouseX, double mouseY) {
+        if (suggestions.isEmpty()) return -1;
+        int x = suggestionsX();
+        int y = suggestionsY();
+        if (mouseX < x || mouseX >= x + suggestionsW()) return -1;
+        if (mouseY < y + 1) return -1;
+
+        int row = (int) ((mouseY - y - 1) / SUGGESTION_H);
+        if (row < 0 || row >= suggestionRowsShown()) return -1;
+        return suggestionScroll + row;
+    }
+
+    private void drawSuggestions(Gfx gfx, int mouseX, int mouseY) {
+        if (suggestions.isEmpty()) return;
+
+        int x = suggestionsX();
+        int y = suggestionsY();
+        int width = suggestionsW();
+        int shown = suggestionRowsShown();
+        int height = shown * SUGGESTION_H + 2;
+        boolean scrollable = suggestions.size() > shown;
+
+        gfx.fill(x - 1, y - 1, x + width + 1, y + height + 1, BEVEL_DARK);
+        fillFromTexture(gfx, x, y, width, height);
+        gfx.fill(x, y, x + width, y + 1, BEVEL_LIGHT);
+        gfx.fill(x, y, x + 1, y + height, BEVEL_LIGHT);
+
+        int textRight = x + width - (scrollable ? 6 : 0);
+
+        for (int row = 0; row < shown; row++) {
+            int i = suggestionScroll + row;
+            if (i >= suggestions.size()) break;
+
+            int rowY = y + 1 + row * SUGGESTION_H;
+            String text = suggestions.get(i);
+            boolean hovered = mouseX >= x && mouseX < x + width
+                    && mouseY >= rowY && mouseY < rowY + SUGGESTION_H;
+            if (hovered || i == suggestionIndex) {
+                gfx.fill(x + 1, rowY, x + width, rowY + SUGGESTION_H, SLOT_HOVER);
+            }
+            String label = truncate(text, textRight - x - 8);
+            gfx.text(font, Component.literal(label), x + 4, rowY + 2, TEXT_MAIN);
+
+            SearchQuery.Category category = SearchQuery.categoryOf(text);
+            if (category != null && text.equals(category.prefix())) {
+                int helpLeft = x + 4 + font.width(label) + HELP_GAP;
+                int room = textRight - 4 - helpLeft;
+                if (room >= MIN_HELP_WIDTH) {
+                    String help = truncate(category.help(), room);
+                    gfx.text(font, Component.literal(help),
+                            textRight - 4 - font.width(help), rowY + 2, TEXT_MUTED);
+                }
+            }
+        }
+
+        if (scrollable) {
+            int barX = x + width - 5;
+            gfx.fill(barX, y + 1, barX + 4, y + height - 1, GROOVE_DARK);
+            int travel = height - 2;
+            int thumb = Math.max(6, travel * shown / suggestions.size());
+            int thumbY = y + 1 + (travel - thumb)
+                    * suggestionScroll / Math.max(1, suggestions.size() - shown);
+            fillFromTexture(gfx, barX, thumbY, 4, thumb);
+        }
+    }
+
     private void drawLocations(Gfx gfx, int mouseX, int mouseY) {
         drawWell(gfx, listLeft(), listTop(), listWidth(), listHeight());
 
         int textX = listLeft() + 4;
-        int textWidth = listWidth() - 8;
 
         if (containers.isEmpty()) {
             gfx.text(font, Component.literal(containersPending ? "Looking..." : "Nothing holds that."),
@@ -831,26 +1280,45 @@ public final class ChestTrackerScreen extends Screen {
             return;
         }
 
+        List<DetailRow> rows = detailRows();
         int hovered = rowAt(mouseX, mouseY);
-        int last = Math.min(containers.size(), detailScroll + listRowsVisible());
+        int last = Math.min(rows.size(), detailScroll + listRowsVisible());
         for (int index = detailScroll; index < last; index++) {
-            QueryDto.ContainerHit hit = containers.get(index);
+            DetailRow row = rows.get(index);
             int y = listRowY(index - detailScroll);
             if (index == hovered) {
                 gfx.fill(listLeft() + 1, y - 1, listLeft() + listWidth() - 1,
                         y + DETAIL_ROW - 1, ROW_HOVER);
             }
 
+            gfx.text(font, Component.literal(row.distance()),
+                    listLeft() + listWidth() - 4 - row.distanceWidth(), y, TEXT_MAIN);
+            gfx.text(font, Component.literal(row.description()), textX, y, TEXT_MAIN);
+        }
+        setHoverLabel("Click to be guided", "right-click to go back");
+    }
+
+    private record DetailRow(String description, String distance, int distanceWidth) {}
+
+    private List<DetailRow> detailRows() {
+        if (detailRows != null && detailRowsFrom == containers) return detailRows;
+
+        int textWidth = listWidth() - 8;
+        List<DetailRow> rows = new ArrayList<>(containers.size());
+        for (QueryDto.ContainerHit hit : containers) {
             String distance = distanceOf(hit);
             int distanceWidth = font.width(distance);
-            gfx.text(font, Component.literal(distance),
-                    listLeft() + listWidth() - 4 - distanceWidth, y, TEXT_MAIN);
-            gfx.text(font, Component.literal(
-                            truncate(describe(hit), textWidth - distanceWidth - 4)),
-                    textX, y, TEXT_MAIN);
+            rows.add(new DetailRow(truncate(describe(hit), textWidth - distanceWidth - 4),
+                    distance, distanceWidth));
         }
-        hoverLabel = "Click to be guided  -  right-click to go back";
+
+        detailRowsFrom = containers;
+        detailRows = rows;
+        return rows;
     }
+
+    private List<DetailRow> detailRows;
+    private List<QueryDto.ContainerHit> detailRowsFrom;
 
     private String describe(QueryDto.ContainerHit hit) {
         StringBuilder line = new StringBuilder();
@@ -875,18 +1343,34 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private static String displayName(String itemId) {
-        ItemStack stack = iconFor(itemId);
-        return stack.isEmpty() ? shortName(itemId) : stack.getHoverName().getString();
+        return NAME_CACHE.computeIfAbsent(itemId, id -> {
+            ItemStack stack = iconFor(id);
+            return stack.isEmpty() ? shortName(id) : stack.getHoverName().getString();
+        });
+    }
+
+    private static final String SEP = "  -  ";
+
+    private int titleWidth() {
+        return buttonX(0) - (panelX + 8) - 4;
+    }
+
+    private void setHoverLabel(String head, String... extras) {
+        int maxWidth = titleWidth();
+        for (int keep = extras.length; keep > 0; keep--) {
+            StringBuilder candidate = new StringBuilder(head);
+            for (int i = 0; i < keep; i++) candidate.append(SEP).append(extras[i]);
+            if (font.width(candidate.toString()) <= maxWidth) {
+                hoverLabel = candidate.toString();
+                return;
+            }
+        }
+        hoverLabel = truncate(head, maxWidth);
     }
 
     private String truncate(String text, int maxWidth) {
         if (font.width(text) <= maxWidth) return text;
-        StringBuilder trimmed = new StringBuilder();
-        for (char c : text.toCharArray()) {
-            if (font.width(trimmed.toString() + c + "...") > maxWidth) break;
-            trimmed.append(c);
-        }
-        return trimmed + "...";
+        return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("..."))) + "...";
     }
 
     private static String shortName(String registryId) {
@@ -898,6 +1382,22 @@ public final class ChestTrackerScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         int mouseX = (int) event.x();
         int mouseY = (int) event.y();
+
+        if (event.button() == 0 && search != null
+                && mouseX >= search.getX() - 3 && mouseX < search.getX() + search.getWidth() + 3
+                && mouseY >= search.getY() && mouseY < search.getY() + 12) {
+            categoriesAsked = true;
+            refreshSuggestions();
+        }
+
+        if (event.button() == 0) {
+            int row = suggestionAt(mouseX, mouseY);
+            if (row >= 0) {
+                suggestionIndex = row;
+                applySuggestion(suggestions.get(row));
+                return true;
+            }
+        }
 
         if (event.button() == 0 && menuOpen) {
             if (clickMenuRow(mouseX, mouseY)) return true;
@@ -995,10 +1495,19 @@ public final class ChestTrackerScreen extends Screen {
                 includeMachines = !includeMachines;
                 refreshItems();
             }
+            case 4 -> {
+                includeUtility = !includeUtility;
+                refreshItems();
+            }
+            case 5 -> {
+                includeEntities = !includeEntities;
+                refreshItems();
+            }
             default -> {
                 return false;
             }
         }
+        menuRowsChanged();
         return true;
     }
 
@@ -1032,7 +1541,7 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     private void guideTo(QueryDto.ContainerHit hit) {
-        ContainerHighlight.get().select(hit.pos(),
+        ContainerHighlight.get().selectHits(List.of(hit),
                 minecraft.player.level().dimension().identifier().toString(),
                 displayName(selectedItemId));
         ContainerHighlight.get().searchingFor(selectedItemId);
@@ -1040,8 +1549,44 @@ public final class ChestTrackerScreen extends Screen {
     }
 
     @Override
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        if (!suggestions.isEmpty()) {
+            switch (event.key()) {
+                case GLFW.GLFW_KEY_TAB -> {
+                    applySuggestion(suggestions.get(
+                            Math.max(0, Math.min(suggestionIndex, suggestions.size() - 1))));
+                    return true;
+                }
+                case GLFW.GLFW_KEY_DOWN -> {
+                    suggestionIndex = (suggestionIndex + 1) % suggestions.size();
+                    scrollToSuggestion();
+                    return true;
+                }
+                case GLFW.GLFW_KEY_UP -> {
+                    suggestionIndex = (suggestionIndex + suggestions.size() - 1) % suggestions.size();
+                    scrollToSuggestion();
+                    return true;
+                }
+                case GLFW.GLFW_KEY_ESCAPE -> {
+                    suggestions = List.of();
+                    categoriesAsked = false;
+                    return true;
+                }
+                default -> { }
+            }
+        }
+        return super.keyPressed(event);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
         int step = (int) Math.signum(deltaY);
+
+        if (!suggestions.isEmpty() && overSuggestions(mouseX, mouseY)) {
+            int maxScroll = Math.max(0, suggestions.size() - suggestionRowsShown());
+            suggestionScroll = Math.max(0, Math.min(maxScroll, suggestionScroll - step));
+            return true;
+        }
         if (selectedItemId == null) {
             scrollRow = Math.max(0, Math.min(maxScrollRow(), scrollRow - step));
         } else {

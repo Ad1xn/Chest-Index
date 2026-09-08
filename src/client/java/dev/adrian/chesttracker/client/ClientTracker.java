@@ -1,5 +1,6 @@
 package dev.adrian.chesttracker.client;
 
+import dev.adrian.chesttracker.client.index.ClientIndex;
 import dev.adrian.chesttracker.client.net.ServerLink;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.net.QueryDto;
@@ -8,6 +9,7 @@ import dev.adrian.chesttracker.server.TrackerService;
 import dev.adrian.chesttracker.server.Trackers;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.level.Level;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -21,6 +23,7 @@ public final class ClientTracker {
     public enum Availability {
         LOCAL,
         SERVER,
+        CLIENT_ONLY,
         NOT_PERMITTED,
         CONNECTING,
         NONE
@@ -31,12 +34,19 @@ public final class ClientTracker {
         return switch (ServerLink.state()) {
             case WAITING -> Availability.CONNECTING;
             case PRESENT -> ServerLink.canQuery() ? Availability.SERVER : Availability.NOT_PERMITTED;
-            case ABSENT -> Availability.NONE;
+            case ABSENT -> hasClientIndex() ? Availability.CLIENT_ONLY : Availability.NONE;
         };
     }
 
     public static boolean isAvailable() {
-        return availability() == Availability.LOCAL || availability() == Availability.SERVER;
+        Availability availability = availability();
+        return availability == Availability.LOCAL
+                || availability == Availability.SERVER
+                || availability == Availability.CLIENT_ONLY;
+    }
+
+    private static boolean hasClientIndex() {
+        return ClientIndex.isBound() && ClientIndex.tracker().totalContainers() > 0;
     }
 
     private static boolean hasLocalIndex() {
@@ -45,12 +55,20 @@ public final class ClientTracker {
     }
 
     public static long changeToken() {
-        if (!hasLocalIndex()) return ServerLink.changeToken();
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) return 0L;
+        String dimensionId = player.level().dimension().identifier().toString();
+
+        if (!hasLocalIndex()) {
+            if (availability() == Availability.CLIENT_ONLY) {
+                return ClientIndex.tracker().generation(dimensionId);
+            }
+            return ServerLink.changeToken();
+        }
 
         TrackerService tracker = Trackers.current();
-        LocalPlayer player = Minecraft.getInstance().player;
-        if (tracker == null || player == null) return 0L;
-        return tracker.generation(player.level().dimension().identifier().toString());
+        if (tracker == null) return 0L;
+        return tracker.generation(dimensionId);
     }
 
     public static void setWatching(boolean watching) {
@@ -70,7 +88,15 @@ public final class ClientTracker {
         QueryDto.SummaryRequest request =
                 new QueryDto.SummaryRequest(requestId, text, filters, limit, dimensionId);
 
-        if (!hasLocalIndex()) return ServerLink.summarise(request);
+        if (!hasLocalIndex()) {
+            if (availability() == Availability.CLIENT_ONLY) {
+                return locally(() -> QueryService.summarise(
+                        ClientIndex.tracker(), request, centre(), here(), null, null,
+                        entitySource()),
+                        QueryDto.SummaryResponse.of(requestId, List.of()));
+            }
+            return ServerLink.summarise(request);
+        }
 
         return onServerThread(
                 (tracker, player) -> QueryService.summarise(tracker, player, request, localAccess()),
@@ -84,12 +110,30 @@ public final class ClientTracker {
 
     public static CompletableFuture<QueryDto.ContainerResponse> containers(
             String itemId, QueryDto.Filters filters, int limit, String dimensionId) {
+        return containers(List.of(itemId), filters, limit, dimensionId);
+    }
+
+    public static CompletableFuture<QueryDto.ContainerResponse> containers(
+            List<String> itemIds, QueryDto.Filters filters, int limit, String dimensionId) {
+        return containers(itemIds, filters, limit, dimensionId, "");
+    }
+
+    public static CompletableFuture<QueryDto.ContainerResponse> containers(
+            List<String> itemIds, QueryDto.Filters filters, int limit, String dimensionId, String text) {
 
         int requestId = ServerLink.nextRequestId();
         QueryDto.ContainerRequest request =
-                new QueryDto.ContainerRequest(requestId, itemId, filters, limit, dimensionId);
+                new QueryDto.ContainerRequest(requestId, itemIds, filters, limit, dimensionId, text);
 
-        if (!hasLocalIndex()) return ServerLink.containers(request);
+        if (!hasLocalIndex()) {
+            if (availability() == Availability.CLIENT_ONLY) {
+                return locally(() -> QueryService.containers(
+                        ClientIndex.tracker(), request, centre(), here(), null,
+                        QueryService.Refresher.NONE, entitySource()),
+                        QueryDto.ContainerResponse.of(requestId, List.of()));
+            }
+            return ServerLink.containers(request);
+        }
 
         return onServerThread(
                 (tracker, player) -> QueryService.containers(tracker, player, request, localAccess()),
@@ -100,7 +144,14 @@ public final class ClientTracker {
         int requestId = ServerLink.nextRequestId();
         QueryDto.StatusRequest request = new QueryDto.StatusRequest(requestId);
 
-        if (!hasLocalIndex()) return ServerLink.status(request);
+        if (!hasLocalIndex()) {
+            if (availability() == Availability.CLIENT_ONLY) {
+                return locally(() -> QueryService.status(
+                        ClientIndex.tracker(), request, hasStoredEnderChest()),
+                        QueryDto.StatusResponse.empty(requestId));
+            }
+            return ServerLink.status(request);
+        }
 
         return onServerThread(
                 (tracker, player) -> QueryService.status(tracker, player, request, localAccess()),
@@ -109,6 +160,42 @@ public final class ClientTracker {
 
     private static ChestTrackerConfig.Access localAccess() {
         return ChestTrackerConfig.Access.ALL;
+    }
+
+    private static <T> CompletableFuture<T> locally(java.util.function.Supplier<T> query, T empty) {
+        try {
+            return CompletableFuture.completedFuture(query.get());
+        } catch (RuntimeException e) {
+            dev.adrian.chesttracker.ChestTracker.LOG.warn(
+                    "Client-side query failed: {}", e.toString());
+            return CompletableFuture.completedFuture(empty);
+        }
+    }
+
+    private static Level entitySource() {
+        ChestTrackerConfig config = ChestTrackerConfig.get();
+        if (!config.trackEntityContainers) return null;
+        if (!config.entityContainersOnVanillaServers) return null;
+        return Minecraft.getInstance().level;
+    }
+
+    private static long centre() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) return 0L;
+        return dev.adrian.chesttracker.core.util.BlockKey.pack(
+                player.getBlockX(), player.getBlockY(), player.getBlockZ());
+    }
+
+    private static String here() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        return player == null ? "" : player.level().dimension().identifier().toString();
+    }
+
+    private static boolean hasStoredEnderChest() {
+        if (!ClientIndex.isBound()) return false;
+        TrackerService tracker = ClientIndex.tracker();
+        if (!tracker.dimensions().contains(QueryDto.ENDER_CHEST)) return false;
+        return !tracker.index(QueryDto.ENDER_CHEST).isEmpty();
     }
 
     private interface LocalQuery<T> {

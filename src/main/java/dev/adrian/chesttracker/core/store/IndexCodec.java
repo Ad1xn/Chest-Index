@@ -26,7 +26,9 @@ public final class IndexCodec {
 
     private static final int MAGIC = 0x43544958;
 
-    public static final int FORMAT_VERSION = 1;
+    public static final int FORMAT_VERSION = 2;
+
+    public static final int OLDEST_READABLE_VERSION = 1;
 
     private static final int FLAG_UNLOOTED = 1 << 2;
     private static final int FLAG_CONTENTS_KNOWN = 1 << 3;
@@ -40,13 +42,29 @@ public final class IndexCodec {
 
     public record Snapshot(StringPalette palette, WorldIndex index) {}
 
+    public record Frozen(List<String> paletteEntries, int dimensionId, List<ContainerRecord> records) {
+
+        public Frozen {
+            paletteEntries = List.copyOf(paletteEntries);
+            records = List.copyOf(records);
+        }
+
+        public static Frozen of(StringPalette palette, WorldIndex index) {
+            return new Frozen(palette.entries(), index.dimensionId(), List.copyOf(index.all()));
+        }
+    }
+
     public static void write(Path file, StringPalette palette, WorldIndex index) throws IOException {
+        write(file, Frozen.of(palette, index));
+    }
+
+    public static void write(Path file, Frozen frozen) throws IOException {
         Path parent = file.getParent();
         if (parent != null) Files.createDirectories(parent);
 
         Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         try (OutputStream out = Files.newOutputStream(tmp)) {
-            write(out, palette, index);
+            write(out, frozen);
         }
         try {
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -56,18 +74,33 @@ public final class IndexCodec {
     }
 
     public static void write(OutputStream rawOut, StringPalette palette, WorldIndex index) throws IOException {
+        write(rawOut, Frozen.of(palette, index));
+    }
+
+    private static final int BUFFER = 64 * 1024;
+
+    private static GZIPOutputStream fastGzip(OutputStream out) throws IOException {
+        GZIPOutputStream gzip = new GZIPOutputStream(out, BUFFER) {
+            {
+                def.setLevel(java.util.zip.Deflater.BEST_SPEED);
+            }
+        };
+        return gzip;
+    }
+
+    public static void write(OutputStream rawOut, Frozen frozen) throws IOException {
         try (DataOutputStream out = new DataOutputStream(
-                new BufferedOutputStream(new GZIPOutputStream(rawOut)))) {
+                new BufferedOutputStream(fastGzip(rawOut), BUFFER))) {
             out.writeInt(MAGIC);
             out.writeInt(FORMAT_VERSION);
-            out.writeInt(index.dimensionId());
+            out.writeInt(frozen.dimensionId());
 
-            List<String> entries = palette.entries();
+            List<String> entries = frozen.paletteEntries();
             writeVarInt(out, entries.size());
             for (String entry : entries) out.writeUTF(entry);
 
-            writeVarInt(out, index.size());
-            for (ContainerRecord record : index.all()) writeRecord(out, record);
+            writeVarInt(out, frozen.records().size());
+            for (ContainerRecord record : frozen.records()) writeRecord(out, record);
         }
     }
 
@@ -79,16 +112,17 @@ public final class IndexCodec {
 
     public static Snapshot read(InputStream rawIn) throws IOException {
         try (DataInputStream in = new DataInputStream(
-                new BufferedInputStream(new GZIPInputStream(rawIn)))) {
+                new BufferedInputStream(new GZIPInputStream(rawIn, BUFFER), BUFFER))) {
 
             int magic = in.readInt();
             if (magic != MAGIC) {
                 throw new IOException("Not a ChestTracker index (magic 0x" + Integer.toHexString(magic) + ")");
             }
             int version = in.readInt();
-            if (version != FORMAT_VERSION) {
+            if (version < OLDEST_READABLE_VERSION || version > FORMAT_VERSION) {
                 throw new IOException("Unsupported index format version " + version
-                        + " (this build reads " + FORMAT_VERSION + ")");
+                        + " (this build reads " + OLDEST_READABLE_VERSION
+                        + " to " + FORMAT_VERSION + ")");
             }
             int dimensionId = in.readInt();
 
@@ -99,7 +133,7 @@ public final class IndexCodec {
 
             WorldIndex index = new WorldIndex(dimensionId);
             int count = readVarInt(in);
-            for (int i = 0; i < count; i++) index.put(readRecord(in));
+            for (int i = 0; i < count; i++) index.put(readRecord(in, version));
 
             return new Snapshot(palette, index);
         } catch (EOFException truncated) {
@@ -137,10 +171,12 @@ public final class IndexCodec {
             } else {
                 out.writeByte(0);
             }
+            writeVarInt(out, entry.details().size());
+            for (int detail : entry.details()) writeVarInt(out, detail);
         }
     }
 
-    private static ContainerRecord readRecord(DataInputStream in) throws IOException {
+    private static ContainerRecord readRecord(DataInputStream in, int version) throws IOException {
         long pos = in.readLong();
         int dimensionId = readVarInt(in);
         int typeId = readVarInt(in);
@@ -164,7 +200,16 @@ public final class IndexCodec {
             int count = readVarInt(in);
             int depth = readVarInt(in);
             String entryName = in.readUnsignedByte() == 1 ? in.readUTF() : null;
-            contents.add(new StackEntry(itemId, count, depth, entryName));
+
+            List<Integer> details = List.of();
+            if (version >= 2) {
+                int detailCount = readVarInt(in);
+                if (detailCount > 0) {
+                    details = new ArrayList<>(detailCount);
+                    for (int d = 0; d < detailCount; d++) details.add(readVarInt(in));
+                }
+            }
+            contents.add(new StackEntry(itemId, count, depth, entryName, details));
         }
 
         return new ContainerRecord(pos, dimensionId, typeId, origin, owner,

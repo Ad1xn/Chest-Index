@@ -17,7 +17,7 @@ import net.minecraft.client.gui.GuiGraphics;
 
 public final class SearchButton extends AbstractWidget {
 
-    public static final int SIZE = 12;
+    public static final int SIZE = 11;
 
     private static final int PANEL = 0xFFC6C6C6;
     private static final int BEVEL_LIGHT = 0xFFFFFFFF;
@@ -25,24 +25,43 @@ public final class SearchButton extends AbstractWidget {
     private static final int ICON = 0xFF404040;
     private static final int HOVER = 0x80FFFFFF;
 
-    private final int anchorX;
-    private final int anchorY;
+    private final java.util.function.IntSupplier anchorX;
+    private final java.util.function.IntSupplier anchorY;
 
-    public SearchButton(int anchorX, int anchorY) {
+    private final String menuKey;
+
+    private boolean dragging;
+
+    public SearchButton(String menuKey,
+                        java.util.function.IntSupplier anchorX,
+                        java.util.function.IntSupplier anchorY) {
         super(0, 0, SIZE, SIZE, Component.literal("Search containers"));
+        this.menuKey = menuKey;
         this.anchorX = anchorX;
         this.anchorY = anchorY;
-        applyConfiguredPosition();
-        setTooltip(Tooltip.create(Component.literal("Search containers  (right-drag to move)")));
+        follow();
+        setTooltip(Tooltip.create(Component.literal(
+                "Search containers  (right-drag to move it on this kind of window)")));
     }
 
-    private void applyConfiguredPosition() {
-        ChestTrackerConfig config = ChestTrackerConfig.get();
-        setX(anchorX + config.searchButtonX);
-        setY(anchorY + config.searchButtonY);
+    public void follow() {
+        if (dragging) return;
+        int[] offset = ChestTrackerConfig.get().searchButtonOffset(menuKey);
+        setX(anchorX.getAsInt() + offset[0]);
+        setY(anchorY.getAsInt() + offset[1]);
+    }
+
+    public String menuKey() {
+        return menuKey;
+    }
+
+    public void setDragging(boolean value) {
+        dragging = value;
     }
 
     private void draw(Gfx gfx, int mouseX, int mouseY) {
+        follow();
+
         int x = getX();
         int y = getY();
 
@@ -66,11 +85,11 @@ public final class SearchButton extends AbstractWidget {
     }
 
     public int anchorX() {
-        return anchorX;
+        return anchorX.getAsInt();
     }
 
     public int anchorY() {
-        return anchorY;
+        return anchorY.getAsInt();
     }
 
     @Override
@@ -79,7 +98,7 @@ public final class SearchButton extends AbstractWidget {
 
         if (event.button() == 0) {
             playDownSound(net.minecraft.client.Minecraft.getInstance().getSoundManager());
-            ClientCompat.openScreen(new ChestTrackerScreen());
+            ClientCompat.openScreenFromContainer(new ChestTrackerScreen());
             return true;
         }
         return false;

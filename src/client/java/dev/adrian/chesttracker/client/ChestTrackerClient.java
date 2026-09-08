@@ -3,6 +3,8 @@ package dev.adrian.chesttracker.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chesttracker.ChestTracker;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
+import dev.adrian.chesttracker.client.index.ClientIndex;
+import dev.adrian.chesttracker.client.index.ClientObserver;
 import dev.adrian.chesttracker.client.net.ServerLink;
 import dev.adrian.chesttracker.client.platform.ClientCompat;
 import dev.adrian.chesttracker.client.platform.WorldHighlightHook;
@@ -27,6 +29,8 @@ public final class ChestTrackerClient implements ClientModInitializer {
 
         ServerLink.register();
 
+        ClientObserver.register();
+
         WorldHighlightHook.register();
 
         openSearch = ClientCompat.registerKeyMapping(new KeyMapping(
@@ -43,13 +47,24 @@ public final class ChestTrackerClient implements ClientModInitializer {
 
         ContainerScreens.register(searchHovered);
 
+        LitematicaSearch.register();
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openSearch.consumeClick()) {
+                if (!Session.active()) {
+                    Session.remind();
+                    continue;
+                }
                 ClientCompat.openScreen(new ChestTrackerScreen());
             }
+            Session.tick();
+            Session.warnAboutEntities();
+            Session.warnAboutConflict();
             ContainerHighlight.get().tick();
             ContainerScreens.tick();
             ServerLink.tick();
+            MaterialGoals.tick();
+            ClientIndex.tick();
         });
     }
 }

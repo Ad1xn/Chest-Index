@@ -15,14 +15,29 @@ public final class HighlightBox {
                             double x, double y, double z,
                             float red, float green, float blue, float alpha,
                             double grow, float lineWidth) {
+        emit(pose, lines, x, y, z, 1, 1, red, green, blue, alpha, grow, lineWidth);
+    }
+
+    public static void emit(PoseStack.Pose pose, VertexConsumer lines,
+                            double x, double y, double z, int sizeX, int sizeZ,
+                            float red, float green, float blue, float alpha,
+                            double grow, float lineWidth) {
+        emit(pose, lines, x, y, z, sizeX, 1.0, sizeZ, red, green, blue, alpha, grow, lineWidth);
+    }
+
+    public static void emit(PoseStack.Pose pose, VertexConsumer lines,
+                            double x, double y, double z,
+                            double sizeX, double sizeY, double sizeZ,
+                            float red, float green, float blue, float alpha,
+                            double grow, float lineWidth) {
 
         double swell = SWELL + grow;
         float x0 = (float) (x - swell);
         float y0 = (float) (y - swell);
         float z0 = (float) (z - swell);
-        float x1 = (float) (x + 1 + swell);
-        float y1 = (float) (y + 1 + swell);
-        float z1 = (float) (z + 1 + swell);
+        float x1 = (float) (x + sizeX + swell);
+        float y1 = (float) (y + sizeY + swell);
+        float z1 = (float) (z + sizeZ + swell);
 
         edge(pose, lines, x0, y0, z0, x0, y1, z0, 0, 1, 0, red, green, blue, alpha, lineWidth);
         edge(pose, lines, x1, y0, z0, x1, y1, z0, 0, 1, 0, red, green, blue, alpha, lineWidth);

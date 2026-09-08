@@ -37,14 +37,19 @@ public final class ContainerScreens {
 
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (!(screen instanceof AbstractContainerScreen<?> container)) return;
+            if (!Session.active()) {
+                button = null;
+                return;
+            }
 
             ContainerScreenAccessor access = (ContainerScreenAccessor) container;
 
             button = null;
             if (ChestTrackerConfig.get().containerSearchButton) {
                 button = new SearchButton(
-                        access.chesttracker$leftPos() + access.chesttracker$imageWidth(),
-                        access.chesttracker$topPos());
+                        menuKeyOf(container),
+                        () -> access.chesttracker$leftPos() + access.chesttracker$imageWidth(),
+                        access::chesttracker$topPos);
                 ClientCompat.addWidget(screen, button);
             }
 
@@ -67,7 +72,9 @@ public final class ContainerScreens {
     }
 
     public static void tick() {
-        dragButton(Minecraft.getInstance());
+        Minecraft client = Minecraft.getInstance();
+        if (!(ClientCompat.currentScreen() instanceof AbstractContainerScreen<?>)) button = null;
+        dragButton(client);
     }
 
     private static void dragButton(Minecraft client) {
@@ -88,19 +95,37 @@ public final class ContainerScreens {
         int mouseX = (int) (client.mouseHandler.xpos() * scaleX);
         int mouseY = (int) (client.mouseHandler.ypos() * scaleY);
 
-        if (down && !rightWasDown && target.isMouseOver(mouseX, mouseY)) draggingButton = true;
+        if (down && !rightWasDown && target.isMouseOver(mouseX, mouseY)) {
+            draggingButton = true;
+            target.setDragging(true);
+        }
         if (draggingButton && down) {
+            target.setDragging(true);
             target.setX(mouseX - SearchButton.SIZE / 2);
             target.setY(mouseY - SearchButton.SIZE / 2);
         }
         if (draggingButton && !down) {
             draggingButton = false;
             ChestTrackerConfig config = ChestTrackerConfig.get();
-            config.searchButtonX = target.getX() - target.anchorX();
-            config.searchButtonY = target.getY() - target.anchorY();
+            config.setSearchButtonOffset(target.menuKey(),
+                    target.getX() - target.anchorX(),
+                    target.getY() - target.anchorY());
             config.save();
+            target.setDragging(false);
         }
         rightWasDown = down;
+    }
+
+    private static String menuKeyOf(AbstractContainerScreen<?> container) {
+        try {
+            var type = container.getMenu().getType();
+            if (type != null) {
+                var id = net.minecraft.core.registries.BuiltInRegistries.MENU.getKey(type);
+                if (id != null) return id.toString();
+            }
+        } catch (RuntimeException noType) {
+        }
+        return container.getClass().getName();
     }
 
     private static void trigger(AbstractContainerScreen<?> container) {

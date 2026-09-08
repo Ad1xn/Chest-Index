@@ -3,15 +3,18 @@ package dev.adrian.chesttracker.core.index;
 import dev.adrian.chesttracker.core.model.ContainerRecord;
 import dev.adrian.chesttracker.core.model.Origin;
 import dev.adrian.chesttracker.core.model.StackEntry;
+import dev.adrian.chesttracker.core.util.Bits;
 import dev.adrian.chesttracker.core.util.BlockKey;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 
 public final class WorldIndex {
@@ -21,6 +24,14 @@ public final class WorldIndex {
     private final Map<Integer, Set<Long>> byItem = new HashMap<>();
 
     private final int dimensionId;
+
+    private long revision;
+
+    private IndexQuery cachedSummaryQuery;
+    private long cachedSummaryRevision = -1;
+    private List<ItemSummary> cachedSummary;
+
+    private int maxItemId = -1;
 
     public WorldIndex(int dimensionId) {
         this.dimensionId = dimensionId;
@@ -51,16 +62,32 @@ public final class WorldIndex {
     }
 
     public void put(ContainerRecord record) {
-        remove(record.pos());
+        revision++;
+        unindex(record.pos());
 
         byPos.put(record.pos(), record);
         byChunk.computeIfAbsent(record.chunkKey(), k -> new HashSet<>()).add(record.pos());
         for (StackEntry entry : record.contents()) {
             byItem.computeIfAbsent(entry.itemId(), k -> new HashSet<>()).add(record.pos());
+            if (entry.itemId() > maxItemId) maxItemId = entry.itemId();
         }
     }
 
+    public void touch(ContainerRecord record) {
+        ContainerRecord existing = byPos.get(record.pos());
+        if (existing == null || !existing.sameDataAs(record)) {
+            put(record);
+            return;
+        }
+        byPos.put(record.pos(), record);
+    }
+
     public ContainerRecord remove(long pos) {
+        revision++;
+        return unindex(pos);
+    }
+
+    private ContainerRecord unindex(long pos) {
         ContainerRecord existing = byPos.remove(pos);
         if (existing == null) return null;
 
@@ -103,94 +130,192 @@ public final class WorldIndex {
     }
 
     public void clear() {
+        revision++;
         byPos.clear();
         byChunk.clear();
         byItem.clear();
     }
 
-    public List<SearchResult> query(IndexQuery query) {
-        Collection<Long> candidates = selectCandidates(query);
+    private static final class Plan {
+        final long[] items;
+        final int[] itemIds;
+        final long[] types;
+        final long[] excludedTypes;
+        final long[] details;
+        final boolean hasOrigins;
 
-        List<SearchResult> results = new ArrayList<>();
-        double maxDistSq = query.maxDistanceSq();
+        Plan(IndexQuery query) {
+            this.items = Bits.of(query.itemIds());
+            this.types = Bits.of(query.typeIds());
+            this.excludedTypes = Bits.of(query.excludedTypeIds());
+            this.details = Bits.of(query.detailIds());
+            this.hasOrigins = !query.origins().isEmpty();
 
-        for (Long pos : candidates) {
-            ContainerRecord record = byPos.get(pos);
-            if (record == null) continue;
-            if (!matchesFilters(record, query)) continue;
-
-            double distSq = BlockKey.distanceSq(query.center(), record.pos());
-            if (query.hasDistanceLimit() && distSq > maxDistSq) continue;
-
-            List<StackEntry> matches = collectMatches(record, query);
-            if (!query.itemIds().isEmpty() && matches.isEmpty()) continue;
-
-            results.add(new SearchResult(record, distSq, matches));
+            if (items == null) {
+                this.itemIds = null;
+            } else {
+                this.itemIds = new int[query.itemIds().size()];
+                int i = 0;
+                for (Integer id : query.itemIds()) this.itemIds[i++] = id == null ? -1 : id;
+            }
         }
+    }
+
+    private interface Visitor {
+        void accept(ContainerRecord record, double distanceSq);
+    }
+
+    public List<SearchResult> query(IndexQuery query) {
+        Plan plan = new Plan(query);
+        return query.limit() > 0 ? nearest(query, plan) : all(query, plan);
+    }
+
+    private List<SearchResult> nearest(IndexQuery query, Plan plan) {
+        int limit = query.limit();
+        PriorityQueue<SearchResult> kept = new PriorityQueue<>(
+                Math.min(limit, 64), (a, b) -> Double.compare(b.distanceSq(), a.distanceSq()));
+
+        walk(query, plan, (record, distSq) -> {
+            if (kept.size() == limit && distSq >= kept.peek().distanceSq()) return;
+            if (!hasMatch(record, query, plan)) return;
+
+            kept.add(new SearchResult(record, distSq, collectMatches(record, query, plan)));
+            if (kept.size() > limit) kept.poll();
+        });
+
+        SearchResult[] results = kept.toArray(new SearchResult[0]);
+        java.util.Arrays.sort(results, (a, b) -> Double.compare(a.distanceSq(), b.distanceSq()));
+        return List.of(results);
+    }
+
+    private List<SearchResult> all(IndexQuery query, Plan plan) {
+        List<SearchResult> results = new ArrayList<>();
+
+        walk(query, plan, (record, distSq) -> {
+            if (!hasMatch(record, query, plan)) return;
+            results.add(new SearchResult(record, distSq, collectMatches(record, query, plan)));
+        });
 
         results.sort((a, b) -> Double.compare(a.distanceSq(), b.distanceSq()));
-        if (query.limit() > 0 && results.size() > query.limit()) {
-            return List.copyOf(results.subList(0, query.limit()));
-        }
-        return List.copyOf(results);
+        return Collections.unmodifiableList(results);
     }
 
-    private Collection<Long> selectCandidates(IndexQuery query) {
-        if (!query.itemIds().isEmpty()) {
-            Set<Long> union = new HashSet<>();
-            for (Integer itemId : query.itemIds()) {
+    private static boolean hasMatch(ContainerRecord record, IndexQuery query, Plan plan) {
+        if (plan.items == null && plan.details == null) return true;
+
+        for (StackEntry entry : record.contents()) {
+            if (!query.includeNested() && entry.isNested()) continue;
+            if (plan.items != null && !Bits.test(plan.items, entry.itemId())) continue;
+            if (!carriesWantedDetail(entry, plan)) continue;
+            return true;
+        }
+        return false;
+    }
+
+    private void walk(IndexQuery query, Plan plan, Visitor visitor) {
+        if (plan.items != null) {
+            long estimate = 0;
+            for (int itemId : plan.itemIds) {
                 Set<Long> holders = byItem.get(itemId);
-                if (holders != null) union.addAll(holders);
+                if (holders != null) estimate += holders.size();
             }
-            return union;
+            if (estimate == 0) return;
+            if (estimate < byPos.size()) {
+                walkHolders(query, plan, visitor);
+                return;
+            }
+        } else if (query.hasDistanceLimit()) {
+            if (walkChunkRadius(query, plan, visitor)) return;
         }
 
-        if (query.hasDistanceLimit()) {
-            return positionsWithinChunkRadius(query);
+        for (ContainerRecord record : byPos.values()) {
+            offer(record, query, plan, visitor);
         }
-
-        return new ArrayList<>(byPos.keySet());
     }
 
-    private Collection<Long> positionsWithinChunkRadius(IndexQuery query) {
+    private void walkHolders(IndexQuery query, Plan plan, Visitor visitor) {
+        if (plan.itemIds.length == 1) {
+            Set<Long> holders = byItem.get(plan.itemIds[0]);
+            if (holders == null) return;
+            for (Long pos : holders) {
+                ContainerRecord record = byPos.get(pos);
+                if (record != null) offer(record, query, plan, visitor);
+            }
+            return;
+        }
+
+        Set<Long> seen = new HashSet<>();
+        for (int itemId : plan.itemIds) {
+            Set<Long> holders = byItem.get(itemId);
+            if (holders == null) continue;
+            for (Long pos : holders) {
+                if (!seen.add(pos)) continue;
+                ContainerRecord record = byPos.get(pos);
+                if (record != null) offer(record, query, plan, visitor);
+            }
+        }
+    }
+
+    private boolean walkChunkRadius(IndexQuery query, Plan plan, Visitor visitor) {
         int centerChunkX = BlockKey.x(query.center()) >> 4;
         int centerChunkZ = BlockKey.z(query.center()) >> 4;
         int chunkRadius = (int) Math.ceil(query.maxDistance() / 16.0) + 1;
 
         long chunkSquare = (2L * chunkRadius + 1) * (2L * chunkRadius + 1);
-        if (chunkSquare > byChunk.size()) {
-            return new ArrayList<>(byPos.keySet());
-        }
+        if (chunkSquare > byChunk.size()) return false;
 
-        List<Long> candidates = new ArrayList<>();
         for (int cx = centerChunkX - chunkRadius; cx <= centerChunkX + chunkRadius; cx++) {
             for (int cz = centerChunkZ - chunkRadius; cz <= centerChunkZ + chunkRadius; cz++) {
                 Set<Long> positions = byChunk.get(BlockKey.chunkKey(cx, cz));
-                if (positions != null) candidates.addAll(positions);
+                if (positions == null) continue;
+                for (Long pos : positions) {
+                    ContainerRecord record = byPos.get(pos);
+                    if (record != null) offer(record, query, plan, visitor);
+                }
             }
         }
-        return candidates;
+        return true;
     }
 
-    private boolean matchesFilters(ContainerRecord record, IndexQuery query) {
-        if (!query.origins().isEmpty() && !query.origins().contains(record.origin())) return false;
-        if (!query.typeIds().isEmpty() && !query.typeIds().contains(record.typeId())) return false;
-        if (query.excludedTypeIds().contains(record.typeId())) return false;
+    private void offer(ContainerRecord record, IndexQuery query, Plan plan, Visitor visitor) {
+        if (!matchesFilters(record, query, plan)) return;
+
+        double distSq = BlockKey.distanceSq(query.center(), record.pos());
+        if (query.hasDistanceLimit() && distSq > query.maxDistanceSq()) return;
+
+        visitor.accept(record, distSq);
+    }
+
+    private boolean matchesFilters(ContainerRecord record, IndexQuery query, Plan plan) {
+        if (plan.hasOrigins && !query.origins().contains(record.origin())) return false;
+        if (plan.types != null && !Bits.test(plan.types, record.typeId())) return false;
+        if (plan.excludedTypes != null && Bits.test(plan.excludedTypes, record.typeId())) return false;
         if (query.unlootedOnly() && !record.unlooted()) return false;
         if (query.knownContentsOnly() && !record.contentsKnown()) return false;
         if (query.owner() != null && !query.owner().equals(record.owner())) return false;
         return true;
     }
 
-    private List<StackEntry> collectMatches(ContainerRecord record, IndexQuery query) {
-        if (query.itemIds().isEmpty()) return List.of();
+    private List<StackEntry> collectMatches(ContainerRecord record, IndexQuery query, Plan plan) {
+        if (plan.items == null && plan.details == null) return List.of();
 
         List<StackEntry> matches = new ArrayList<>();
         for (StackEntry entry : record.contents()) {
             if (!query.includeNested() && entry.isNested()) continue;
-            if (query.itemIds().contains(entry.itemId())) matches.add(entry);
+            if (plan.items != null && !Bits.test(plan.items, entry.itemId())) continue;
+            if (!carriesWantedDetail(entry, plan)) continue;
+            matches.add(entry);
         }
         return matches;
+    }
+
+    private static boolean carriesWantedDetail(StackEntry entry, Plan plan) {
+        if (plan.details == null) return true;
+        if (entry.details().isEmpty()) return false;
+        for (int detail : entry.details()) {
+            if (Bits.test(plan.details, detail)) return true;
+        }
+        return false;
     }
 
     public record ItemSummary(int itemId, int totalCount, int containerCount,
@@ -203,34 +328,100 @@ public final class WorldIndex {
         }
     }
 
-    public List<ItemSummary> summarise(IndexQuery query) {
-        Map<Integer, int[]> totals = new HashMap<>();
-        Map<Integer, Double> nearest = new HashMap<>();
+    private static final class Totals {
+        private final int[] count;
+        private final int[] containers;
+        private final int[] nested;
+        private final double[] nearest;
 
-        for (SearchResult result : query(query)) {
-            ContainerRecord container = result.container();
-            if (!container.contentsKnown()) continue;
+        private final int[] lastContainer;
 
-            Set<Integer> seenHere = new HashSet<>();
-            for (StackEntry entry : container.contents()) {
+        private final boolean[] touched;
+        private final int[] order;
+        private int touchedCount;
+        private int containerSeq;
+
+        Totals(int capacity) {
+            this.count = new int[capacity];
+            this.containers = new int[capacity];
+            this.nested = new int[capacity];
+            this.nearest = new double[capacity];
+            this.lastContainer = new int[capacity];
+            this.touched = new boolean[capacity];
+            this.order = new int[capacity];
+        }
+
+        void add(ContainerRecord record, double distanceSq, IndexQuery query, Plan plan) {
+            if (!record.contentsKnown()) return;
+
+            containerSeq++;
+            for (StackEntry entry : record.contents()) {
                 if (!query.includeNested() && entry.isNested()) continue;
-                if (!query.itemIds().isEmpty() && !query.itemIds().contains(entry.itemId())) continue;
 
-                int[] totalsFor = totals.computeIfAbsent(entry.itemId(), id -> new int[3]);
-                totalsFor[0] += entry.count();
-                if (entry.isNested()) totalsFor[2] += entry.count();
-                if (seenHere.add(entry.itemId())) totalsFor[1]++;
+                int id = entry.itemId();
+                if (id < 0 || id >= count.length) continue;
+                if (plan.items != null && !Bits.test(plan.items, id)) continue;
+                if (!carriesWantedDetail(entry, plan)) continue;
 
-                nearest.merge(entry.itemId(), result.distanceSq(), Math::min);
+                if (!touched[id]) {
+                    touched[id] = true;
+                    order[touchedCount++] = id;
+                    nearest[id] = distanceSq;
+                } else if (distanceSq < nearest[id]) {
+                    nearest[id] = distanceSq;
+                }
+
+                count[id] += entry.count();
+                if (entry.isNested()) nested[id] += entry.count();
+                if (lastContainer[id] != containerSeq) {
+                    lastContainer[id] = containerSeq;
+                    containers[id]++;
+                }
             }
         }
 
-        List<ItemSummary> summaries = new ArrayList<>(totals.size());
-        totals.forEach((itemId, counts) -> summaries.add(new ItemSummary(
-                itemId, counts[0], counts[1], counts[2],
-                nearest.getOrDefault(itemId, Double.MAX_VALUE))));
-        Collections.sort(summaries);
-        return summaries;
+        List<ItemSummary> build() {
+            Arrays.sort(order, 0, touchedCount);
+
+            List<ItemSummary> summaries = new ArrayList<>(touchedCount);
+            for (int i = 0; i < touchedCount; i++) {
+                int id = order[i];
+                summaries.add(new ItemSummary(id, count[id], containers[id], nested[id], nearest[id]));
+            }
+            Collections.sort(summaries);
+            return summaries;
+        }
+    }
+
+    public List<ItemSummary> summarise(IndexQuery query) {
+        if (cachedSummary != null
+                && cachedSummaryRevision == revision
+                && query.equals(cachedSummaryQuery)) {
+            return cachedSummary;
+        }
+        List<ItemSummary> summary = Collections.unmodifiableList(computeSummary(query));
+
+        cachedSummaryQuery = query;
+        cachedSummaryRevision = revision;
+        cachedSummary = summary;
+        return summary;
+    }
+
+    private List<ItemSummary> computeSummary(IndexQuery query) {
+        if (maxItemId < 0) return List.of();
+
+        Plan plan = new Plan(query);
+        Totals totals = new Totals(maxItemId + 1);
+
+        if (query.limit() > 0) {
+            for (SearchResult result : query(query)) {
+                totals.add(result.container(), result.distanceSq(), query, plan);
+            }
+        } else {
+            walk(query, plan, (record, distSq) -> totals.add(record, distSq, query, plan));
+        }
+
+        return totals.build();
     }
 
     public Stats stats() {
