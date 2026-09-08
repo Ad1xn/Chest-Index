@@ -148,12 +148,17 @@ public final class SettingsScreen extends Screen {
     private int panelW;
 
     /**
-     * The most rows this screen has room for, whatever section is open.
+     * How many rows the well is tall, fixed for the life of the screen.
      *
-     * <p>A ceiling, not the count: {@link #visibleRows()} is what is actually
-     * drawn.
+     * <p>Fixed, and sized to the largest section, because the two alternatives
+     * are both worse. Sizing it to the screen leaves a five-row section sitting
+     * in a well with room for eight. Sizing it to the <em>open</em> section -
+     * which this briefly did - resizes the window under the hand of whoever is
+     * clicking down the rail, and on a four-row section made the well shorter
+     * than the rail beside it, so the last button hung out of the bottom of the
+     * window over the footer.
      */
-    private int fitLimit;
+    private int visibleRows;
 
     private List<Section> sections = List.of();
 
@@ -551,18 +556,17 @@ public final class SettingsScreen extends Screen {
         // Thirty-two leaves the footer line its own room under the window, and
         // a margin above and below the lot.
         int room = height - 32 - CHROME_H;
-        fitLimit = Math.max(MIN_ROWS, Math.min(MAX_ROWS, room / ROW_H));
+        int fits = Math.max(railRows(), Math.min(MAX_ROWS, room / ROW_H));
+
+        int tallest = 0;
+        for (Section candidate : sections) tallest = Math.max(tallest, candidate.rows().size());
+        // Never shorter than the rail, whatever the sections hold: a well the
+        // rail hangs out of is not a small window, it is a broken one.
+        visibleRows = Math.max(railRows(), Math.min(fits, tallest));
 
         panelW = Panel.EDGE_W + RAIL_BUTTON + RAIL_PAD + CONTENT_W + Panel.EDGE_W;
         panelX = (width - panelW) / 2;
-
-        // The top edge is placed once and does not move, so clicking down the
-        // rail never moves the rail out from under the cursor - only the bottom
-        // edge follows the section. Centred on the tallest section rather than
-        // on the open one, because that is the size the window mostly is.
-        int tallest = 0;
-        for (Section candidate : sections) tallest = Math.max(tallest, candidate.rows().size());
-        panelY = (height - (CHROME_H + Math.min(fitLimit, tallest) * ROW_H)) / 2;
+        panelY = (height - panelH()) / 2;
 
         // Sized and placed to sit inside the groove the strip draws for it,
         // rather than beside it - the same way the tracker screen's box does.
@@ -608,32 +612,26 @@ public final class SettingsScreen extends Screen {
     }
 
     private int contentH() {
-        return visibleRows() * ROW_H + 2;
+        return visibleRows * ROW_H + 2;
     }
 
     /** The window's fixed parts, whatever the open section is. */
     private static final int CHROME_H =
             Panel.TOP_H + Panel.SEARCH_H + PAD + 2 + PAD + Panel.BOTTOM_H;
 
-    /**
-     * How many rows are drawn: what the section has, or what fits.
-     *
-     * <p>The well used to be as tall as the screen allowed regardless, which
-     * left a section of five settings sitting in a well with room for eight -
-     * three rows of empty panel under it, which read as a screen that had
-     * failed to finish loading rather than as a short section.
-     */
-    private int visibleRows() {
-        return Math.max(1, Math.min(fitLimit, rows().size()));
+    /** Rows the well needs to be at least as tall as the rail standing beside it. */
+    private int railRows() {
+        int railH = sections.size() * RAIL_BUTTON + (sections.size() - 1) * RAIL_GAP;
+        return (railH + ROW_H - 1) / ROW_H;
     }
 
     private int panelH() {
-        return CHROME_H + visibleRows() * ROW_H;
+        return CHROME_H + visibleRows * ROW_H;
     }
 
-    /** Whether there are more rows than the screen has room for. */
+    /** Whether there are more rows than the well can show at once. */
     private boolean overflows() {
-        return rows().size() > fitLimit;
+        return rows().size() > visibleRows;
     }
 
     private int rowsX() {
@@ -653,7 +651,7 @@ public final class SettingsScreen extends Screen {
     }
 
     private int maxScroll() {
-        return Math.max(0, rows().size() - fitLimit);
+        return Math.max(0, rows().size() - visibleRows);
     }
 
     private int closeX() {
@@ -723,7 +721,7 @@ public final class SettingsScreen extends Screen {
 
         if (overflows()) {
             Panel.scrollbar(gfx, scrollbarX(), contentTop() + 1, SCROLLBAR_W, contentH() - 2,
-                    scroll, maxScroll(), rows().size(), visibleRows());
+                    scroll, maxScroll(), rows().size(), visibleRows);
         }
 
         // A tooltip while a track is being dragged is a panel jumping about
@@ -834,7 +832,7 @@ public final class SettingsScreen extends Screen {
         int right = left + rowsW();
         int hovered = rowAt(mouseX, mouseY);
 
-        for (int i = 0; i < visibleRows(); i++) {
+        for (int i = 0; i < visibleRows; i++) {
             int index = scroll + i;
             if (index >= visible.size()) break;
 
@@ -1089,7 +1087,7 @@ public final class SettingsScreen extends Screen {
     private int rowAt(int mouseX, int mouseY) {
         if (mouseX < rowsX() || mouseX >= rowsX() + rowsW()) return -1;
         int top = contentTop() + 1;
-        if (mouseY < top || mouseY >= top + visibleRows() * ROW_H) return -1;
+        if (mouseY < top || mouseY >= top + visibleRows * ROW_H) return -1;
         int index = scroll + (mouseY - top) / ROW_H;
         return index < rows().size() ? index : -1;
     }
