@@ -1,6 +1,6 @@
 package dev.adrian.chesttracker.client.highlight;
 
-import dev.adrian.chesttracker.client.platform.ClientCompat;
+import dev.adrian.chesttracker.client.ActionBar;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.core.highlight.HighlightTargets;
 import dev.adrian.chesttracker.core.highlight.HighlightTimer;
@@ -11,6 +11,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 
@@ -49,6 +50,24 @@ public final class ContainerHighlight {
      */
     private List<Long> positions = List.of();
 
+    /**
+     * Which of {@link #positions} are entities, and which entity each one is.
+     *
+     * <p>A chest minecart's position is only true at the instant it is read.
+     * The boxes used to be drawn from the packed positions the query answered
+     * with, so a cart that was moving left its box standing in the rail bed
+     * behind it - the mod pointing confidently at nothing, which is the one
+     * failure it must not have.
+     *
+     * <p>So a position is kept as the target's <em>identity</em> - it is what
+     * the nearest-target logic and {@link #forget} compare - and the entity id
+     * is what the coordinates are read through, per frame, from the game
+     * itself. When the entity is gone from the client (unloaded, or a chunk
+     * away) the packed position is used as the last place it was seen, which
+     * is the honest answer rather than no answer.
+     */
+    private java.util.Map<Long, Integer> entityIds = java.util.Map.of();
+
     private long pos;
     private String dimensionId;
     private String label;
@@ -60,7 +79,7 @@ public final class ContainerHighlight {
      * for comparing - marking slots in an open container needs to know which
      * item, not what it is called in the player's language.
      */
-    private String searchedItemId;
+    private java.util.Set<String> searchedItemIds = java.util.Set.of();
 
     /** Seconds of turning left, counted down per frame. */
     private float turnSecondsLeft;
@@ -106,12 +125,98 @@ public final class ContainerHighlight {
      * there, and there".
      */
     public void select(List<Long> positions, String dimensionId, String label) {
+        select(positions, java.util.Map.of(), dimensionId, label);
+    }
+
+    /**
+     * Points at every result of a query, entities included.
+     *
+     * <p>The entry point the search screens use, because a
+     * {@link dev.adrian.chesttracker.core.net.QueryDto.ContainerHit} knows
+     * whether it is a block or a cart and a bare position does not.
+     */
+    public void selectHits(List<dev.adrian.chesttracker.core.net.QueryDto.ContainerHit> hits,
+                           String dimensionId, String label) {
+        if (hits == null || hits.isEmpty()) {
+            select(List.of(), dimensionId, label);
+            return;
+        }
+        List<Long> positions = new java.util.ArrayList<>(hits.size());
+        java.util.Map<Long, Integer> ids = new java.util.HashMap<>();
+        for (var hit : hits) {
+            positions.add(hit.pos());
+            if (hit.isEntity()) ids.put(hit.pos(), hit.entityId());
+        }
+        select(positions, ids, dimensionId, label);
+    }
+
+    /** @param entityIds see {@link #entityIds}; empty when nothing found moves */
+    public void select(List<Long> positions, java.util.Map<Long, Integer> entityIds,
+                       String dimensionId, String label) {
         this.positions = positions == null ? List.of() : List.copyOf(positions);
+        this.entityIds = entityIds == null ? java.util.Map.of() : java.util.Map.copyOf(entityIds);
         long nearest = this.positions.isEmpty() ? 0 : this.positions.get(0);
         selectPrimary(nearest, dimensionId, label);
     }
 
+    /**
+     * Where the container identified by {@code position} is <em>now</em>.
+     *
+     * <p>The centre of the block for anything that stands still, and the live
+     * position of the entity for anything that does not. See {@link #entityIds}.
+     */
+    private Vec3 centre(long position) {
+        Entity entity = entityAt(position);
+        if (entity != null) {
+            Vec3 at = livePosition(entity);
+            return new Vec3(at.x, at.y + 0.5, at.z);
+        }
+        return new Vec3(BlockKey.x(position) + 0.5, BlockKey.y(position) + 0.5, BlockKey.z(position) + 0.5);
+    }
+
+    /**
+     * Where an entity is <em>this frame</em>, not this tick.
+     *
+     * <p>Entities move twenty times a second and are drawn sixty or more, so
+     * the game interpolates between the last two ticks when it renders them.
+     * The camera is interpolated the same way. Reading {@code getX()} instead
+     * takes the position from the last whole tick and pairs it with a camera
+     * that is part-way to the next one, so the box lands in a slightly
+     * different place relative to the cart on each frame - which is seen as a
+     * box that shivers around a minecart that is itself moving smoothly.
+     *
+     * <p>{@code getPosition(partialTick)} is the same interpolation vanilla
+     * uses to draw the entity, so the box sits still on it.
+     */
+    private static Vec3 livePosition(Entity entity) {
+        float partialTick = Minecraft.getInstance().getDeltaTracker()
+                // True: entities are frozen when the game is paused, and a box
+                // that carries on interpolating past a frozen cart would drift
+                // off it.
+                .getGameTimeDeltaPartialTick(true);
+        return entity.getPosition(partialTick);
+    }
+
+    /**
+     * The still-loaded entity behind a highlighted position, or null.
+     *
+     * <p>Null covers both "this was never an entity" and "it has since gone",
+     * and the callers want the same thing in either case: fall back to the
+     * position the query gave, which is where it was last seen.
+     */
+    private Entity entityAt(long position) {
+        if (entityIds.isEmpty()) return null;
+        Integer id = entityIds.get(position);
+        if (id == null) return null;
+        var level = Minecraft.getInstance().level;
+        return level == null ? null : level.getEntity(id);
+    }
+
     private void selectPrimary(long pos, String dimensionId, String label) {
+        // A search that found somewhere to walk replaces a carried mark, rather
+        // than leaving the two of them both notionally active.
+        this.carriedUntil = 0L;
+        this.hintItemIds = java.util.Set.of();
         ChestTrackerConfig config = ChestTrackerConfig.get();
         this.timer = new HighlightTimer(config.highlightDurationMs(),
                 config.highlightRecedingGraceMs(), SAMPLE_INTERVAL_MS);
@@ -126,20 +231,181 @@ public final class ContainerHighlight {
         turnLastFrameAt = System.nanoTime();
     }
 
+    /**
+     * When a carried mark runs out, or 0 when there is not one.
+     *
+     * <p>Kept apart from {@link HighlightTimer} because that timer's whole rule
+     * is "is the player still moving towards it", and a carried mark has
+     * nothing to move towards - the thing is already on them. A plain deadline
+     * is the honest version of "how long should this stay up".
+     */
+    private long carriedUntil;
+
+    /**
+     * Marks an item in whatever container is opened next, without pointing
+     * anywhere in the world.
+     *
+     * <p>For the ender chest, whose contents are on the player rather than at
+     * coordinates. Clicking an item there used to run the ordinary search,
+     * which correctly found nowhere to walk to and then said "Nothing indexed
+     * holds Diamond" - flatly contradicting the grid that had just shown them
+     * the diamonds. There is a real answer to give: the item is in the ender
+     * chest, probably inside one of the shulker boxes in it, and marking the
+     * slots is what says which.
+     */
+    public void markCarried(String itemId, String label) {
+        markCarried(itemId, label, List.of(), null);
+    }
+
+    /**
+     * As above, and also points at the ender chests the player could open.
+     *
+     * <p>"It is in your ender chest" is only half an answer while you are
+     * standing in a room with one. So the blocks are boxed like any other
+     * match, the ender chest <em>item</em> is marked in whatever container is
+     * open - it might be in a shulker in the chest in front of you - and the
+     * item itself is marked once the ender chest is finally open. Three steps
+     * of the same trail, each one marked as it becomes the next thing to do.
+     *
+     * @param positions ender chests to box, nearest first; may be empty
+     */
+    public void markCarried(String itemId, String label,
+                            List<Long> positions, String dimensionId) {
+        clear();
+        this.searchedItemIds = java.util.Set.of(itemId);
+        this.label = label;
+        this.carriedUntil = System.currentTimeMillis() + ChestTrackerConfig.get().highlightDurationMs();
+
+        if (positions == null || positions.isEmpty()) {
+            this.positions = List.of();
+            // Null rather than a dimension: there is no world position, and
+            // tick() reads this to know not to draw guidance to one.
+            this.dimensionId = null;
+            this.hintItemIds = ENDER_CHEST_HINT;
+            return;
+        }
+
+        // A carried mark and a place to walk to at once, which nothing else
+        // does: the timer runs the guidance and the deadline runs the marking,
+        // and they are about the same search.
+        long carried = this.carriedUntil;
+        java.util.Set<String> wanted = this.searchedItemIds;
+        select(positions, dimensionId, label);
+        this.carriedUntil = carried;
+        this.searchedItemIds = wanted;
+        this.hintItemIds = ENDER_CHEST_HINT;
+    }
+
+    /**
+     * Items that are not the answer but lead to it - the ender chest, when
+     * what was asked for is inside it.
+     *
+     * <p>Kept apart from {@link #searchedItemIds} because the two mean
+     * different things to the slot marker: one is "this is your item", the
+     * other is "open this next", and they are drawn in different colours for
+     * exactly that reason.
+     */
+    private java.util.Set<String> hintItemIds = java.util.Set.of();
+
+    private static final java.util.Set<String> ENDER_CHEST_HINT =
+            java.util.Set.of("minecraft:ender_chest");
+
+    /** Container items worth opening next; see {@link #hintItemIds}. */
+    public java.util.Set<String> hintItemIds() {
+        return hintItemIds;
+    }
+
+    /** Whether a carried mark is still up. */
+    private boolean carriedActive() {
+        return carriedUntil > 0 && System.currentTimeMillis() < carriedUntil;
+    }
+
+    /**
+     * Drops one container from the highlight, because it no longer exists.
+     *
+     * <p>The last one going takes the whole highlight with it: boxes over
+     * nothing are worse than no boxes, and there is nothing left to guide to.
+     */
+    public void forget(long position) {
+        if (positions.isEmpty()) return;
+        List<Long> remaining = new java.util.ArrayList<>(positions.size());
+        for (Long candidate : positions) {
+            if (candidate != position) remaining.add(candidate);
+        }
+        if (remaining.size() == positions.size()) return;
+
+        if (remaining.isEmpty()) {
+            clear();
+            return;
+        }
+        positions = List.copyOf(remaining);
+        if (!entityIds.isEmpty()) {
+            java.util.Map<Long, Integer> kept = new java.util.HashMap<>(entityIds);
+            kept.keySet().retainAll(positions);
+            entityIds = java.util.Map.copyOf(kept);
+        }
+        if (pos == position) pos = positions.get(0);
+    }
+
     public void clear() {
         timer.clear();
         positions = List.of();
-        searchedItemId = null;
+        entityIds = java.util.Map.of();
+        searchedItemIds = java.util.Set.of();
+        hintItemIds = java.util.Set.of();
+        carriedUntil = 0L;
     }
 
-    /** The registry id being looked for, for marking slots. Null when inactive. */
-    public String searchedItemId() {
-        return searchedItemId;
+    /**
+     * The registry ids being looked for, so open containers can mark them.
+     *
+     * <p>Empty when nothing is being searched for. A set rather than one id
+     * because a search can legitimately be about many at once - everything
+     * inside a shulker box, or everything a schematic still needs - and the
+     * marks in an open container should show all of them, not an arbitrary
+     * one.
+     *
+     * <p>Returned as an immutable set whose identity changes only when the
+     * search does, which is what lets the slot marker cache its resolved items
+     * instead of parsing registry ids every frame.
+     */
+    public java.util.Set<String> searchedItemIds() {
+        return searchedItemIds;
     }
 
     /** Names the item a selection is about, so open containers can mark it. */
     public void searchingFor(String itemId) {
-        this.searchedItemId = itemId;
+        this.searchedItemIds = itemId == null ? java.util.Set.of() : java.util.Set.of(itemId);
+    }
+
+    /**
+     * Drops one item from what is being marked, because the player has it now.
+     *
+     * <p>The mark exists to answer "which slot"; once the cursor is on that
+     * slot, or the stack is on the cursor, it has been answered and going on
+     * pulsing is the mod still shouting after the question was settled.
+     *
+     * <p>The last one going takes the whole highlight with it - the boxes point
+     * at containers holding a thing the player is now carrying.
+     */
+    public void retire(String itemId) {
+        if (itemId == null || !searchedItemIds.contains(itemId)) return;
+
+        java.util.Set<String> remaining = new java.util.HashSet<>(searchedItemIds);
+        remaining.remove(itemId);
+        if (remaining.isEmpty()) {
+            clear();
+            return;
+        }
+        // Replaced rather than edited: the slot marker caches what it resolved
+        // against this set's identity.
+        searchedItemIds = java.util.Set.copyOf(remaining);
+    }
+
+    /** Names every item a selection is about. */
+    public void searchingFor(java.util.Collection<String> itemIds) {
+        this.searchedItemIds = itemIds == null || itemIds.isEmpty()
+                ? java.util.Set.of() : java.util.Set.copyOf(itemIds);
     }
 
     /**
@@ -244,11 +510,39 @@ public final class ContainerHighlight {
     private static final float LINE_WIDTH_PER_BLOCK = 0.02f;
     private static final float MAX_LINE_WIDTH = 5.0f;
 
-    /** Whether there is anything for the world renderer to draw. */
+    /**
+     * Whether there is anything for the world renderer to draw.
+     *
+     * <p>Asked every frame whether or not anything is highlighted, which is
+     * almost always nothing - so the two free field tests come first and the
+     * two that do work (walking the connection, and parsing the display mode
+     * out of the config's string) are only reached when there is really a
+     * highlight to draw.
+     */
     public boolean hasBoxes() {
         return timer.isActive() && !positions.isEmpty()
+                && dev.adrian.chesttracker.client.Session.active()
                 && ChestTrackerConfig.get().highlightDisplay().drawsBoxes();
     }
+
+    /**
+     * The highlighted positions as a set, rebuilt only when they change.
+     *
+     * <p>Used to spot a double chest whose halves are both hits. It was a fresh
+     * {@code Set.copyOf} every frame for a list that only moves when a new
+     * search runs.
+     */
+    private java.util.Set<Long> positionSet() {
+        if (positionSetSource != positions) {
+            positionSetSource = positions;
+            positionSet = positions.size() < 2
+                    ? java.util.Set.of() : java.util.Set.copyOf(positions);
+        }
+        return positionSet;
+    }
+
+    private List<Long> positionSetSource;
+    private java.util.Set<Long> positionSet = java.util.Set.of();
 
     /**
      * Draws a box around each highlighted container.
@@ -268,17 +562,53 @@ public final class ContainerHighlight {
         float[] nearestColour = config.nearestRgb();
         float[] otherColour = config.otherRgb();
 
+        // Which positions are in play, so a double chest whose halves are both
+        // hits can be recognised as one chest rather than drawn twice.
+        java.util.Set<Long> present = positionSet();
+
         int drawn = 0;
         for (Long position : positions) {
             if (drawn >= MAX_BOXES) break;
 
-            double x = BlockKey.x(position);
-            double y = BlockKey.y(position);
-            double z = BlockKey.z(position);
+            // A double chest is two blocks the player thinks of as one, and the
+            // index agrees with the game rather than with the player: each half
+            // is a container of its own, so an item in both halves is two hits.
+            // Drawn literally that is two boxes with a line down the middle of
+            // one chest, two beams, and one half picked out as "nearest" - which
+            // reads as the mod pointing at half a chest.
+            // An entity is wherever it is this frame, and is its own size;
+            // only a block can be half of a double chest.
+            Entity entity = entityAt(position);
+            Span span = entity != null ? SINGLE_SPAN
+                    : spanAt(BlockKey.x(position), BlockKey.y(position), BlockKey.z(position));
 
-            double dx = x + 0.5 - eye.x;
-            double dy = y + 0.5 - eye.y;
-            double dz = z + 0.5 - eye.z;
+            // Both halves hit: one of them draws the pair and the other stands
+            // down. Either may do it - the box is anchored at the pair's lower
+            // corner from whichever half is asked - so the tie is broken on the
+            // packed value simply to make it the same one every frame.
+            if (span.partner() != NO_PARTNER && present.contains(span.partner())
+                    && span.partner() < position) {
+                continue;
+            }
+
+            // The box's lower corner, and how far it reaches. For an entity
+            // both come off the entity itself: the position interpolated to
+            // this frame, so the box travels with the cart rather than standing
+            // where it was when the query was answered, and the size from its
+            // own hitbox, so a chest boat gets a boat-shaped box and a minecart
+            // a minecart-shaped one instead of both being drawn as a cube.
+            Vec3 at = entity == null ? null : livePosition(entity);
+            double width = entity == null ? 0 : entity.getBbWidth();
+            double x = at != null ? at.x - width / 2 : BlockKey.x(position) + span.offsetX();
+            double y = at != null ? at.y : BlockKey.y(position);
+            double z = at != null ? at.z - width / 2 : BlockKey.z(position) + span.offsetZ();
+            double sizeX = entity != null ? width : span.sizeX();
+            double sizeY = entity != null ? entity.getBbHeight() : 1.0;
+            double sizeZ = entity != null ? width : span.sizeZ();
+
+            double dx = x + sizeX / 2.0 - eye.x;
+            double dy = y + sizeY / 2.0 - eye.y;
+            double dz = z + sizeZ / 2.0 - eye.z;
             double distSq = dx * dx + dy * dy + dz * dz;
             double distance = Math.sqrt(distSq);
 
@@ -295,20 +625,22 @@ public final class ContainerHighlight {
             // across a base is something you can find by looking rather than
             // something you have to already be pointing at.
             double grow = growthAt(distance);
-            float width = (float) Math.round(Math.min(MAX_LINE_WIDTH,
+            float lineWidth = (float) Math.round(Math.min(MAX_LINE_WIDTH,
                     BASE_LINE_WIDTH + Math.max(0.0, distance - GROW_FROM) * LINE_WIDTH_PER_BLOCK));
 
             // The nearest one is picked out, because that is the one the action
             // bar is talking about and the one the player is walking towards.
-            boolean nearest = position == pos;
+            // A pair drawn as one box is the nearest if either of its halves is.
+            boolean nearest = position == pos
+                    || (span.partner() != NO_PARTNER && span.partner() == pos);
             float[] colour = nearest ? nearestColour : otherColour;
 
-            double drawX = dx * pull - 0.5;
-            double drawY = dy * pull - 0.5;
-            double drawZ = dz * pull - 0.5;
+            double drawX = dx * pull - sizeX / 2.0;
+            double drawY = dy * pull - sizeY / 2.0;
+            double drawZ = dz * pull - sizeZ / 2.0;
 
-            HighlightBox.emit(pose, lines, drawX, drawY, drawZ,
-                    colour[0], colour[1], colour[2], 0.9f, grow, width);
+            HighlightBox.emit(pose, lines, drawX, drawY, drawZ, sizeX, sizeY, sizeZ,
+                    colour[0], colour[1], colour[2], 0.9f, grow, lineWidth);
 
             // The column is what carries at range, and the only part of this
             // that means anything where no terrain is drawn to place it.
@@ -316,12 +648,70 @@ public final class ContainerHighlight {
                 double beamHeight = Math.min(MAX_BEAM_HEIGHT,
                         BEAM_HEIGHT + distance * BEAM_HEIGHT_PER_BLOCK);
                 HighlightBox.beam(pose, lines,
-                        drawX + 0.5, drawY + 1.5, drawZ + 0.5, beamHeight * pull,
-                        colour[0], colour[1], colour[2], 0.75f, width);
+                        drawX + sizeX / 2.0, drawY + sizeY + 0.5, drawZ + sizeZ / 2.0,
+                        beamHeight * pull,
+                        colour[0], colour[1], colour[2], 0.75f, lineWidth);
             }
             drawn++;
         }
     }
+
+    /**
+     * How far the marker at a position has to reach to cover the whole
+     * container: {@code {offsetX, offsetZ, sizeX, sizeZ}}.
+     *
+     * <p>Only the double chest needs this, and only when its chunk is loaded -
+     * which is exactly when the player can see that the box is wrong. Out at
+     * the horizon, where the block state is not available, one block is both
+     * all we can know and all the difference the eye could tell.
+     *
+     * <p>Asked per box per frame, but there are at most thirty-two of them and
+     * a loaded block state is a lookup, not a load.
+     */
+    private static Span spanAt(int x, int y, int z) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null) return SINGLE_SPAN;
+
+        net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(x, y, z);
+        // Never force a chunk to load for the sake of a box.
+        if (!client.level.hasChunkAt(pos)) return SINGLE_SPAN;
+
+        net.minecraft.world.level.block.state.BlockState state = client.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof net.minecraft.world.level.block.ChestBlock)) return SINGLE_SPAN;
+        if (net.minecraft.world.level.block.ChestBlock.getBlockType(state)
+                == net.minecraft.world.level.block.DoubleBlockCombiner.BlockType.SINGLE) {
+            return SINGLE_SPAN;
+        }
+
+        net.minecraft.core.Direction direction =
+                net.minecraft.world.level.block.ChestBlock.getConnectedDirection(state);
+        int dx = direction.getStepX();
+        int dz = direction.getStepZ();
+        int otherX = x + dx;
+        int otherZ = z + dz;
+        if (!BlockKey.isRepresentable(otherX, y, otherZ)) return SINGLE_SPAN;
+
+        // The neighbour can be on either side; the box starts at whichever
+        // block is lower on that axis.
+        return new Span(Math.min(0, dx), Math.min(0, dz),
+                Math.abs(dx) + 1, Math.abs(dz) + 1,
+                BlockKey.pack(otherX, y, otherZ));
+    }
+
+    /**
+     * How far a marker at a position has to reach to cover the whole container,
+     * and which other position is the same container.
+     *
+     * @param offsetX where the box starts relative to this block
+     * @param partner the other half of a double chest, or {@link #NO_PARTNER}
+     */
+    private record Span(int offsetX, int offsetZ, int sizeX, int sizeZ, long partner) {}
+
+    /** No other block is part of this container. */
+    private static final long NO_PARTNER = Long.MIN_VALUE;
+
+    /** The answer for everything that is not half of a double chest. */
+    private static final Span SINGLE_SPAN = new Span(0, 0, 1, 1, NO_PARTNER);
 
     /**
      * How far out geometry can still be drawn.
@@ -362,6 +752,16 @@ public final class ContainerHighlight {
     public void turnTowardsTarget() {
         if (turnSecondsLeft <= 0.0f) return;
 
+        // A view that moves on its own is what an anti-cheat calls aim assist,
+        // and rotation reaches the server in the ordinary movement packets -
+        // so on somebody else's server this does nothing at all unless it has
+        // been deliberately allowed. The boxes still point the way; they are
+        // drawn on this machine and the server never learns they exist.
+        if (!dev.adrian.chesttracker.client.Assist.allowed()) {
+            turnSecondsLeft = 0.0f;
+            return;
+        }
+
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null || positions.isEmpty() || !timer.isActive()) {
             turnSecondsLeft = 0.0f;
@@ -374,9 +774,10 @@ public final class ContainerHighlight {
         if (seconds <= 0.0f) return;
         turnSecondsLeft -= seconds;
 
-        double dx = BlockKey.x(pos) + 0.5 - player.getX();
-        double dy = BlockKey.y(pos) + 0.5 - player.getEyeY();
-        double dz = BlockKey.z(pos) + 0.5 - player.getZ();
+        Vec3 target = centre(pos);
+        double dx = target.x - player.getX();
+        double dy = target.y - player.getEyeY();
+        double dz = target.z - player.getZ();
 
         float wantYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
         float wantPitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
@@ -412,12 +813,30 @@ public final class ContainerHighlight {
      */
     private void followNearest(LocalPlayer player) {
         if (positions.size() < 2) return;
-        pos = HighlightTargets.nearest(positions,
-                player.getBlockX(), player.getBlockY(), player.getBlockZ());
+        if (entityIds.isEmpty()) {
+            pos = HighlightTargets.nearest(positions,
+                    player.getBlockX(), player.getBlockY(), player.getBlockZ());
+            return;
+        }
+
+        // Anything that moves has to be measured from where it is, so this
+        // cannot go through the packed-position version. The rule is the same
+        // one, and the reason it is not shared is that the core has no way to
+        // ask the game where an entity got to.
+        long best = positions.get(0);
+        double bestDistSq = Double.MAX_VALUE;
+        for (Long candidate : positions) {
+            double distSq = centre(candidate).distanceToSqr(player.getX(), player.getY(), player.getZ());
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                best = candidate;
+            }
+        }
+        pos = best;
     }
 
     public boolean isActive() {
-        return timer.isActive();
+        return timer.isActive() || carriedActive();
     }
 
     public long pos() {
@@ -433,6 +852,18 @@ public final class ContainerHighlight {
      * the player cannot see through a wall anyway.
      */
     public void tick() {
+        // Switched off mid-guidance - the player joined a server on their own
+        // off-limits list. Nothing left standing, rather than boxes with
+        // nothing behind them.
+        if (!dev.adrian.chesttracker.client.Session.active()) {
+            if (isActive()) clear();
+            return;
+        }
+        // A carried mark with nowhere to walk to has no bearing to write and no
+        // dimension it can be left. It just runs out on its own. One that does
+        // have ender chests to point at falls through and guides to them like
+        // any other search.
+        if (carriedActive() && positions.isEmpty()) return;
         if (!timer.isActive()) return;
 
         Minecraft client = Minecraft.getInstance();
@@ -459,24 +890,31 @@ public final class ContainerHighlight {
         if (!ChestTrackerConfig.get().highlightDisplay().writesActionBar()) return;
 
         if (distance <= ARRIVAL_DISTANCE) {
-            ClientCompat.actionBar(Component.literal(label + " - you are here")
-                    .withStyle(ChatFormatting.GREEN));
+            ActionBar.guidance(
+                    Component.literal(label + " - you are here").withStyle(ChatFormatting.GREEN));
             return;
         }
 
-        ClientCompat.actionBar(Component.literal(String.format("%s  %s  %.0fm",
-                label, bearing(player), distance)).withStyle(ChatFormatting.AQUA));
+        // Guidance, not an answer: it yields to whatever the player last asked
+        // for, and is restated a tick later anyway.
+        ActionBar.guidance(
+                Component.literal(String.format("%s  %s  %.0fm",
+                        label, bearing(player), distance)).withStyle(ChatFormatting.AQUA));
     }
 
     private double distanceTo(LocalPlayer player) {
-        return Math.sqrt(BlockKey.distanceSq(
-                BlockKey.pack(player.getBlockX(), player.getBlockY(), player.getBlockZ()), pos));
+        if (entityAt(pos) == null) {
+            return Math.sqrt(BlockKey.distanceSq(
+                    BlockKey.pack(player.getBlockX(), player.getBlockY(), player.getBlockZ()), pos));
+        }
+        return centre(pos).distanceTo(new Vec3(player.getX(), player.getY(), player.getZ()));
     }
 
     /** Where the container is relative to where the player is facing. */
     private String bearing(LocalPlayer player) {
-        double dx = BlockKey.x(pos) + 0.5 - player.getX();
-        double dz = BlockKey.z(pos) + 0.5 - player.getZ();
+        Vec3 target = centre(pos);
+        double dx = target.x - player.getX();
+        double dz = target.z - player.getZ();
         double targetYaw = Math.toDegrees(Math.atan2(-dx, dz));
         double relative = Math.floorMod((long) (targetYaw - player.getYRot() + 360 + 22.5), 360L) / 45;
 
@@ -491,7 +929,7 @@ public final class ContainerHighlight {
             default -> "ahead-left";
         };
 
-        int dy = BlockKey.y(pos) - player.getBlockY();
+        int dy = (int) Math.floor(target.y) - player.getBlockY();
         if (dy > 3) return horizontal + " and up";
         if (dy < -3) return horizontal + " and down";
         return horizontal;

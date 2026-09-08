@@ -15,15 +15,15 @@ class QueryDtoTest {
         // "Built" covers the uncertain case as well; see the two tests below
         // for why that is the point rather than a looseness.
         assertEquals(Set.of(Origin.PLAYER_PLACED, Origin.UNKNOWN),
-                new QueryDto.Filters(true, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins());
+                new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins());
         assertEquals(Set.of(Origin.NATURAL),
-                new QueryDto.Filters(true, false, QueryDto.Filters.ORIGIN_NATURAL).origins());
+                new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_NATURAL).origins());
     }
 
     @Test
     void anyOriginMeansNoConstraint() {
         // Empty is "no filter", not "match nothing" - the index reads it that way.
-        assertTrue(new QueryDto.Filters(true, false, QueryDto.Filters.ORIGIN_ANY).origins().isEmpty());
+        assertTrue(new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_ANY).origins().isEmpty());
     }
 
     @Test
@@ -31,9 +31,9 @@ class QueryDtoTest {
         // These arrive off the wire, so the values are whatever the other side
         // chose to send. An unrecognised one must not select a different filter
         // by accident, and must not throw on a packet either.
-        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, 99).originFilter());
-        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, -3).originFilter());
-        assertTrue(new QueryDto.Filters(true, false, 99).origins().isEmpty());
+        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, false, false, 99).originFilter());
+        assertEquals(QueryDto.Filters.ORIGIN_ANY, new QueryDto.Filters(true, false, false, false, -3).originFilter());
+        assertTrue(new QueryDto.Filters(true, false, false, false, 99).origins().isEmpty());
     }
 
     @Test
@@ -42,8 +42,7 @@ class QueryDtoTest {
         // anything, so every chest a player owns is UNKNOWN. Reading the label
         // literally would show them an empty grid and imply the only fix is to
         // re-place every chest they have.
-        Set<Origin> built = new QueryDto.Filters(true, false,
-                QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins();
+        Set<Origin> built = new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins();
 
         assertTrue(built.contains(Origin.PLAYER_PLACED));
         assertTrue(built.contains(Origin.UNKNOWN));
@@ -54,8 +53,7 @@ class QueryDtoTest {
     void theGeneratedFilterStaysExact() {
         // Generated containers are positively identified - a structure piece or
         // an unrolled loot table - so this side has no reason to guess.
-        Set<Origin> generated = new QueryDto.Filters(true, false,
-                QueryDto.Filters.ORIGIN_NATURAL).origins();
+        Set<Origin> generated = new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_NATURAL).origins();
 
         assertEquals(Set.of(Origin.NATURAL), generated);
     }

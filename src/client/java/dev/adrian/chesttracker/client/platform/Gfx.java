@@ -56,8 +56,30 @@ public final class Gfx {
         raw.text(font, text, x, y, colour);
     }
 
+    // Text shrunk about its bottom-right corner, for a label with more
+    // characters than its box has room for. The corner is the anchor because
+    // the callers right-align: a count sits against the right edge of its slot
+    // whatever it says, so that edge is the one that must not move.
+    public void textFromCorner(Font font, String text, int rightX, int bottomY,
+                               float scale, int colour) {
+        var pose = raw.pose();
+        pose.pushMatrix();
+        pose.translate(rightX, bottomY);
+        pose.scale(scale, scale);
+        raw.text(font, text, -font.width(text), -font.lineHeight, colour);
+        pose.popMatrix();
+    }
+
     public void fill(int x1, int y1, int x2, int y2, int colour) {
         raw.fill(x1, y1, x2, y2, colour);
+    }
+
+    // Vertical only, top colour to bottom colour, and identical on both
+    // versions. The colour picker draws its saturation/value square out of
+    // these one column at a time, which is a hundred and twenty calls a frame
+    // instead of the fourteen thousand a per-pixel fill would take.
+    public void fillGradient(int x1, int y1, int x2, int y2, int top, int bottom) {
+        raw.fillGradient(x1, y1, x2, y2, top, bottom);
     }
 
     public void item(ItemStack stack, int x, int y) {
@@ -77,6 +99,20 @@ public final class Gfx {
                      int width, int height, int textureWidth, int textureHeight) {
         raw.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight);
     }
+
+    // The same, stretching a source region to a different size. The window is
+    // widened for a scrollbar column vanilla's art does not cover, and the gap
+    // is filled by repeating one uniform pixel column out of that art. Drawing
+    // it a pixel at a time cost a blit per pixel per band per frame - several
+    // hundred a frame for one window. Stretching the same column is one call
+    // and, because GUI textures are sampled nearest-neighbour, the same pixels:
+    // the fill still comes from whatever texture a resource pack supplies.
+    public void blitStretched(Identifier texture, int x, int y, float u, float v,
+                              int width, int height, int uWidth, int vHeight,
+                              int textureWidth, int textureHeight) {
+        raw.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v,
+                width, height, uWidth, vHeight, textureWidth, textureHeight);
+    }
     *///?} else {
     private final GuiGraphics raw;
 
@@ -92,8 +128,30 @@ public final class Gfx {
         raw.drawString(font, text, x, y, colour);
     }
 
+    // Text shrunk about its bottom-right corner, for a label with more
+    // characters than its box has room for. The corner is the anchor because
+    // the callers right-align: a count sits against the right edge of its slot
+    // whatever it says, so that edge is the one that must not move.
+    public void textFromCorner(Font font, String text, int rightX, int bottomY,
+                               float scale, int colour) {
+        var pose = raw.pose();
+        pose.pushMatrix();
+        pose.translate(rightX, bottomY);
+        pose.scale(scale, scale);
+        raw.drawString(font, text, -font.width(text), -font.lineHeight, colour);
+        pose.popMatrix();
+    }
+
     public void fill(int x1, int y1, int x2, int y2, int colour) {
         raw.fill(x1, y1, x2, y2, colour);
+    }
+
+    // Vertical only, top colour to bottom colour, and identical on both
+    // versions. The colour picker draws its saturation/value square out of
+    // these one column at a time, which is a hundred and twenty calls a frame
+    // instead of the fourteen thousand a per-pixel fill would take.
+    public void fillGradient(int x1, int y1, int x2, int y2, int top, int bottom) {
+        raw.fillGradient(x1, y1, x2, y2, top, bottom);
     }
 
     public void item(ItemStack stack, int x, int y) {
@@ -112,6 +170,20 @@ public final class Gfx {
     public void blit(Identifier texture, int x, int y, float u, float v,
                      int width, int height, int textureWidth, int textureHeight) {
         raw.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight);
+    }
+
+    // The same, stretching a source region to a different size. The window is
+    // widened for a scrollbar column vanilla's art does not cover, and the gap
+    // is filled by repeating one uniform pixel column out of that art. Drawing
+    // it a pixel at a time cost a blit per pixel per band per frame - several
+    // hundred a frame for one window. Stretching the same column is one call
+    // and, because GUI textures are sampled nearest-neighbour, the same pixels:
+    // the fill still comes from whatever texture a resource pack supplies.
+    public void blitStretched(Identifier texture, int x, int y, float u, float v,
+                              int width, int height, int uWidth, int vHeight,
+                              int textureWidth, int textureHeight) {
+        raw.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v,
+                width, height, uWidth, vHeight, textureWidth, textureHeight);
     }
     //?}
 }

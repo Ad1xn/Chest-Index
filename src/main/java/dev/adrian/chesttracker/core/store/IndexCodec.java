@@ -43,8 +43,19 @@ public final class IndexCodec {
     /** "CTIX" - ChestTracker IndeX. */
     private static final int MAGIC = 0x43544958;
 
-    /** Bump on any incompatible layout change; {@link #read} rejects unknown versions. */
-    public static final int FORMAT_VERSION = 1;
+    /**
+     * Bump on any layout change; {@link #read} rejects versions newer than this.
+     *
+     * <p>Version 2 added what distinguishes one stack from another of the same
+     * item - its enchantments, its potion, its lore - without which a search
+     * for "mending" has nothing to match against. Version 1 files are still
+     * read: every stack simply comes back with none of that, which is exactly
+     * true of what was stored, and the next scan fills it in.
+     */
+    public static final int FORMAT_VERSION = 2;
+
+    /** The oldest layout {@link #read} still understands. */
+    public static final int OLDEST_READABLE_VERSION = 1;
 
     private static final int FLAG_UNLOOTED = 1 << 2;
     private static final int FLAG_CONTENTS_KNOWN = 1 << 3;
@@ -59,13 +70,44 @@ public final class IndexCodec {
     /** A palette and the index that references it, as stored in one file. */
     public record Snapshot(StringPalette palette, WorldIndex index) {}
 
+    /**
+     * Everything one file needs, detached from the live index it came from.
+     *
+     * <p>The point is that taking one is cheap and holding one is safe.
+     * {@link ContainerRecord} is immutable and the two lists are copies, so a
+     * snapshot can be handed to a background thread and written there while the
+     * index it was taken from carries on changing. The client index needs
+     * exactly that: it lives on the render thread, where a gzip write of a few
+     * megabytes is a visible stutter.
+     *
+     * @param paletteEntries the palette in id order, as {@link StringPalette#entries()}
+     * @param dimensionId    palette id of the dimension these records belong to
+     * @param records        the records themselves
+     */
+    public record Frozen(List<String> paletteEntries, int dimensionId, List<ContainerRecord> records) {
+
+        public Frozen {
+            paletteEntries = List.copyOf(paletteEntries);
+            records = List.copyOf(records);
+        }
+
+        /** Takes a snapshot of a live index. Must be called on the thread that owns it. */
+        public static Frozen of(StringPalette palette, WorldIndex index) {
+            return new Frozen(palette.entries(), index.dimensionId(), List.copyOf(index.all()));
+        }
+    }
+
     public static void write(Path file, StringPalette palette, WorldIndex index) throws IOException {
+        write(file, Frozen.of(palette, index));
+    }
+
+    public static void write(Path file, Frozen frozen) throws IOException {
         Path parent = file.getParent();
         if (parent != null) Files.createDirectories(parent);
 
         Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         try (OutputStream out = Files.newOutputStream(tmp)) {
-            write(out, palette, index);
+            write(out, frozen);
         }
         try {
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -77,18 +119,50 @@ public final class IndexCodec {
     }
 
     public static void write(OutputStream rawOut, StringPalette palette, WorldIndex index) throws IOException {
+        write(rawOut, Frozen.of(palette, index));
+    }
+
+    /**
+     * Buffer for both directions.
+     *
+     * <p>Eight kilobytes - the default - means a syscall and a deflate flush
+     * for every eight kilobytes of a file that is megabytes long. Sixty-four
+     * costs sixty-four kilobytes of heap for the length of one save.
+     */
+    private static final int BUFFER = 64 * 1024;
+
+    /**
+     * A gzip stream tuned for speed rather than size.
+     *
+     * <p>The default compression level is a reasonable trade for a file being
+     * sent somewhere. This one is written to the player's own disk, several
+     * times an hour, on a thread somebody is waiting for - and at level one it
+     * writes in a fraction of the time for a file about a fifth larger, which
+     * on a two megabyte index is a few hundred kilobytes nobody will notice
+     * against a world folder measured in gigabytes.
+     */
+    private static GZIPOutputStream fastGzip(OutputStream out) throws IOException {
+        GZIPOutputStream gzip = new GZIPOutputStream(out, BUFFER) {
+            {
+                def.setLevel(java.util.zip.Deflater.BEST_SPEED);
+            }
+        };
+        return gzip;
+    }
+
+    public static void write(OutputStream rawOut, Frozen frozen) throws IOException {
         try (DataOutputStream out = new DataOutputStream(
-                new BufferedOutputStream(new GZIPOutputStream(rawOut)))) {
+                new BufferedOutputStream(fastGzip(rawOut), BUFFER))) {
             out.writeInt(MAGIC);
             out.writeInt(FORMAT_VERSION);
-            out.writeInt(index.dimensionId());
+            out.writeInt(frozen.dimensionId());
 
-            List<String> entries = palette.entries();
+            List<String> entries = frozen.paletteEntries();
             writeVarInt(out, entries.size());
             for (String entry : entries) out.writeUTF(entry);
 
-            writeVarInt(out, index.size());
-            for (ContainerRecord record : index.all()) writeRecord(out, record);
+            writeVarInt(out, frozen.records().size());
+            for (ContainerRecord record : frozen.records()) writeRecord(out, record);
         }
     }
 
@@ -100,27 +174,29 @@ public final class IndexCodec {
 
     public static Snapshot read(InputStream rawIn) throws IOException {
         try (DataInputStream in = new DataInputStream(
-                new BufferedInputStream(new GZIPInputStream(rawIn)))) {
+                new BufferedInputStream(new GZIPInputStream(rawIn, BUFFER), BUFFER))) {
 
             int magic = in.readInt();
             if (magic != MAGIC) {
                 throw new IOException("Not a ChestTracker index (magic 0x" + Integer.toHexString(magic) + ")");
             }
             int version = in.readInt();
-            if (version != FORMAT_VERSION) {
+            if (version < OLDEST_READABLE_VERSION || version > FORMAT_VERSION) {
                 throw new IOException("Unsupported index format version " + version
-                        + " (this build reads " + FORMAT_VERSION + ")");
+                        + " (this build reads " + OLDEST_READABLE_VERSION
+                        + " to " + FORMAT_VERSION + ")");
             }
             int dimensionId = in.readInt();
 
             int paletteSize = readVarInt(in);
+            // Below, every record is read at the version the file says it is.
             List<String> entries = new ArrayList<>(paletteSize);
             for (int i = 0; i < paletteSize; i++) entries.add(in.readUTF());
             StringPalette palette = StringPalette.fromEntries(entries);
 
             WorldIndex index = new WorldIndex(dimensionId);
             int count = readVarInt(in);
-            for (int i = 0; i < count; i++) index.put(readRecord(in));
+            for (int i = 0; i < count; i++) index.put(readRecord(in, version));
 
             return new Snapshot(palette, index);
         } catch (EOFException truncated) {
@@ -158,10 +234,14 @@ public final class IndexCodec {
             } else {
                 out.writeByte(0);
             }
+            // Almost always zero, and a varint zero is one byte - so the stacks
+            // that carry nothing pay one byte each for the ones that do.
+            writeVarInt(out, entry.details().size());
+            for (int detail : entry.details()) writeVarInt(out, detail);
         }
     }
 
-    private static ContainerRecord readRecord(DataInputStream in) throws IOException {
+    private static ContainerRecord readRecord(DataInputStream in, int version) throws IOException {
         long pos = in.readLong();
         int dimensionId = readVarInt(in);
         int typeId = readVarInt(in);
@@ -185,7 +265,16 @@ public final class IndexCodec {
             int count = readVarInt(in);
             int depth = readVarInt(in);
             String entryName = in.readUnsignedByte() == 1 ? in.readUTF() : null;
-            contents.add(new StackEntry(itemId, count, depth, entryName));
+
+            List<Integer> details = List.of();
+            if (version >= 2) {
+                int detailCount = readVarInt(in);
+                if (detailCount > 0) {
+                    details = new ArrayList<>(detailCount);
+                    for (int d = 0; d < detailCount; d++) details.add(readVarInt(in));
+                }
+            }
+            contents.add(new StackEntry(itemId, count, depth, entryName, details));
         }
 
         return new ContainerRecord(pos, dimensionId, typeId, origin, owner,

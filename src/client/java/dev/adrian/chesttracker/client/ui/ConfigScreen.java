@@ -4,10 +4,14 @@ import dev.adrian.chesttracker.config.ChestTrackerConfig;
 import dev.adrian.chesttracker.client.platform.Gfx;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+
+import java.util.ArrayList;
+import java.util.List;
 
 //? if >=26.1 {
 /*import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -27,46 +31,38 @@ import net.minecraft.client.gui.GuiGraphics;
  * range by clicking - and wrapping back to the minimum at the top - meant
  * fifteen clicks to cross a range and no sense of where in it you were.
  *
- * <p>Everything here is read by something. An earlier version of this screen
- * offered four settings that nothing ever consulted, which is worse than not
- * offering them: it looks like the mod ignores its own configuration.
+ * <h2>Why it scrolls</h2>
+ *
+ * <p>It used to be two fixed columns of eight. That silently broke the moment
+ * the list passed sixteen settings: the extra rows wrapped back to the top of
+ * the second column and were drawn <em>over</em> the ones already there. They
+ * looked fine - the last one drawn is the one you see - but vanilla hit-tests
+ * widgets in the order they were added, so a click on "Item detail" was
+ * delivered to the toggle hidden underneath it. Three settings, the colour
+ * picker among them, were unreachable and two others changed when something
+ * else was clicked.
+ *
+ * <p>A fixed grid cannot be right, because the number of settings is not
+ * fixed and the window's height is not either. So the list scrolls, and a row
+ * is either wholly on screen or not present at all - there is no partly-drawn
+ * row to click by accident.
  */
 public final class ConfigScreen extends Screen {
 
-    /**
-     * Two pixels of gap between twenty-pixel widgets.
-     *
-     * <p>Tightened from twenty-four when the list reached eight rows: at that
-     * height the page ran past the bottom of the window at the larger GUI
-     * scales, and a setting off the edge of the screen is a setting that does
-     * not exist.
-     */
     private static final int ROW_HEIGHT = 22;
     private static final int WIDGET_WIDTH = 200;
 
     /** Gap between the two columns. */
     private static final int COLUMN_GAP = 8;
 
-    /**
-     * Rows before the list moves to the second column.
-     *
-     * <p>One column ran out of screen. At a common GUI scale the window is
-     * about 240 rows tall, and eleven settings plus a Done button did not fit -
-     * the bottom of the list simply left the screen, which is a worse way to
-     * hide a setting than not having it.
-     */
-    private static final int ROWS_PER_COLUMN = 8;
+    /** Where the first row sits, clear of the title. */
+    private static final int TOP = 32;
 
-    /**
-     * Where the first row sits.
-     *
-     * <p>Chosen so that eight rows and the Done button still land inside a
-     * two-hundred-and-forty pixel window, which is what seven hundred and
-     * twenty pixels at GUI scale three gives you. The title clears it.
-     */
-    private static final int TOP = 30;
+    /** Room kept at the bottom for the Done button and the footer line. */
+    private static final int BOTTOM_RESERVED = 56;
 
-    /** Sliders on this page are the full column width. */
+    private static final int SCROLLBAR_W = 4;
+    private static final int SCROLLBAR_GAP = 4;
 
     private static final int MAX_RESULTS_CEILING = 2000;
     private static final int RESULTS_STEP = 50;
@@ -82,51 +78,127 @@ public final class ConfigScreen extends Screen {
         this.parent = parent;
     }
 
-    /** Widgets placed so far, which decides where the next one goes. */
-    private int placed;
+    /** Every settings row, in order, however many of them fit on screen. */
+    private final List<AbstractWidget> rows = new ArrayList<>();
 
-    private int columnX() {
-        int left = width / 2 - WIDGET_WIDTH - COLUMN_GAP / 2;
-        return placed < ROWS_PER_COLUMN ? left : left + WIDGET_WIDTH + COLUMN_GAP;
+    /** First row shown. Kept in whole rows, so no row is ever half drawn. */
+    private int scroll;
+
+    /**
+     * How many columns the window is wide enough for.
+     *
+     * <p>Two whenever they fit, because the whole list then fits on screen at
+     * every ordinary GUI scale and there is nothing to scroll - a settings page
+     * you have to scroll to reach the second half of is worse than one you can
+     * read at a glance, and the fixed grid was only ever wrong because it could
+     * not grow, not because it had two columns.
+     */
+    private int columns() {
+        return width >= WIDGET_WIDTH * 2 + COLUMN_GAP + 16 ? 2 : 1;
     }
 
-    private int rowY() {
-        return TOP + (placed % ROWS_PER_COLUMN) * ROW_HEIGHT;
+    private int leftX() {
+        int total = columns() * WIDGET_WIDTH + (columns() - 1) * COLUMN_GAP;
+        return (width - total) / 2;
     }
 
-    /** Places the next widget, wrapping into the second column when the first fills. */
-    private <T extends net.minecraft.client.gui.components.AbstractWidget> T place(T widget) {
+    /** How many rows fit between the title and the Done button. */
+    private int visibleRows() {
+        return Math.max(1, (height - TOP - BOTTOM_RESERVED) / ROW_HEIGHT);
+    }
+
+    /** Rows of settings there are, counting a full-width pair as one row. */
+    private int totalRows() {
+        return (rows.size() + columns() - 1) / columns();
+    }
+
+    private int maxScroll() {
+        return Math.max(0, totalRows() - visibleRows());
+    }
+
+    /** Adds a row to the list; where it lands is decided by {@link #layout()}. */
+    private void row(AbstractWidget widget) {
+        rows.add(widget);
         addRenderableWidget(widget);
-        placed++;
-        return widget;
     }
 
     @Override
     protected void init() {
-        placed = 0;
-        int x = columnX();
-        int y = rowY();
+        rows.clear();
+        // Every widget is built at the same place and moved by layout(), which
+        // is the only thing that knows how many columns there are.
+        int x = leftX();
 
-        place(toggle(x, y, "Scan world on join",
+        row(toggle(x, "ChestTracker",
+                "The whole mod. Off means no search screen, no button on containers, no\nkey, nothing indexed and nothing drawn in the world - not merely hidden.",
+                () -> config.enabled, value -> config.enabled = value));
+
+        row(Button.builder(Component.literal("Servers it stays off on..."),
+                        button -> minecraft.setScreenAndShow(new ServerListScreen(this,
+                                "Servers ChestTracker stays off on",
+                                "Joining one of these switches the mod off for as long as you are\n"
+                                        + "connected. Matched by host, so example.net covers eu.example.net.",
+                                config.disabledServers)))
+                .bounds(x, TOP, WIDGET_WIDTH, 20)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Addresses the mod turns itself off on. Starts with four large public\n"
+                                + "servers whose rules on client mods are strict; remove any of them if\n"
+                                + "you would rather decide for yourself.")))
+                .build());
+
+        row(toggle(x, "Scan world on join",
                 "Reads the world off disk in the background when you join, so containers in\nchunks you have never visited are found too. Costs some throughput for a\nfew seconds on a large world.",
                 () -> config.scanOnWorldJoin, value -> config.scanOnWorldJoin = value));
 
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Count items inside shulker boxes",
+        row(toggle(x, "Count items inside shulker boxes",
                 "Whether a shulker box in a chest contributes its contents to that chest,\nor only counts as a shulker box.",
                 () -> config.includeNested, value -> config.includeNested = value));
 
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Show machines by default",
-                "Hoppers, furnaces, droppers and the like. Always indexed; this is only\nwhether the search screen starts with them shown.",
+        row(toggle(x, "Show machines by default",
+                "Hoppers, droppers, dispensers and crafters - containers that move items\nabout on their own. Always indexed; this is only whether the search screen\nstarts with them shown.",
                 () -> config.showMachines, value -> config.showMachines = value));
 
-        x = columnX(); y = rowY();
+        row(toggle(x, "Show furnaces & pots by default",
+                "Furnaces, brewing stands, jukeboxes, lecterns, decorated pots and\nchiseled bookshelves - things that hold items but are not storage. A\nseparate group from the machines, because a pot holds exactly what you put\nin it while a hopper's contents are in transit.",
+                () -> config.showUtility, value -> config.showUtility = value));
+
+        row(toggle(x, "Show minecarts & boats by default",
+                "Chest minecarts, hopper minecarts and chest boats. Read live at the moment\nyou search rather than indexed, because they move - so they are found only\nwhere the world is loaded, and never remembered between sessions.",
+                () -> config.showEntities, value -> config.showEntities = value));
+
+        row(toggle(x, "Read minecarts on servers without the mod",
+                "Off by default, and deliberately. On a server these are moved by other\nplayers and by rails this client is not simulating, so where one was found\nis not where it is - and guidance that confidently walks you to the wrong\nplace is worse than not answering. In your own world they are always read.",
+                () -> config.entityContainersOnVanillaServers,
+                value -> config.entityContainersOnVanillaServers = value));
+
+        row(Button.builder(Component.literal("What counts as a machine..."),
+                        button -> minecraft.setScreenAndShow(new ServerListScreen(this,
+                                "Machines",
+                                "Container types filtered by the \"Machines\" toggle. Anything in neither\n"
+                                        + "group is ordinary storage and is always shown.",
+                                config.machineTypes,
+                                ServerListScreen::asRegistryId, "hopper")))
+                .bounds(x, TOP, WIDGET_WIDTH, 20)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Add a modded machine here to have it filtered with the vanilla ones.")))
+                .build());
+
+        row(Button.builder(Component.literal("What counts as a functional block..."),
+                        button -> minecraft.setScreenAndShow(new ServerListScreen(this,
+                                "Functional blocks",
+                                "Container types filtered by the \"Functional blocks\" toggle. Anything in\n"
+                                        + "neither group is ordinary storage and is always shown.",
+                                config.utilityTypes,
+                                ServerListScreen::asRegistryId, "jukebox")))
+                .bounds(x, TOP, WIDGET_WIDTH, 20)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Furnaces, brewing stands, jukeboxes, lecterns, pots and shelves.")))
+                .build());
 
         // Past the top of the range this reads "unlimited" rather than a
         // number: someone dragging it to the end means "stop hiding things",
         // not "exactly two thousand".
-        place(new IntSlider(x, y, config.maxResults, 0, MAX_RESULTS_CEILING, RESULTS_STEP) {
+        row(new IntSlider(x, TOP, config.maxResults, 0, MAX_RESULTS_CEILING, RESULTS_STEP) {
             @Override
             String label(int value) {
                 return "Items shown: " + (value >= MAX_RESULTS_CEILING ? "unlimited" : Integer.toString(value));
@@ -139,11 +211,9 @@ public final class ConfigScreen extends Screen {
             }
         });
 
-        x = columnX(); y = rowY();
-        place(displayCycle(x, y));
+        row(displayCycle(x));
 
-        x = columnX(); y = rowY();
-        place(new IntSlider(x, y, config.highlightSeconds, 5, HIGHLIGHT_MAX, 5) {
+        row(new IntSlider(x, TOP, config.highlightSeconds, 5, HIGHLIGHT_MAX, 5) {
             @Override
             String label(int value) {
                 return "Guidance lasts: " + value + "s";
@@ -155,8 +225,7 @@ public final class ConfigScreen extends Screen {
             }
         });
 
-        x = columnX(); y = rowY();
-        place(new IntSlider(x, y, config.highlightRecedingGraceSeconds, 1, GRACE_MAX, 1) {
+        row(new IntSlider(x, TOP, config.highlightRecedingGraceSeconds, 1, GRACE_MAX, 1) {
             @Override
             String label(int value) {
                 return "Grace when walking away: " + value + "s";
@@ -168,50 +237,111 @@ public final class ConfigScreen extends Screen {
             }
         });
 
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Trail of marks above matches",
+        row(toggle(x, "Trail of marks above matches",
                 "Stands a column of fading marks on every match. This is the part that\nstill works past render distance, where there is no terrain drawn to place\na box against.",
                 () -> config.guideBeam, value -> config.guideBeam = value));
 
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Open a match already in reach",
-                "If a container you just searched for is within normal reach, open it\ninstead of pointing at it. Sends the same interaction as right-clicking,\nso a server checks the distance as usual.",
-                () -> config.openInReach, value -> config.openInReach = value));
-
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Turn to face a match",
-                "Turns your view towards the nearest match when a search lands. Worth\nknowing on a server you do not run: a client that moves the view is the\nshape of thing some anti-cheats watch for.",
-                () -> config.turnToTarget, value -> config.turnToTarget = value));
-
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Search button on containers",
-                "A small magnifier on chests and other container windows. Left-click opens\nthe search screen; right-drag moves the button and remembers where.",
-                () -> config.containerSearchButton, value -> config.containerSearchButton = value));
-
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Ender chest view",
-                "Offers your ender chest as a view of its own, beside the dimension\nbuttons. It lists only what is in there - never mixed with a\ndimension - and appears only when it is not empty.",
-                () -> config.enderChestView, value -> config.enderChestView = value));
-
-        x = columnX(); y = rowY();
-        place(toggle(x, y, "Shift shows item detail",
-                "Holding shift over an item in the search grid describes it: how many\nthere are, in how many containers, how many are sealed inside shulker\nboxes, and how far the nearest is.",
-                () -> config.nestedTooltip, value -> config.nestedTooltip = value));
-
-        x = columnX(); y = rowY();
-        place(Button.builder(Component.literal("Highlight colours..."),
+        row(Button.builder(Component.literal("Highlight colours..."),
                         button -> minecraft.setScreenAndShow(new HighlightColourScreen(this)))
-                .bounds(x, y, WIDGET_WIDTH, 20)
+                .bounds(x, TOP, WIDGET_WIDTH, 20)
                 .tooltip(Tooltip.create(Component.literal(
                         "The colours the in-world markers are drawn in - one for the\nnearest match, one for the rest.")))
                 .build());
 
-        x = columnX(); y = rowY();
-        place(accessCycle(x, y));
+        row(slotStyleCycle(x));
 
-        int bottom = TOP + ROWS_PER_COLUMN * ROW_HEIGHT + 10;
+        row(detailCycle(x));
+
+        row(toggle(x, "Ender chest view",
+                "Offers your ender chest as a view of its own, beside the dimension\nbuttons. It lists only what is in there - never mixed with a\ndimension - and appears only when it is not empty.",
+                () -> config.enderChestView, value -> config.enderChestView = value));
+
+        row(toggle(x, "Search button on containers",
+                "A small magnifier on chests and other container windows. Left-click opens\nthe search screen; right-drag moves it. Each kind of window remembers its\nown place, so a hopper's button need not sit where a chest's does.",
+                () -> config.containerSearchButton, value -> config.containerSearchButton = value));
+
+        row(toggle(x, "Shulker key searches contents",
+                "Pointing the search key at a shulker box or bundle looks for everything\ninside it rather than for more shulker boxes - which is almost always the\nquestion. Off, it searches for the box itself, empty ones included.",
+                () -> config.searchShulkerContents, value -> config.searchShulkerContents = value));
+
+        row(toggle(x, "Litematica material list buttons",
+                "Adds search buttons to Litematica's material list: one on each row, left\nof that row's Ignore, which finds that material; and one beside Export,\nwhich finds everything the schematic still needs.\nOnly appears when Litematica is installed.",
+                () -> config.litematicaButton, value -> config.litematicaButton = value));
+
+        row(toggle(x, "Run on servers without the mod",
+                "On a vanilla server the only index there can be is one this client keeps\nfor itself, built from what the server already sends you and the containers\nyou open. Nothing is sent, nothing is opened for you.\n\nOff switches the mod off entirely on those servers - no key, no screen,\nnothing indexed - because without that index there is nothing here for it\nto search. Your own world and servers running the mod are unaffected.",
+                () -> config.clientSideIndex, value -> config.clientSideIndex = value));
+
+        row(toggle(x, "Assist: open a match in reach",
+                "If a container you just searched for is within normal reach, open it\ninstead of pointing at it. Sends the same interaction as right-clicking,\nso a server checks the distance as usual.",
+                () -> config.openInReach, value -> config.openInReach = value));
+
+        row(toggle(x, "Assist: turn to face a match",
+                "Turns your view towards the nearest match when a search lands. Worth\nknowing on a server you do not run: a client that moves the view is the\nshape of thing some anti-cheats watch for.",
+                () -> config.turnToTarget, value -> config.turnToTarget = value));
+
+        row(toggle(x, "Assist on every server",
+                "Whether the two assist settings act on servers as well as in your own\nworld. Off by default: turning to face a match and opening one in reach are\nthe only things this mod does that a server can see, and both look exactly\nlike the cheats anti-cheat is written to catch. Prefer naming the servers\nyou trust to switching this on everywhere.",
+                () -> config.assistOnServers, value -> config.assistOnServers = value));
+
+        row(Button.builder(Component.literal("Servers assist is allowed on..."),
+                        button -> minecraft.setScreenAndShow(new ServerListScreen(this,
+                                "Servers assist is allowed on",
+                                "Turning to face a match and opening one in reach act on these servers\n"
+                                        + "and nowhere else. Your own world always allows both.",
+                                config.assistServers)))
+                .bounds(x, TOP, WIDGET_WIDTH, 20)
+                .tooltip(Tooltip.create(Component.literal(
+                        "A named server you trust, rather than every server you ever join.")))
+                .build());
+
+        row(accessCycle(x));
+
         addRenderableWidget(Button.builder(Component.literal("Done"), button -> onClose())
-                .bounds(width / 2 - 60, bottom, 120, 20).build());
+                .bounds(width / 2 - 60, height - 28, 120, 20).build());
+
+        scroll = Math.min(scroll, maxScroll());
+        layout();
+    }
+
+    /**
+     * Puts every row where the current scroll says, and hides the ones off the
+     * ends.
+     *
+     * <p>Hidden rather than clipped: a hidden widget is not drawn and does not
+     * take a click, so there is no half-row hanging over the Done button to be
+     * pressed by accident, and no scissor rectangle to fight with tooltips.
+     */
+    private void layout() {
+        int columns = columns();
+        int visible = visibleRows();
+        int left = leftX();
+
+        for (int i = 0; i < rows.size(); i++) {
+            AbstractWidget widget = rows.get(i);
+            // Filled left to right, a row at a time, so scrolling by one row
+            // moves both columns together rather than shuffling settings
+            // between them.
+            int row = i / columns - scroll;
+            int column = i % columns;
+            boolean shown = row >= 0 && row < visible;
+
+            widget.visible = shown;
+            widget.active = shown;
+            if (shown) {
+                widget.setX(left + column * (WIDGET_WIDTH + COLUMN_GAP));
+                widget.setY(TOP + row * ROW_HEIGHT);
+            }
+        }
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+        int max = maxScroll();
+        if (max == 0) return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
+        scroll = Math.max(0, Math.min(max, scroll - (int) Math.signum(deltaY)));
+        layout();
+        return true;
     }
 
     /**
@@ -278,12 +408,6 @@ public final class ConfigScreen extends Screen {
         }
     }
 
-    private Button toggle(int x, int y, String label,
-                          java.util.function.BooleanSupplier getter,
-                          java.util.function.Consumer<Boolean> setter) {
-        return toggle(x, y, label, null, getter, setter);
-    }
-
     /**
      * A toggle that can say what it is for.
      *
@@ -293,25 +417,81 @@ public final class ConfigScreen extends Screen {
      * explanation goes in a tooltip rather than a longer label, because the
      * label has to stay readable at a glance.
      */
-    private Button toggle(int x, int y, String label, String help,
+    private Button toggle(int x, String label, String help,
                           java.util.function.BooleanSupplier getter,
                           java.util.function.Consumer<Boolean> setter) {
         Button button = Button.builder(Component.literal(label + ": " + onOff(getter.getAsBoolean())), it -> {
             setter.accept(!getter.getAsBoolean());
             it.setMessage(Component.literal(label + ": " + onOff(getter.getAsBoolean())));
-        }).bounds(x, y, WIDGET_WIDTH, 20).build();
+        }).bounds(x, TOP, WIDGET_WIDTH, 20).build();
         if (help != null) button.setTooltip(Tooltip.create(Component.literal(help)));
         return button;
     }
 
-    /** Cycles how a highlight is shown: boxes, text above the hotbar, both, or neither. */
-    private Button displayCycle(int x, int y) {
+    /**
+     * When the search grid's detail panel appears.
+     *
+     * <p>A cycle rather than a toggle because there are three sensible answers,
+     * and the middle one is the default: always on covers the grid while you
+     * read it, always off loses the one panel that explains where an item
+     * actually is.
+     */
+    private Button detailCycle(int x) {
+        Button button = Button.builder(Component.literal(detailLabel()), it -> {
+            ChestTrackerConfig.Detail[] modes = ChestTrackerConfig.Detail.values();
+            int next = (config.itemDetail().ordinal() + 1) % modes.length;
+            config.itemDetail = modes[next].name();
+            it.setMessage(Component.literal(detailLabel()));
+        }).bounds(x, TOP, WIDGET_WIDTH, 20).build();
+        button.setTooltip(Tooltip.create(Component.literal(
+                "Describes the item under the cursor in the search grid: how many there\n"
+                        + "are, in how many containers, how many are sealed inside shulker boxes,\n"
+                        + "and how far the nearest is. The title row always carries the short version.")));
+        return button;
+    }
+
+    private String detailLabel() {
+        String mode = switch (config.itemDetail()) {
+            case ALWAYS -> "always";
+            case SHIFT -> "holding shift";
+            case OFF -> "never";
+        };
+        return "Item detail: " + mode;
+    }
+
+    /**
+     * How the slots holding a match are marked, once a container is open.
+     *
+     * <p>A cycle rather than a toggle for the same reason the others are: the
+     * outline and the wash are not opposites, and wanting both is a reasonable
+     * answer that a checkbox cannot give.
+     */
+    private Button slotStyleCycle(int x) {
+        Button button = Button.builder(Component.literal(slotStyleLabel()), it -> {
+            ChestTrackerConfig.SlotStyle[] styles = ChestTrackerConfig.SlotStyle.values();
+            int next = (config.slotHighlightStyle().ordinal() + 1) % styles.length;
+            config.slotHighlightStyle = styles[next].name();
+            it.setMessage(Component.literal(slotStyleLabel()));
+        }).bounds(x, TOP, WIDGET_WIDTH, 20).build();
+        button.setTooltip(Tooltip.create(Component.literal(
+                "How a slot holding what you searched for is marked, in whatever container\n"
+                        + "is open. The outline leaves the item and its stack count fully visible;\n"
+                        + "the background is easier to pick out against a busy container texture,\n"
+                        + "and is drawn as a tint so the item still reads through it.")));
+        return button;
+    }
+
+    private String slotStyleLabel() {
+        return "Marked slots: " + config.slotHighlightStyle().label();
+    }
+
+    private Button displayCycle(int x) {
         return Button.builder(Component.literal(displayLabel()), button -> {
             ChestTrackerConfig.Display[] modes = ChestTrackerConfig.Display.values();
             int next = (config.highlightDisplay().ordinal() + 1) % modes.length;
             config.highlightDisplay = modes[next].name();
             button.setMessage(Component.literal(displayLabel()));
-        }).bounds(x, y, WIDGET_WIDTH, 20).build();
+        }).bounds(x, TOP, WIDGET_WIDTH, 20).build();
     }
 
     private String displayLabel() {
@@ -332,13 +512,13 @@ public final class ConfigScreen extends Screen {
      * opened to LAN, which is exactly when nobody thinks to look in a settings
      * screen - so it is labelled rather than hidden.
      */
-    private Button accessCycle(int x, int y) {
+    private Button accessCycle(int x) {
         return Button.builder(Component.literal(accessLabel()), button -> {
             ChestTrackerConfig.Access[] tiers = ChestTrackerConfig.Access.values();
             int next = (config.permissionTier().ordinal() + 1) % tiers.length;
             config.permissionTier = tiers[next].name();
             button.setMessage(Component.literal(accessLabel()));
-        }).bounds(x, y, WIDGET_WIDTH, 20).build();
+        }).bounds(x, TOP, WIDGET_WIDTH, 20).build();
     }
 
     private String accessLabel() {
@@ -363,14 +543,31 @@ public final class ConfigScreen extends Screen {
     }
 
     private void draw(Gfx gfx) {
-        gfx.text(font, Component.literal("ChestTracker Settings"),
-                width / 2 - font.width("ChestTracker Settings") / 2, 18, 0xFFFFFFFF);
+        String title = "ChestTracker Settings";
+        gfx.text(font, Component.literal(title), width / 2 - font.width(title) / 2, 14, 0xFFFFFFFF);
+
+        drawScrollbar(gfx);
 
         String footer = Minecraft.getInstance().hasSingleplayerServer()
                 ? "The access setting only applies once you open this world to LAN."
                 : "Scanning happens in the background; a large world fills in over time.";
         gfx.text(font, Component.literal(footer),
-                width / 2 - font.width(footer) / 2, height - 34, 0xFFA0A0A0);
+                width / 2 - font.width(footer) / 2, height - 42, 0xFFA0A0A0);
+    }
+
+    /** A thumb beside the column, so a list that runs off the bottom says so. */
+    private void drawScrollbar(Gfx gfx) {
+        int max = maxScroll();
+        if (max == 0) return;
+
+        int x = leftX() + columns() * WIDGET_WIDTH + (columns() - 1) * COLUMN_GAP + SCROLLBAR_GAP;
+        int top = TOP;
+        int track = visibleRows() * ROW_HEIGHT - 2;
+
+        gfx.fill(x, top, x + SCROLLBAR_W, top + track, 0x60000000);
+        int thumb = Math.max(12, track * visibleRows() / totalRows());
+        int y = top + (track - thumb) * scroll / max;
+        gfx.fill(x, y, x + SCROLLBAR_W, y + thumb, 0xFFAAAAAA);
     }
 
     //? if >=26.1 {

@@ -70,15 +70,27 @@ public final class ContainerScreens {
 
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (!(screen instanceof AbstractContainerScreen<?> container)) return;
+            // Checked here rather than once at startup: the switch is a
+            // per-server answer, and screens are built after the join that
+            // decides it.
+            if (!Session.active()) {
+                button = null;
+                return;
+            }
 
             // init() has already run, so the window's position is settled.
             ContainerScreenAccessor access = (ContainerScreenAccessor) container;
 
             button = null;
             if (ChestTrackerConfig.get().containerSearchButton) {
+                // Suppliers, not values: the window moves without the screen
+                // being re-initialised - opening the recipe book slides it
+                // sideways - and a position captured here would be stale from
+                // that moment on.
                 button = new SearchButton(
-                        access.chesttracker$leftPos() + access.chesttracker$imageWidth(),
-                        access.chesttracker$topPos());
+                        menuKeyOf(container),
+                        () -> access.chesttracker$leftPos() + access.chesttracker$imageWidth(),
+                        access::chesttracker$topPos);
                 ClientCompat.addWidget(screen, button);
             }
 
@@ -105,7 +117,15 @@ public final class ContainerScreens {
 
     /** Per-tick work: only the button drag, which has no event to listen to. */
     public static void tick() {
-        dragButton(Minecraft.getInstance());
+        Minecraft client = Minecraft.getInstance();
+        // The button belongs to a container window, and is only replaced when
+        // another one opens - so after a chest closed it stayed here, and the
+        // drag poll below went on watching for a right-press over coordinates
+        // nothing occupies any more. A right-click landing there on whatever
+        // screen came next moved the chest's button and wrote the config: the
+        // search screen's own "right-click to list" is directly over it.
+        if (!(ClientCompat.currentScreen() instanceof AbstractContainerScreen<?>)) button = null;
+        dragButton(client);
     }
 
     /**
@@ -135,20 +155,61 @@ public final class ContainerScreens {
         int mouseX = (int) (client.mouseHandler.xpos() * scaleX);
         int mouseY = (int) (client.mouseHandler.ypos() * scaleY);
 
-        if (down && !rightWasDown && target.isMouseOver(mouseX, mouseY)) draggingButton = true;
+        if (down && !rightWasDown && target.isMouseOver(mouseX, mouseY)) {
+            draggingButton = true;
+            // Tells the button to stop pulling itself back to the saved offset
+            // while the pointer is deciding where it goes.
+            target.setDragging(true);
+        }
         if (draggingButton && down) {
+            // Restated every tick rather than only on the press: a screen
+            // re-initialised mid-drag builds a fresh button that has not been
+            // told, and it would spend the rest of the drag snapping itself
+            // back to the saved offset.
+            target.setDragging(true);
             target.setX(mouseX - SearchButton.SIZE / 2);
             target.setY(mouseY - SearchButton.SIZE / 2);
         }
         if (draggingButton && !down) {
             draggingButton = false;
-            // Written once on release rather than on every frame of the drag.
+            // Written once on release rather than on every frame of the drag,
+            // and against the anchor as it is now - so a button dropped while
+            // the recipe book is open still lands where it was put once it
+            // closes again.
             ChestTrackerConfig config = ChestTrackerConfig.get();
-            config.searchButtonX = target.getX() - target.anchorX();
-            config.searchButtonY = target.getY() - target.anchorY();
+            // Against this kind of window rather than against all of them, so
+            // moving the button on a hopper leaves the chest's where it was.
+            config.setSearchButtonOffset(target.menuKey(),
+                    target.getX() - target.anchorX(),
+                    target.getY() - target.anchorY());
             config.save();
+            target.setDragging(false);
         }
         rightWasDown = down;
+    }
+
+    /**
+     * A stable name for the kind of window this is, so the button's position
+     * can be remembered per container rather than for all of them at once.
+     *
+     * <p>The menu type is the right key: it is what decides the window's shape,
+     * it is the same for every chest in the world, and a modded container has
+     * one too. Two things can go wrong with it and both fall back to the class
+     * name, which is stable enough for the same purpose - the player inventory
+     * menu has no registered type and throws when asked, and a menu built
+     * outside the registry has one that resolves to nothing.
+     */
+    private static String menuKeyOf(AbstractContainerScreen<?> container) {
+        try {
+            var type = container.getMenu().getType();
+            if (type != null) {
+                var id = net.minecraft.core.registries.BuiltInRegistries.MENU.getKey(type);
+                if (id != null) return id.toString();
+            }
+        } catch (RuntimeException noType) {
+            // Falls through to the class name.
+        }
+        return container.getClass().getName();
     }
 
     /** Searches for whatever the cursor is over. */

@@ -45,16 +45,54 @@ public final class HighlightBox {
                             double x, double y, double z,
                             float red, float green, float blue, float alpha,
                             double grow, float lineWidth) {
+        emit(pose, lines, x, y, z, 1, 1, red, green, blue, alpha, grow, lineWidth);
+    }
 
-        // Grown about the block's centre, so it stays centred on the container
+    /**
+     * Emits one box spanning {@code sizeX} by {@code sizeZ} blocks.
+     *
+     * <p>For the double chest, which is two blocks the game and the player both
+     * treat as one container. The index files it under one of the two halves,
+     * so a one-block box drew a line down the middle of a chest and left the
+     * other half outside the marker - which reads as the mod pointing at the
+     * wrong block rather than at a chest with a wide box.
+     *
+     * @param x the <em>lower</em> corner, not the indexed half
+     */
+    public static void emit(PoseStack.Pose pose, VertexConsumer lines,
+                            double x, double y, double z, int sizeX, int sizeZ,
+                            float red, float green, float blue, float alpha,
+                            double grow, float lineWidth) {
+        emit(pose, lines, x, y, z, sizeX, 1.0, sizeZ, red, green, blue, alpha, grow, lineWidth);
+    }
+
+    /**
+     * Emits one box of any size, for containers that are not made of blocks.
+     *
+     * <p>A chest minecart is 0.98 blocks wide and 0.7 tall; a chest boat is
+     * 1.375 by 0.5625. Drawing either as a one-block cube is a box that does
+     * not fit the thing it is pointing at - too tall for both, too narrow for
+     * the boat - and the eye reads that as the marker being slightly off rather
+     * than as the marker being square. So an entity's box is its own size, read
+     * from the entity itself, and every type gets the one that fits it.
+     *
+     * @param x the lower corner on each axis, not the centre
+     */
+    public static void emit(PoseStack.Pose pose, VertexConsumer lines,
+                            double x, double y, double z,
+                            double sizeX, double sizeY, double sizeZ,
+                            float red, float green, float blue, float alpha,
+                            double grow, float lineWidth) {
+
+        // Grown about the container's centre, so it stays centred on it
         // however large it gets.
         double swell = SWELL + grow;
         float x0 = (float) (x - swell);
         float y0 = (float) (y - swell);
         float z0 = (float) (z - swell);
-        float x1 = (float) (x + 1 + swell);
-        float y1 = (float) (y + 1 + swell);
-        float z1 = (float) (z + 1 + swell);
+        float x1 = (float) (x + sizeX + swell);
+        float y1 = (float) (y + sizeY + swell);
+        float z1 = (float) (z + sizeZ + swell);
 
         // Four uprights.
         edge(pose, lines, x0, y0, z0, x0, y1, z0, 0, 1, 0, red, green, blue, alpha, lineWidth);

@@ -29,6 +29,10 @@ versions/*/logs/
 .DS_Store
 .claude/worktrees/
 
+# Generated knowledge graph of this repo - a local navigation aid, rebuilt on
+# demand from the source it describes, and stale the moment the source moves.
+graphify-out/
+
 # Working notes, not for publication. Contains local paths and a running
 # account of what has and has not been verified - useful to whoever is
 # building this, misleading to anyone reading it as documentation.

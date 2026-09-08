@@ -88,4 +88,12 @@ tasks.processResources {
     filesMatching(listOf("fabric.mod.json", "*.mixins.json")) { expand(resourceProps) }
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    // Enough heap that a benchmark holding a world-sized index is measuring the
+    // code rather than the garbage collector; see IndexBench, which is the only
+    // thing here that needs it and is skipped unless CT_BENCH is set.
+    maxHeapSize = "4g"
+    environment("CT_BENCH", System.getenv("CT_BENCH") ?: "")
+    testLogging { showStandardStreams = System.getenv("CT_BENCH") == "1" }
+}

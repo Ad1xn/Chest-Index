@@ -14,6 +14,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
 
+import java.util.Set;
+
 /**
  * Marks the slots holding what was searched for, in whatever container is open.
  *
@@ -39,37 +41,51 @@ public final class SlotHighlight {
 
     private SlotHighlight() {}
 
-    /** How deep to look inside container items. Two is a shulker in a shulker. */
-    private static final int MAX_DEPTH = 2;
+    /**
+     * How deep to look inside container items.
+     *
+     * <p>Three, because the real chain is longer than it looks: an item in a
+     * bundle, in a shulker box, in the ender chest. Two stopped one level short
+     * of the bundle and left it unmarked in a shulker that was marked, which
+     * reads as the mod having lost the thread at the last step.
+     */
+    private static final int MAX_DEPTH = 3;
 
     private static final int PULSE_MS = 1400;
 
     public static void draw(Gfx gfx, AbstractContainerScreen<?> screen, int leftPos, int topPos) {
         if (!ChestTrackerConfig.get().highlightFoundSlots) return;
 
-        String wanted = ContainerHighlight.get().searchedItemId();
-        if (wanted == null || !ContainerHighlight.get().isActive()) return;
+        Set<String> wanted = ContainerHighlight.get().searchedItemIds();
+        if (wanted.isEmpty() || !ContainerHighlight.get().isActive()) return;
 
-        // Resolved once per frame, and compared by reference after that. The
-        // first version asked the registry for every stack's id and built a
-        // string from it - for a chest of shulkers that is hundreds of lookups
-        // and hundreds of throwaway strings every single frame, which is
-        // exactly the sort of thing that shows up as the GUI feeling heavy.
-        Item target = BuiltInRegistries.ITEM.getValue(Identifier.parse(wanted));
-        if (target == null) return;
+        Set<Item> targets = resolve(wanted);
+        if (targets.isEmpty()) return;
+
+        retireWhatIsFound(screen, wanted);
+
+        // Items that are not the answer but hold it - the ender chest, when the
+        // search was for something inside it. Marked in the same colour a
+        // shulker holding the item is, because they mean the same thing: this
+        // is the thing to open next.
+        Set<Item> hints = resolveHints(ContainerHighlight.get().hintItemIds());
 
         ChestTrackerConfig config = ChestTrackerConfig.get();
         int direct = alpha(0xFF000000 | config.nearestColour);
         int inside = alpha(0xFF000000 | config.otherColour);
+
+        ChestTrackerConfig.SlotStyle style = config.slotHighlightStyle();
+        boolean outline = style.drawsOutline();
+        boolean background = style.drawsBackground();
 
         for (Slot slot : screen.getMenu().slots) {
             ItemStack stack = slot.getItem();
             if (stack.isEmpty()) continue;
 
             int colour;
-            if (stack.getItem() == target) {
+            if (targets.contains(stack.getItem())) {
                 colour = direct;
-            } else if (holds(stack, target, MAX_DEPTH)) {
+            } else if (hints.contains(stack.getItem()) || holds(stack, targets, MAX_DEPTH)) {
                 colour = inside;
             } else {
                 continue;
@@ -77,13 +93,69 @@ public final class SlotHighlight {
 
             int x = leftPos + slot.x;
             int y = topPos + slot.y;
-            // A border rather than a wash: the slot still has to show its item
-            // and its stack count, and a filled overlay hides both.
-            gfx.fill(x - 1, y - 1, x + 17, y, colour);
-            gfx.fill(x - 1, y + 16, x + 17, y + 17, colour);
-            gfx.fill(x - 1, y, x, y + 16, colour);
-            gfx.fill(x + 16, y, x + 17, y + 16, colour);
+
+            // Over the item rather than behind it - this runs after the screen
+            // has finished drawing, which is the only point a mod can add to
+            // it. So the wash is held well under the pulse's own alpha: the
+            // slot still has to show its item and its stack count, and at full
+            // strength it would hide both. Vanilla tints its own hovered slot
+            // the same way, over the top and half transparent.
+            // Drawn before the outline so it cannot paint over it.
+            if (background) {
+                gfx.fill(x, y, x + 16, y + 16, dim(colour));
+            }
+            if (outline) {
+                gfx.fill(x - 1, y - 1, x + 17, y, colour);
+                gfx.fill(x - 1, y + 16, x + 17, y + 17, colour);
+                gfx.fill(x - 1, y, x, y + 16, colour);
+                gfx.fill(x + 16, y, x + 17, y + 16, colour);
+            }
         }
+    }
+
+    /**
+     * The same colour at a fraction of its opacity, for the background wash.
+     *
+     * <p>An outline can be fully opaque because it sits beside the item; a fill
+     * covers it, so it has to stay a tint rather than become a block of colour
+     * with an item lost somewhere inside it.
+     */
+    private static int dim(int colour) {
+        int opacity = ((colour >>> 24) * BACKGROUND_OPACITY_PERCENT) / 100;
+        return (colour & 0x00FFFFFF) | (opacity << 24);
+    }
+
+    /** How much of the mark's opacity the background wash gets. */
+    private static final int BACKGROUND_OPACITY_PERCENT = 45;
+
+    /**
+     * Stops marking anything the player has evidently found.
+     *
+     * <p>Two signals, and both mean the same thing: the stack is on the cursor,
+     * or the cursor is on the slot. Either way the search has been answered and
+     * the mark is finished - leaving it pulsing turns a helpful mark into one
+     * more thing to dismiss.
+     *
+     * <p>Not while a material list is being gathered. That search retires an
+     * item on a count - enough of it, not any of it - and hovering one stack of
+     * cobblestone does not mean the schematic has its cobblestone.
+     */
+    private static void retireWhatIsFound(AbstractContainerScreen<?> screen, Set<String> wanted) {
+        if (dev.adrian.chesttracker.client.MaterialGoals.isTracking()) return;
+
+        retire(screen.getMenu().getCarried(), wanted);
+
+        Slot hovered = ((dev.adrian.chesttracker.mixin.client.ContainerScreenAccessor) screen)
+                .chesttracker$hoveredSlot();
+        if (hovered != null && hovered.hasItem()) retire(hovered.getItem(), wanted);
+    }
+
+    private static void retire(ItemStack stack, Set<String> wanted) {
+        if (stack == null || stack.isEmpty()) return;
+        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (id == null) return;
+        String itemId = id.toString();
+        if (wanted.contains(itemId)) ContainerHighlight.get().retire(itemId);
     }
 
     /**
@@ -109,13 +181,14 @@ public final class SlotHighlight {
      * slot is the truth. Covers both shulker boxes and bundles, which store
      * their contents under different components.
      */
-    private static boolean holds(ItemStack stack, Item target, int depth) {
+    private static boolean holds(ItemStack stack, Set<Item> targets, int depth) {
         if (depth <= 0) return false;
 
         ItemContainerContents contents = stack.get(DataComponents.CONTAINER);
         if (contents != null
                 && ItemContentsCompat.stacks(contents)
-                        .anyMatch(inner -> inner.getItem() == target || holds(inner, target, depth - 1))) {
+                        .anyMatch(inner -> targets.contains(inner.getItem())
+                                || holds(inner, targets, depth - 1))) {
             return true;
         }
 
@@ -124,6 +197,60 @@ public final class SlotHighlight {
         // ItemStackTemplate on 26.2 and ItemStack on 1.21.11, while this one
         // is a Stream<ItemStack> on both and needs no shim.
         return bundle != null && bundle.itemCopyStream()
-                .anyMatch(inner -> inner.getItem() == target || holds(inner, target, depth - 1));
+                .anyMatch(inner -> targets.contains(inner.getItem())
+                        || holds(inner, targets, depth - 1));
+    }
+
+    /** The last set of ids resolved, and what they resolved to. */
+    private static Set<String> cachedIds = Set.of();
+    private static Set<Item> cachedItems = Set.of();
+
+    /** The same, for the hint set, which changes independently of the target set. */
+    private static Set<String> cachedHintIds = Set.of();
+    private static Set<Item> cachedHintItems = Set.of();
+
+    /** As {@link #resolve}, cached separately so the two sets do not evict each other. */
+    private static Set<Item> resolveHints(Set<String> ids) {
+        if (ids.isEmpty()) return Set.of();
+        if (ids == cachedHintIds) return cachedHintItems;
+
+        Set<Item> items = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (String id : ids) {
+            Identifier identifier = Identifier.tryParse(id);
+            if (identifier == null) continue;
+            Item item = BuiltInRegistries.ITEM.getValue(identifier);
+            if (item != null) items.add(item);
+        }
+        cachedHintIds = ids;
+        cachedHintItems = items;
+        return items;
+    }
+
+    /**
+     * Turns registry ids into items, remembering the last answer.
+     *
+     * <p>This runs every frame, for a set that changes only when the player
+     * starts a new search. The first version resolved a registry id per stack
+     * per frame and built a string for each - hundreds of lookups and hundreds
+     * of throwaway strings every frame for a chest of shulkers, which is
+     * exactly what made the GUI feel heavy. Caching on the set's identity works
+     * because the highlight hands back an immutable set that is replaced, never
+     * edited.
+     */
+    private static Set<Item> resolve(Set<String> ids) {
+        if (ids == cachedIds) return cachedItems;
+
+        Set<Item> items = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (String id : ids) {
+            Identifier identifier = Identifier.tryParse(id);
+            if (identifier == null) continue;
+            // A server can name an item this client does not have, so the
+            // lookup genuinely can miss.
+            Item item = BuiltInRegistries.ITEM.getValue(identifier);
+            if (item != null) items.add(item);
+        }
+        cachedIds = ids;
+        cachedItems = items;
+        return items;
     }
 }

@@ -52,6 +52,7 @@ public final class ContainerTypes {
 
     private final Set<String> known = Collections.synchronizedSet(new LinkedHashSet<>(VANILLA));
 
+
     /** Registry id of a block entity's type, or null if it is not registered. */
     public static String idOf(BlockEntity blockEntity) {
         BlockEntityType<?> type = blockEntity.getType();

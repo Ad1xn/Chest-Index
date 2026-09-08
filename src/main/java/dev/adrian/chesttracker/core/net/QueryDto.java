@@ -29,7 +29,19 @@ public final class QueryDto {
     private QueryDto() {}
 
     /** What the toolbar buttons select. */
-    public record Filters(boolean includeNested, boolean includeMachines, int originFilter) {
+    /**
+     * @param includeMachines containers that move items about on their own -
+     *                        hoppers, droppers, dispensers, crafters
+     * @param includeUtility  containers that hold things but are not storage -
+     *                        furnaces, brewing stands, jukeboxes, pots,
+     *                        bookshelves
+     * @param includeEntities containers that are entities and therefore move -
+     *                        chest and hopper minecarts, chest boats. Read live
+     *                        and never stored; see
+     *                        {@link dev.adrian.chesttracker.platform.EntityContainers}
+     */
+    public record Filters(boolean includeNested, boolean includeMachines,
+                          boolean includeUtility, boolean includeEntities, int originFilter) {
 
         public static final int ORIGIN_ANY = 0;
         public static final int ORIGIN_PLAYER_PLACED = 1;
@@ -41,7 +53,7 @@ public final class QueryDto {
         }
 
         public static Filters defaults() {
-            return new Filters(true, false, ORIGIN_ANY);
+            return new Filters(true, false, false, true, ORIGIN_ANY);
         }
 
         /**
@@ -139,15 +151,63 @@ public final class QueryDto {
     }
 
     /** Ask where one item is. */
-    public record ContainerRequest(int requestId, String itemId, Filters filters, int limit,
-                                   String dimensionId) {
+    /**
+     * Where one or more items are.
+     *
+     * <p>{@code itemIds} is a list rather than a single id because two features
+     * ask the same question about a whole set at once: pressing the search key
+     * over a shulker box asks where everything <em>inside</em> it is, and a
+     * schematic's material list asks where everything it needs is. Both would
+     * otherwise be a query per item - dozens of round trips for one keypress,
+     * each with its own result limit, so the nearest containers overall could
+     * not be picked out of them.
+     *
+     * <p>A container matches if it holds <em>any</em> of the ids, and its
+     * matched count totals all of them.
+     */
+    public record ContainerRequest(int requestId, List<String> itemIds, Filters filters, int limit,
+                                   String dimensionId, String text) {
+
+        /** Never ask for more than this many at once, whatever the caller passes. */
+        public static final int MAX_ITEMS = 256;
 
         public ContainerRequest {
             if (dimensionId == null) dimensionId = "";
+            if (text == null) text = "";
+            itemIds = itemIds == null ? List.of() : List.copyOf(itemIds);
+            if (itemIds.size() > MAX_ITEMS) itemIds = List.copyOf(itemIds.subList(0, MAX_ITEMS));
+        }
+
+        /**
+         * Without the search text, for the callers that have none.
+         *
+         * <p>The text is here so that a question asked of the grid is asked the
+         * same way of the list behind it: ">barrel" or "ench:mending" narrowed
+         * the counts, and a list of places that ignored them would contradict
+         * the number the player just clicked on.
+         */
+        public ContainerRequest(int requestId, List<String> itemIds, Filters filters, int limit,
+                                String dimensionId) {
+            this(requestId, itemIds, filters, limit, dimensionId, "");
+        }
+        public ContainerRequest(int requestId, String itemId, Filters filters, int limit,
+                                String dimensionId) {
+            this(requestId, itemId == null ? List.of() : List.of(itemId), filters, limit, dimensionId, "");
         }
 
         public ContainerRequest(int requestId, String itemId, Filters filters, int limit) {
             this(requestId, itemId, filters, limit, "");
+        }
+
+        /**
+         * The single item asked for, when there is exactly one.
+         *
+         * <p>The detail pane and the highlight both still work one item at a
+         * time; this keeps them from having to care that the wire can carry
+         * more.
+         */
+        public String soleItemId() {
+            return itemIds.size() == 1 ? itemIds.get(0) : null;
         }
     }
 
@@ -156,9 +216,32 @@ public final class QueryDto {
      *
      * @param contentsKnown false when the container's contents cannot be known,
      *                      so the UI can say so rather than imply it is empty
+     * @param entityId      network id of the entity this container is, or
+     *                      {@link #NOT_AN_ENTITY} for an ordinary block. A
+     *                      minecart's position is a fact about the moment it
+     *                      was read and nothing else - it is on a rail, being
+     *                      moved - so {@code pos} is where it <em>was</em>.
+     *                      The id is what lets the client ask the game where
+     *                      it is now, every frame, instead of drawing a box
+     *                      around the place it left
      */
     public record ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
-                               boolean nested, boolean natural, boolean contentsKnown) {}
+                               boolean nested, boolean natural, boolean contentsKnown,
+                               int entityId) {
+
+        /** No entity behind this hit: it is a block, and {@code pos} is the whole truth. */
+        public static final int NOT_AN_ENTITY = 0;
+
+        public ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
+                            boolean nested, boolean natural, boolean contentsKnown) {
+            this(typeId, pos, matchedCount, distanceSq, nested, natural, contentsKnown, NOT_AN_ENTITY);
+        }
+
+        /** Whether this container moves, and so has to be re-read rather than remembered. */
+        public boolean isEntity() {
+            return entityId != NOT_AN_ENTITY;
+        }
+    }
 
     /** @param permitted see {@link SummaryResponse#permitted()} */
     public record ContainerResponse(int requestId, boolean permitted, List<ContainerHit> hits) {
@@ -248,13 +331,14 @@ public final class QueryDto {
         /**
          * Bumped when the payload shapes change incompatibly.
          *
-         * <p>4 added a dimension to both requests and a status route. 3 added
-         * a nested count to every item summary. Two peers that
-         * disagree about a payload's shape while both claiming the same
-         * version do not fail, they desync - the reader takes the next field
-         * from the middle of the previous one - so this has to move whenever a
-         * field does.
+         * <p>5 turned a container request's single item id into a list, so one
+         * query can ask where a whole set of items is. 4 added a dimension to
+         * both requests and a status route. 3 added a nested count to every
+         * item summary. Two peers that disagree about a payload's shape while
+         * both claiming the same version do not fail, they desync - the reader
+         * takes the next field from the middle of the previous one - so this
+         * has to move whenever a field does.
          */
-        public static final int PROTOCOL_VERSION = 4;
+        public static final int PROTOCOL_VERSION = 7;
     }
 }

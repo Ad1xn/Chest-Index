@@ -1,5 +1,6 @@
 package dev.adrian.chesttracker.mixin;
 
+import dev.adrian.chesttracker.platform.ClientBlockChanges;
 import dev.adrian.chesttracker.server.Trackers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -16,6 +17,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * block change funnels through here: creepers, TNT, pistons, fire and
  * worldedit-style bulk changes included. Injecting at RETURN means the world
  * already reflects the change, so the hook can simply ask what is there now.
+ *
+ * <p>Both sides run this method, and both have an index that can be wrong
+ * about a chest that no longer exists - the server's, and a client's own copy
+ * on a vanilla server. They are told through different routes only because one
+ * of them lives in a source set this file may not import from.
  */
 @Mixin(Level.class)
 public abstract class LevelMixin {
@@ -25,6 +31,14 @@ public abstract class LevelMixin {
     private void chesttracker$afterSetBlock(BlockPos pos, BlockState state, int flags, int recursionLeft,
                                             CallbackInfoReturnable<Boolean> cir) {
         if (!cir.getReturnValueZ()) return; // The change did not take effect.
-        Trackers.onBlockChanged((Level) (Object) this, pos);
+        Level level = (Level) (Object) this;
+        // Both sides come through here. A client connected to a vanilla server
+        // keeps an index of its own, and a chest broken in front of it has to
+        // leave that index for the same reason it leaves the server's.
+        if (level.isClientSide()) {
+            ClientBlockChanges.fire(level, pos);
+            return;
+        }
+        Trackers.onBlockChanged(level, pos);
     }
 }

@@ -6,6 +6,7 @@
   "description": "Indexes every container in the world within a configurable radius - including chunks that are not loaded - so you can search your storage without opening a single chest. Works in singleplayer, on modded servers, and degrades gracefully on vanilla servers.",
   "authors": [ "adrian" ],
   "license": "MIT",
+  "icon": "assets/chest-tracker/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [ "dev.adrian.chesttracker.ChestTracker" ],
@@ -19,9 +20,6 @@
   ],
   "suggests": {
     "modmenu": "*"
-  },
-  "breaks": {
-    "chesttracker": "*"
   },
   "depends": {
     "fabricloader": ">=${loader_dep}",

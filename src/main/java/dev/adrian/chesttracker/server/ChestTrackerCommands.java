@@ -289,7 +289,7 @@ public final class ChestTrackerCommands {
     private static Set<Integer> matchingItemIds(TrackerService tracker, String query) {
         String needle = query.toLowerCase(java.util.Locale.ROOT).trim();
         Set<Integer> matches = new HashSet<>();
-        List<String> entries = tracker.palette().entries();
+        List<String> entries = tracker.palette().view();
         for (int id = 0; id < entries.size(); id++) {
             if (entries.get(id).toLowerCase(java.util.Locale.ROOT).contains(needle)) matches.add(id);
         }

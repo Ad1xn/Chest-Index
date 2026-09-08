@@ -58,6 +58,15 @@ public final class RegionScanner {
 
     private final TrackerService tracker;
     private final Queue<Batch> pending = new ConcurrentLinkedQueue<>();
+    /**
+     * How deep {@link #pending} is, counted rather than measured.
+     *
+     * <p>{@code ConcurrentLinkedQueue.size()} walks the whole queue, and the
+     * throttle asks once per chunk - so on a world of any size the reader spent
+     * its time counting a queue that is by design allowed to be five hundred
+     * deep. This is the same number for O(1).
+     */
+    private final AtomicInteger queueDepth = new AtomicInteger();
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean cancelled = new AtomicBoolean();
 
@@ -305,12 +314,13 @@ public final class RegionScanner {
             List<ContainerRecord> classified = OriginClassifier.classify(entry.getValue(), regionBoxes);
             containersFound.addAndGet(classified.size());
             pending.add(new Batch(dimensionId, entry.getKey(), classified, localPalette));
+            queueDepth.incrementAndGet();
         }
     }
 
     /** Backs off while the apply queue is deep, so a fast disk cannot balloon memory. */
     private void throttle() {
-        while (pending.size() > 512 && !cancelled.get()) {
+        while (queueDepth.get() > 512 && !cancelled.get()) {
             try {
                 Thread.sleep(20);
             } catch (InterruptedException interrupted) {
@@ -340,6 +350,7 @@ public final class RegionScanner {
         Batch batch;
         while (applied < APPLY_BUDGET_PER_TICK && (batch = pending.poll()) != null) {
             applied++;
+            queueDepth.decrementAndGet();
 
             if (isChunkLoaded.test(batch.dimensionId(), batch.chunkKey())) {
                 // A loaded chunk may hold unsaved changes, so the disk copy is
@@ -364,6 +375,6 @@ public final class RegionScanner {
     }
 
     public int queuedBatches() {
-        return pending.size();
+        return queueDepth.get();
     }
 }

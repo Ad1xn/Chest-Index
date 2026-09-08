@@ -30,7 +30,8 @@ class PayloadCodecTest {
     @Test
     void summaryRequestSurvivesTheRoundTrip() {
         QueryDto.SummaryRequest original = new QueryDto.SummaryRequest(
-                42, "redstone", new QueryDto.Filters(false, true, QueryDto.Filters.ORIGIN_NATURAL), 300);
+                42, "redstone",
+                new QueryDto.Filters(false, true, true, false, QueryDto.Filters.ORIGIN_NATURAL), 300);
 
         FriendlyByteBuf buf = buffer();
         ChestTrackerPayloads.SummaryRequestPayload.CODEC.encode(
@@ -86,6 +87,31 @@ class PayloadCodecTest {
                 ChestTrackerPayloads.ContainerResponsePayload.CODEC.decode(buf).response();
 
         assertEquals(original, decoded);
+        assertEquals(0, buf.readableBytes());
+    }
+
+    @Test
+    void containerResponseCarriesTheEntityId() {
+        // A chest minecart is the whole reason the field exists: without it the
+        // client can only box the place the cart was standing when the query
+        // was answered.
+        QueryDto.ContainerResponse original = QueryDto.ContainerResponse.of(3, List.of(
+                new QueryDto.ContainerHit("minecraft:chest_minecart", 77L, 5, 4.0,
+                        false, false, true, 40123),
+                new QueryDto.ContainerHit("minecraft:chest", 78L, 5, 4.0,
+                        false, false, true)));
+
+        FriendlyByteBuf buf = buffer();
+        ChestTrackerPayloads.ContainerResponsePayload.CODEC.encode(
+                buf, new ChestTrackerPayloads.ContainerResponsePayload(original));
+        QueryDto.ContainerResponse decoded =
+                ChestTrackerPayloads.ContainerResponsePayload.CODEC.decode(buf).response();
+
+        assertEquals(original, decoded);
+        assertEquals(40123, decoded.hits().get(0).entityId());
+        assertTrue(decoded.hits().get(0).isEntity());
+        // A block is not an entity that happens to have id zero.
+        assertFalse(decoded.hits().get(1).isEntity());
         assertEquals(0, buf.readableBytes());
     }
 
@@ -208,6 +234,8 @@ class PayloadCodecTest {
         buf.writeUtf("");          // text
         buf.writeBoolean(true);    // includeNested
         buf.writeBoolean(false);   // includeMachines
+        buf.writeBoolean(false);   // includeUtility
+        buf.writeBoolean(true);    // includeEntities
         buf.writeVarInt(9999);     // origin filter, not a value we ever send
         buf.writeVarInt(10);       // limit
         buf.writeUtf("");          // dimension, blank meaning "where I am"
@@ -217,6 +245,62 @@ class PayloadCodecTest {
 
         assertEquals(QueryDto.Filters.ORIGIN_ANY, decoded.filters().originFilter());
         assertEquals("", decoded.dimensionId());
+        assertEquals(0, buf.readableBytes());
+    }
+
+    @Test
+    void containerRequestRoundTripsManyItems() {
+        // The multi-item form is what the shulker key and the Litematica button
+        // both send. A single-item request is just the one-element case, so if
+        // the length prefix were wrong this is where it shows.
+        QueryDto.ContainerRequest original = new QueryDto.ContainerRequest(
+                11, List.of("minecraft:diamond", "minecraft:redstone", "minecraft:oak_planks"),
+                QueryDto.Filters.defaults(), 32, "minecraft:overworld");
+
+        FriendlyByteBuf buf = buffer();
+        ChestTrackerPayloads.ContainerRequestPayload.CODEC.encode(
+                buf, new ChestTrackerPayloads.ContainerRequestPayload(original));
+
+        QueryDto.ContainerRequest read =
+                ChestTrackerPayloads.ContainerRequestPayload.CODEC.decode(buf).request();
+        assertEquals(original, read);
+        assertEquals(List.of("minecraft:diamond", "minecraft:redstone", "minecraft:oak_planks"),
+                read.itemIds(), "order is kept, so the first item still names the search");
+        assertEquals(0, buf.readableBytes());
+    }
+
+    @Test
+    void containerRequestWithNoItemsSurvivesTheWire() {
+        // Reachable: a shulker whose contents this client cannot name at all.
+        // It must decode to an empty request rather than reading past the end.
+        QueryDto.ContainerRequest original = new QueryDto.ContainerRequest(
+                12, List.of(), QueryDto.Filters.defaults(), 8, "");
+
+        FriendlyByteBuf buf = buffer();
+        ChestTrackerPayloads.ContainerRequestPayload.CODEC.encode(
+                buf, new ChestTrackerPayloads.ContainerRequestPayload(original));
+
+        assertEquals(original, ChestTrackerPayloads.ContainerRequestPayload.CODEC.decode(buf).request());
+        assertEquals(0, buf.readableBytes());
+    }
+
+    @Test
+    void containerRequestCapsHowManyItemsItWillCarry() {
+        // The count comes off the wire and decides how many times the reader
+        // loops, so a hostile or buggy peer must not be able to make it loop
+        // forever. The record caps on the way in as well.
+        List<String> tooMany = new java.util.ArrayList<>();
+        for (int i = 0; i < QueryDto.ContainerRequest.MAX_ITEMS + 50; i++) {
+            tooMany.add("mod:item_" + i);
+        }
+        QueryDto.ContainerRequest capped = new QueryDto.ContainerRequest(
+                13, tooMany, QueryDto.Filters.defaults(), 8, "");
+        assertEquals(QueryDto.ContainerRequest.MAX_ITEMS, capped.itemIds().size());
+
+        FriendlyByteBuf buf = buffer();
+        ChestTrackerPayloads.ContainerRequestPayload.CODEC.encode(
+                buf, new ChestTrackerPayloads.ContainerRequestPayload(capped));
+        assertEquals(capped, ChestTrackerPayloads.ContainerRequestPayload.CODEC.decode(buf).request());
         assertEquals(0, buf.readableBytes());
     }
 }

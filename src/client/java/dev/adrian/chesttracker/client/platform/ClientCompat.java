@@ -34,6 +34,34 @@ public final class ClientCompat {
         //?}
     }
 
+    /**
+     * A toast in the corner, the way an advancement announces itself.
+     *
+     * <p>For the one thing that has to be said when the mod is deliberately
+     * doing nothing. An action-bar line would be an error message, and this is
+     * not an error - it is the mod reporting that it is switched off here,
+     * which is information the player wants once and never again.
+     *
+     * <p>26.x moved the toast manager off {@code Minecraft} onto the
+     * {@code Gui}, along with the rest of the HUD. {@code SystemToast.add} is
+     * identical on both.
+     */
+    public static void toast(Component title, Component message) {
+        Minecraft client = Minecraft.getInstance();
+        //? if >=26.1 {
+        /*if (client.gui == null) return;
+        net.minecraft.client.gui.components.toasts.SystemToast.add(
+                client.gui.toastManager(),
+                net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                title, message);
+        *///?} else {
+        net.minecraft.client.gui.components.toasts.SystemToast.add(
+                client.getToastManager(),
+                net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                title, message);
+        //?}
+    }
+
     /** Fabric API renamed its key-binding module to key-mapping for 26.x. */
     public static KeyMapping registerKeyMapping(KeyMapping mapping) {
         //? if >=26.1 {
@@ -65,6 +93,31 @@ public final class ClientCompat {
     /** {@code setScreenAndShow} exists on both versions; {@code setScreen} does not. */
     public static void openScreen(Screen screen) {
         Minecraft.getInstance().setScreenAndShow(screen);
+    }
+
+    /**
+     * Opens a screen of ours in place of a container window, telling the server
+     * the container is closed first.
+     *
+     * <p>Replacing the screen is not the same as closing the container. The
+     * close packet is sent by {@code LocalPlayer.closeContainer()}, which
+     * vanilla calls from the container screen's own {@code onClose} - so
+     * setting a different screen over the top leaves the server believing the
+     * player is still standing in the chest. On a vanilla server that means the
+     * chest stays open, its lid stays up, and nobody else can use it until
+     * something else closes it.
+     *
+     * <p>Closing first also lets the menu's own removal run, which is what the
+     * client-side index reads the contents from - so the chest is still
+     * recorded on the way out.
+     */
+    public static void openScreenFromContainer(Screen screen) {
+        Minecraft client = Minecraft.getInstance();
+        if (currentScreen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>
+                && client.player != null) {
+            client.player.closeContainer();
+        }
+        client.setScreenAndShow(screen);
     }
 
     /** What {@link #afterScreenRender} hands back, once per frame. */

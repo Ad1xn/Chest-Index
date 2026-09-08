@@ -188,4 +188,50 @@ class TrackerServiceTest {
         assertNotEquals(0L, tracker.generation(DIM));
         assertEquals(0L, tracker.generation("minecraft:the_nether"));
     }
+
+    @Test
+    void aRereadStillRefreshesWhenItWasLastSeen() {
+        // The re-read is not a change, but it is still the freshest word on
+        // whether the contents are current - which is what the UI shows as
+        // staleness. Counting it as nothing must not mean storing nothing.
+        tracker.record(DIM, chest(1, new StackEntry(1, 5)));
+        tracker.record(DIM, chest(9, new StackEntry(1, 5)));
+
+        assertEquals(9L, tracker.index(DIM).get(POS).lastSeenTick());
+    }
+
+    @Test
+    void aRereadLeavesTheSummaryCacheAlone() {
+        // The live drain re-reads dirty containers every tick. If each one
+        // moved the index's revision, the summary an open screen is reading
+        // would be recomputed from scratch every tick of a running hopper.
+        tracker.record(DIM, chest(1, new StackEntry(1, 5)));
+        var query = dev.adrian.chesttracker.core.index.IndexQuery.builder().build();
+        var first = tracker.index(DIM).summarise(query);
+
+        tracker.record(DIM, chest(2, new StackEntry(1, 5)));
+
+        assertSame(first, tracker.index(DIM).summarise(query),
+                "an unchanged re-read must not invalidate the cached summary");
+    }
+
+    @Test
+    void remappingKeepsWhatDistinguishesAStack() {
+        // Everything that arrives from a region scan or out of the save file
+        // comes through remap against a foreign palette. Dropping the detail
+        // ids there left `ench:` and `lore:` searches able to match only the
+        // containers opened by hand this session.
+        var foreign = new dev.adrian.chesttracker.core.store.StringPalette();
+        int itemId = foreign.intern("minecraft:diamond_pickaxe");
+        int detailId = foreign.intern("ench:mending");
+        ContainerRecord source = new ContainerRecord(POS, foreign.intern(DIM),
+                foreign.intern("minecraft:chest"), Origin.PLAYER_PLACED, null, false, true,
+                null, 1, List.of(new StackEntry(itemId, 1, 0, null, List.of(detailId))));
+
+        ContainerRecord remapped = tracker.remap(source, foreign, DIM);
+
+        List<Integer> details = remapped.contents().get(0).details();
+        assertEquals(1, details.size(), "the stack's details must survive the palette swap");
+        assertEquals("ench:mending", tracker.palette().value(details.get(0)));
+    }
 }

@@ -2,6 +2,7 @@ package dev.adrian.chesttracker.core.anvil;
 
 import dev.adrian.chesttracker.core.model.ContainerRecord;
 import dev.adrian.chesttracker.core.model.Origin;
+import dev.adrian.chesttracker.core.model.StackDetail;
 import dev.adrian.chesttracker.core.model.StackEntry;
 import dev.adrian.chesttracker.core.store.StringPalette;
 import dev.adrian.chesttracker.core.util.BlockKey;
@@ -130,6 +131,10 @@ public final class ChunkExtractor {
         for (NbtCompound item : items) {
             String itemId = item.getString("id");
             if (itemId == null) continue;
+            // Serialised inventories do not normally write empty slots, but a
+            // datapack or an older world can, and an "Air" row in the grid is
+            // pure noise. The live reader drops these too.
+            if (itemId.equals("minecraft:air") || itemId.equals("air")) continue;
 
             // 1.20.5+ writes a lowercase int `count`; older worlds wrote a byte
             // `Count`. Both targets are post-1.20.5, but reading either costs
@@ -140,7 +145,8 @@ public final class ChunkExtractor {
             String customName = components == null ? null
                     : PlainText.of(components.getString("minecraft:custom_name"));
 
-            out.add(new StackEntry(palette.intern(itemId), count, depth, customName));
+            out.add(new StackEntry(palette.intern(itemId), count, depth, customName,
+                    detailsOf(components, customName, palette)));
 
             if (components != null) {
                 // A shulker box carries its contents as slot/item pairs.
@@ -152,6 +158,97 @@ public final class ChunkExtractor {
                 collectItems(components.getCompoundList("minecraft:bundle_contents"), out, depth + 1, palette);
             }
         }
+    }
+
+    /**
+     * What tells this stack apart from another of the same item, off the disk.
+     *
+     * <p>The same details the live reader takes off the components of a real
+     * {@code ItemStack}, read here out of the serialised form of those same
+     * components - because most of a world has never been loaded, and an index
+     * that only knew about enchantments in chunks somebody had visited would
+     * answer "no" to almost every search for one.
+     *
+     * <p>Every shape is read defensively. This is somebody's world file, it may
+     * have been written by an older version or edited by a tool, and the right
+     * answer to a component that does not look the way it should is to skip it.
+     */
+    private static List<Integer> detailsOf(NbtCompound components, String customName, StringPalette palette) {
+        // Most stacks in a world are plain cobblestone with nothing to record,
+        // and this runs once per stack in every chunk read off disk.
+        if (components == null && customName == null) return List.of();
+
+        List<Integer> details = new ArrayList<>(2);
+        if (components != null) {
+            addEnchantments(components.getCompound("minecraft:enchantments"), details, palette);
+            addEnchantments(components.getCompound("minecraft:stored_enchantments"), details, palette);
+            addPotion(components.getCompound("minecraft:potion_contents"), details, palette);
+            addPotion(components, "minecraft:potion_contents", details, palette);
+            addLore(components, details, palette);
+        }
+        add(details, palette, StackDetail.name(customName));
+        return details;
+    }
+
+    /**
+     * The enchantments on one stack.
+     *
+     * <p>Written either as the ids directly or wrapped in a {@code levels}
+     * compound, depending on the version that wrote the chunk. Both are read:
+     * a world is not re-serialised just because the format moved on, so both
+     * shapes are still out there in chunks nobody has touched since.
+     */
+    private static void addEnchantments(NbtCompound enchantments, List<Integer> details, StringPalette palette) {
+        if (enchantments == null) return;
+
+        NbtCompound levels = enchantments.getCompound("levels");
+        NbtCompound source = levels != null ? levels : enchantments;
+        for (String id : source.keys()) {
+            // The wrapper's own keys are not enchantments.
+            if ("levels".equals(id) || "show_in_tooltip".equals(id)) continue;
+            add(details, palette, StackDetail.enchantment(id));
+        }
+    }
+
+    private static void addPotion(NbtCompound contents, List<Integer> details, StringPalette palette) {
+        if (contents == null) return;
+        add(details, palette, StackDetail.potion(contents.getString("potion")));
+    }
+
+    /** The short form, where the component is the potion id on its own. */
+    private static void addPotion(NbtCompound components, String key,
+                                  List<Integer> details, StringPalette palette) {
+        if (components.getCompound(key) != null) return;
+        add(details, palette, StackDetail.potion(unquote(components.getString(key))));
+    }
+
+    private static void addLore(NbtCompound components, List<Integer> details, StringPalette palette) {
+        List<Object> lines = components.getList("minecraft:lore");
+        if (lines == null) return;
+
+        int kept = 0;
+        for (Object line : lines) {
+            if (kept >= StackDetail.MAX_LORE_LINES) break;
+            String text = PlainText.of(line == null ? null : line.toString());
+            if (text == null) continue;
+            add(details, palette, StackDetail.lore(text));
+            kept++;
+        }
+    }
+
+    private static void add(List<Integer> details, StringPalette palette, String detail) {
+        if (detail == null) return;
+        int id = palette.intern(detail);
+        if (!details.contains(id)) details.add(id);
+    }
+
+    private static String unquote(String raw) {
+        if (raw == null) return null;
+        String value = raw.trim();
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 
     private static List<StructureBox> extractStructureBoxes(NbtCompound chunk) {

@@ -3,6 +3,8 @@ package dev.adrian.chesttracker.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chesttracker.ChestTracker;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
+import dev.adrian.chesttracker.client.index.ClientIndex;
+import dev.adrian.chesttracker.client.index.ClientObserver;
 import dev.adrian.chesttracker.client.net.ServerLink;
 import dev.adrian.chesttracker.client.platform.ClientCompat;
 import dev.adrian.chesttracker.client.platform.WorldHighlightHook;
@@ -40,6 +42,11 @@ public final class ChestTrackerClient implements ClientModInitializer {
         // talking to before the player opens it.
         ServerLink.register();
 
+        // The fallback for servers that do not have the mod: an index built
+        // only from what this client is sent and what the player opens. It
+        // registers listeners and never a sender, which is the whole point.
+        ClientObserver.register();
+
         // Boxes around tracked containers. The only part of the mod that talks
         // to the world renderer, and the only place the two targets diverge
         // enough to need a whole separate registration.
@@ -66,15 +73,42 @@ public final class ChestTrackerClient implements ClientModInitializer {
         // not to be delivered here, polls the window too. See ContainerScreens.
         ContainerScreens.register(searchHovered);
 
+        // Only ever fires if Litematica is installed; it is matched by class
+        // name and is not a build dependency.
+        LitematicaSearch.register();
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openSearch.consumeClick()) {
+                // Silent, because off should read as absent rather than as
+                // broken - no error line, no screen, nothing. The toast that
+                // went up when the mod switched itself off is the answer, and
+                // pressing the key repeats it now and then in case that was a
+                // while ago.
+                if (!Session.active()) {
+                    Session.remind();
+                    continue;
+                }
                 ClientCompat.openScreen(new ChestTrackerScreen());
             }
+            // Notices the mod switching itself off - a server on the off-list,
+            // or one without the mod when those are not indexed.
+            Session.tick();
+            // Says so, once per connection, when container entities are being
+            // held back because this server cannot be trusted to follow them.
+            Session.warnAboutEntities();
+            // Says so, once, if the mod this one replaces is also installed.
+            Session.warnAboutConflict();
             ContainerHighlight.get().tick();
             ContainerScreens.tick();
             // Expires the wait for a server that never announced itself, and
             // any request whose reply is never coming.
             ServerLink.tick();
+            // Retires each schematic material from the highlight once enough
+            // of it is in the player's inventory.
+            MaterialGoals.tick();
+            // Writes the client-side index out now and then, so a crash costs
+            // a minute of observations rather than the session.
+            ClientIndex.tick();
         });
     }
 }

@@ -44,7 +44,7 @@ import net.minecraft.client.gui.GuiGraphics;
  */
 public final class SearchButton extends AbstractWidget {
 
-    public static final int SIZE = 12;
+    public static final int SIZE = 11;
 
     // Vanilla's container palette, shared by every container GUI in the game.
     private static final int PANEL = 0xFFC6C6C6;
@@ -53,27 +53,78 @@ public final class SearchButton extends AbstractWidget {
     private static final int ICON = 0xFF404040;
     private static final int HOVER = 0x80FFFFFF;
 
-    /** The container window's top-right corner, which the offset is measured from. */
-    private final int anchorX;
-    private final int anchorY;
+    /**
+     * The container window's top-right corner, asked for afresh every frame.
+     *
+     * <p>It used to be captured once, when the button was built during the
+     * screen's {@code init}. That is wrong because a container window moves
+     * without being re-initialised: opening the recipe book shifts the whole
+     * GUI sideways, and the button stayed where the window used to be. The same
+     * staleness would leave it misplaced after anything else that repositions a
+     * screen in place.
+     *
+     * <p>Measuring from the top-right rather than the top-left is what lets one
+     * saved offset serve every container. A hopper, a single chest and a double
+     * chest have different widths but the same right-hand edge relative to
+     * their own window, so the button lands in the same corner of each.
+     */
+    private final java.util.function.IntSupplier anchorX;
+    private final java.util.function.IntSupplier anchorY;
 
-    public SearchButton(int anchorX, int anchorY) {
+    /**
+     * Which kind of window this button is on - {@code minecraft:hopper},
+     * {@code minecraft:generic_9x6} and so on.
+     *
+     * <p>The offset is stored against this rather than shared by every
+     * container, because "the same corner of every window" turned out not to
+     * be what anybody wants. A hopper is five slots wide and its top-right
+     * corner sits directly over its only row; a double chest has an empty
+     * title bar up there. Somewhere good on one is in the way on the other.
+     */
+    private final String menuKey;
+
+    /**
+     * True while the player is dragging it, when the pointer decides where it
+     * is and the saved offset must not pull it back.
+     */
+    private boolean dragging;
+
+    public SearchButton(String menuKey,
+                        java.util.function.IntSupplier anchorX,
+                        java.util.function.IntSupplier anchorY) {
         super(0, 0, SIZE, SIZE, Component.literal("Search containers"));
+        this.menuKey = menuKey;
         this.anchorX = anchorX;
         this.anchorY = anchorY;
-        applyConfiguredPosition();
-        setTooltip(Tooltip.create(Component.literal("Search containers  (right-drag to move)")));
+        follow();
+        setTooltip(Tooltip.create(Component.literal(
+                "Search containers  (right-drag to move it on this kind of window)")));
     }
 
-    private void applyConfiguredPosition() {
-        ChestTrackerConfig config = ChestTrackerConfig.get();
-        setX(anchorX + config.searchButtonX);
-        setY(anchorY + config.searchButtonY);
+    /** Puts the button back where the offset says, relative to where the window is now. */
+    public void follow() {
+        if (dragging) return;
+        int[] offset = ChestTrackerConfig.get().searchButtonOffset(menuKey);
+        setX(anchorX.getAsInt() + offset[0]);
+        setY(anchorY.getAsInt() + offset[1]);
+    }
+
+    /** Which window's offset this button reads and writes. */
+    public String menuKey() {
+        return menuKey;
+    }
+
+    public void setDragging(boolean value) {
+        dragging = value;
     }
 
     // --- drawing ------------------------------------------------------------
 
     private void draw(Gfx gfx, int mouseX, int mouseY) {
+        // Re-anchored here rather than on a tick, so it moves in the same frame
+        // the window does instead of lagging a twentieth of a second behind it.
+        follow();
+
         int x = getX();
         int y = getY();
 
@@ -105,13 +156,13 @@ public final class SearchButton extends AbstractWidget {
 
     // --- input --------------------------------------------------------------
 
-    /** Where the anchor is, so the drag poll can turn a position into an offset. */
+    /** Where the anchor is now, so the drag poll can turn a position into an offset. */
     public int anchorX() {
-        return anchorX;
+        return anchorX.getAsInt();
     }
 
     public int anchorY() {
-        return anchorY;
+        return anchorY.getAsInt();
     }
 
     @Override
@@ -120,7 +171,10 @@ public final class SearchButton extends AbstractWidget {
 
         if (event.button() == 0) {
             playDownSound(net.minecraft.client.Minecraft.getInstance().getSoundManager());
-            ClientCompat.openScreen(new ChestTrackerScreen());
+            // Through the closing route: this button lives on somebody else's
+            // container window, and swapping the screen without telling the
+            // server would leave that container open at the far end.
+            ClientCompat.openScreenFromContainer(new ChestTrackerScreen());
             return true;
         }
         return false;

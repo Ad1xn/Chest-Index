@@ -10,7 +10,10 @@ import dev.adrian.chesttracker.core.util.BlockKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -379,5 +382,131 @@ class WorldIndexTest {
         assertEquals(2, stats.containers());
         assertEquals(1, stats.withKnownContents());
         assertEquals(1, stats.byOrigin().get(Origin.NATURAL));
+    }
+
+    /**
+     * The summary no longer runs through {@link WorldIndex#query} - it walks
+     * the index directly, because ranking every container by distance and then
+     * sorting by quantity was most of the cost of every keystroke.
+     *
+     * <p>That leaves two ways through the same question, so they have to keep
+     * agreeing. This asserts it over a spread wide enough to exercise both
+     * candidate strategies: the inverted index for a narrow item filter, and
+     * the full scan for a broad one.
+     */
+    @Test
+    void theFastSummaryAgreesWithSummarisingRankedResults() {
+        for (int i = 0; i < 60; i++) {
+            index.put(chest(i * 3, 64, i, 
+                    new StackEntry(DIAMOND, 1 + i % 7),
+                    new StackEntry(STONE, 2 + i % 5, i % 3 == 0 ? 1 : 0),
+                    new StackEntry(EMERALD, 1 + i % 3)));
+        }
+
+        for (IndexQuery query : List.of(
+                IndexQuery.builder().center(BlockKey.pack(0, 64, 0)).build(),
+                IndexQuery.builder().center(BlockKey.pack(90, 64, 30)).build(),
+                IndexQuery.builder().items(Set.of(DIAMOND)).build(),
+                IndexQuery.builder().items(Set.of(DIAMOND, STONE, EMERALD)).build(),
+                IndexQuery.builder().includeNested(false).build(),
+                IndexQuery.builder().maxDistance(40).center(BlockKey.pack(0, 64, 0)).build())) {
+
+            // What the old implementation did, spelled out: rank, then total.
+            Map<Integer, int[]> expected = new HashMap<>();
+            Map<Integer, Double> nearest = new HashMap<>();
+            for (SearchResult result : index.query(query)) {
+                if (!result.container().contentsKnown()) continue;
+                Set<Integer> seenHere = new HashSet<>();
+                for (StackEntry entry : result.container().contents()) {
+                    if (!query.includeNested() && entry.isNested()) continue;
+                    if (!query.itemIds().isEmpty() && !query.itemIds().contains(entry.itemId())) continue;
+                    int[] totals = expected.computeIfAbsent(entry.itemId(), id -> new int[3]);
+                    totals[0] += entry.count();
+                    if (entry.isNested()) totals[2] += entry.count();
+                    if (seenHere.add(entry.itemId())) totals[1]++;
+                    nearest.merge(entry.itemId(), result.distanceSq(), Math::min);
+                }
+            }
+
+            List<WorldIndex.ItemSummary> actual = index.summarise(query);
+            assertEquals(expected.size(), actual.size(), "same items reported");
+            for (WorldIndex.ItemSummary summary : actual) {
+                int[] totals = expected.get(summary.itemId());
+                assertNotNull(totals, "reported an item the ranked path did not");
+                assertEquals(totals[0], summary.totalCount());
+                assertEquals(totals[1], summary.containerCount());
+                assertEquals(totals[2], summary.nestedCount());
+                assertEquals(nearest.get(summary.itemId()), summary.nearestDistSq(), 1e-9);
+            }
+        }
+    }
+
+    /**
+     * A broad item filter is deliberately turned back into a full scan, because
+     * the union of its holder lists is larger than the index and has to be
+     * deduplicated first. The switch must not change the answer - and in
+     * particular must not count a container twice for holding two of the
+     * wanted items.
+     */
+    @Test
+    void aContainerHoldingSeveralWantedItemsIsCountedOnce() {
+        index.put(chest(0, 64, 0,
+                new StackEntry(DIAMOND, 5), new StackEntry(STONE, 5), new StackEntry(EMERALD, 5)));
+
+        List<WorldIndex.ItemSummary> summary =
+                index.summarise(IndexQuery.builder().items(Set.of(DIAMOND, STONE, EMERALD)).build());
+
+        assertEquals(3, summary.size());
+        for (WorldIndex.ItemSummary entry : summary) {
+            assertEquals(5, entry.totalCount(), "one chest visited once");
+            assertEquals(1, entry.containerCount());
+        }
+    }
+
+    @Test
+    void aDetailFilterPicksOutOneStackOfTwoOfTheSameItem() {
+        // The case the whole per-stack detail machinery exists for: two
+        // pickaxes, same item id, and only one of them is the one being
+        // looked for.
+        int pickaxe = 7;
+        int mending = 40;
+        int unbreaking = 41;
+
+        WorldIndex index = new WorldIndex(0);
+        index.put(new ContainerRecord(BlockKey.pack(0, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(pickaxe, 1, 0, null, List.of(mending)))));
+        index.put(new ContainerRecord(BlockKey.pack(10, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(pickaxe, 1, 0, null, List.of(unbreaking)))));
+        index.put(new ContainerRecord(BlockKey.pack(20, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(pickaxe, 1, 0, null))));
+
+        List<SearchResult> mended = index.query(IndexQuery.builder()
+                .details(java.util.Set.of(mending))
+                .build());
+
+        assertEquals(1, mended.size());
+        assertEquals(BlockKey.pack(0, 64, 0), mended.get(0).container().pos());
+
+        // And the counts behind the grid have to agree with that list.
+        List<WorldIndex.ItemSummary> summary = index.summarise(IndexQuery.builder()
+                .details(java.util.Set.of(mending))
+                .build());
+        assertEquals(1, summary.size());
+        assertEquals(1, summary.get(0).totalCount());
+    }
+
+    @Test
+    void noDetailFilterStillFindsEverything() {
+        WorldIndex index = new WorldIndex(0);
+        index.put(new ContainerRecord(BlockKey.pack(0, 64, 0), 0, 1, Origin.PLAYER_PLACED, null,
+                false, true, null, 1L,
+                List.of(new StackEntry(7, 1, 0, null, List.of(40)),
+                        new StackEntry(8, 3, 0, null))));
+
+        assertEquals(1, index.query(IndexQuery.builder().build()).size());
+        assertEquals(2, index.summarise(IndexQuery.builder().build()).size());
     }
 }

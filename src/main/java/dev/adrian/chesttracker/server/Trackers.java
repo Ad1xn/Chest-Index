@@ -69,11 +69,28 @@ public final class Trackers {
                 .hasChunk(BlockKey.chunkX(chunkKey), BlockKey.chunkZ(chunkKey));
     }
 
+    /**
+     * Levels by dimension id, resolved once each.
+     *
+     * <p>Asked on hot paths - once per chunk applied during a scan, and once
+     * per dimension per tick while draining changes - and the answer cannot
+     * change while a server is running. Without this each call walked every
+     * level in the server building and comparing strings to find one it had
+     * already found sixty times that tick.
+     */
+    private static final Map<String, ServerLevel> LEVELS = new ConcurrentHashMap<>();
+
     public static ServerLevel levelFor(String dimensionId) {
         net.minecraft.server.MinecraftServer current = server;
         if (current == null) return null;
+
+        ServerLevel cached = LEVELS.get(dimensionId);
+        if (cached != null) return cached;
+
         for (ServerLevel level : current.getAllLevels()) {
-            if (dimensionId(level).equals(dimensionId)) return level;
+            String id = dimensionId(level);
+            LEVELS.putIfAbsent(id, level);
+            if (id.equals(dimensionId)) return level;
         }
         return null;
     }
@@ -89,6 +106,10 @@ public final class Trackers {
         server = null;
         current = null;
         DIMENSION_IDS.clear();
+        // These hold ServerLevels, which hold the whole world. Leaving them
+        // behind would keep a stopped server's worlds alive for as long as the
+        // game runs.
+        LEVELS.clear();
     }
 
     public static String dimensionId(Level level) {
@@ -152,6 +173,11 @@ public final class Trackers {
         if (tracker == null || DIRTY.isEmpty()) return 0;
 
         int done = 0;
+        // One scanner for the whole drain. It holds nothing but the tracker, so
+        // building a fresh one per dimension per tick was allocating for no
+        // reason on a path that runs twenty times a second.
+        var scanner = new dev.adrian.chesttracker.server.scan.LiveScanner(tracker);
+
         for (Map.Entry<String, java.util.Set<Long>> entry : DIRTY.entrySet()) {
             ServerLevel level = levelFor(entry.getKey());
             java.util.Set<Long> positions = entry.getValue();
@@ -160,7 +186,6 @@ public final class Trackers {
                 continue;
             }
 
-            var scanner = new dev.adrian.chesttracker.server.scan.LiveScanner(tracker);
             var iterator = positions.iterator();
             while (iterator.hasNext() && done < DIRTY_BUDGET_PER_TICK) {
                 long pos = iterator.next();

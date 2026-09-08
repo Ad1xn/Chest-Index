@@ -1,6 +1,7 @@
 package dev.adrian.chesttracker.core.store;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +50,21 @@ public final class StringPalette {
     /** Palette contents in id order, for serialisation. */
     public List<String> entries() {
         return List.copyOf(byId);
+    }
+
+    /**
+     * The same contents as {@link #entries()} without the copy, for readers
+     * that only walk the palette and discard it.
+     *
+     * <p>A search scans every entry on every keystroke, and on a decorated
+     * world the palette holds not just item ids but each enchantment, potion,
+     * lore line and custom name ever seen - tens of thousands of strings.
+     * Copying that array to read it once was most of what a keystroke did.
+     * The view is unmodifiable but live: callers must not hold it across an
+     * {@link #intern}.
+     */
+    public List<String> view() {
+        return Collections.unmodifiableList(byId);
     }
 
     /** Rebuilds a palette from {@link #entries()} output. */

@@ -96,8 +96,16 @@ public final class TrackerService {
         // the live re-read, the offline region scan, and anything added later.
         ContainerRecord merged = container.inheriting(previous);
 
+        // An unchanged re-read still has to land, because it carries a fresh
+        // lastSeenTick - but it must not move the revision, or the summary
+        // cache is thrown away every tick a hopper runs. See WorldIndex.touch.
+        if (previous != null && previous.sameDataAs(merged)) {
+            index(dimensionId).touch(merged);
+            return;
+        }
+
         index(dimensionId).put(merged);
-        if (previous == null || !previous.sameDataAs(merged)) bump(dimensionId);
+        bump(dimensionId);
     }
 
     public ContainerRecord remove(String dimensionId, long pos) {
@@ -196,12 +204,32 @@ public final class TrackerService {
         for (StackEntry entry : record.contents()) {
             String itemId = from.value(entry.itemId());
             if (itemId == null) continue;
-            contents.add(new StackEntry(palette.intern(itemId), entry.count(), entry.depth(), entry.customName()));
+            contents.add(new StackEntry(palette.intern(itemId), entry.count(), entry.depth(),
+                    entry.customName(), remapDetails(entry.details(), from)));
         }
 
         return new ContainerRecord(record.pos(), palette.intern(dimensionId), palette.intern(typeId),
                 record.origin(), record.owner(), record.unlooted(), record.contentsKnown(),
                 record.customName(), record.lastSeenTick(), contents);
+    }
+
+    /**
+     * Translates a stack's detail ids the same way its item id is translated.
+     *
+     * <p>These were being dropped, which cost twice: the scanner interned every
+     * enchantment, potion and lore line it read and then had the result thrown
+     * away here, and a search for {@code ench:mending} could only ever match a
+     * container somebody had opened this session - because every container that
+     * came off disk or out of the save file arrived with no details at all.
+     */
+    private List<Integer> remapDetails(List<Integer> details, StringPalette from) {
+        if (details.isEmpty()) return List.of();
+        List<Integer> remapped = new java.util.ArrayList<>(details.size());
+        for (int detailId : details) {
+            String detail = from.value(detailId);
+            if (detail != null) remapped.add(palette.intern(detail));
+        }
+        return remapped;
     }
 
     /**
