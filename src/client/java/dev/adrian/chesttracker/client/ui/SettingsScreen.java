@@ -77,7 +77,7 @@ public final class SettingsScreen extends Screen {
     private int panelY;
     private int panelW;
 
-    private int fitLimit;
+    private int visibleRows;
 
     private List<Section> sections = List.of();
 
@@ -422,14 +422,15 @@ public final class SettingsScreen extends Screen {
         section = Math.max(0, Math.min(section, sections.size() - 1));
 
         int room = height - 32 - CHROME_H;
-        fitLimit = Math.max(MIN_ROWS, Math.min(MAX_ROWS, room / ROW_H));
-
-        panelW = Panel.EDGE_W + RAIL_BUTTON + RAIL_PAD + CONTENT_W + Panel.EDGE_W;
-        panelX = (width - panelW) / 2;
+        int fits = Math.max(railRows(), Math.min(MAX_ROWS, room / ROW_H));
 
         int tallest = 0;
         for (Section candidate : sections) tallest = Math.max(tallest, candidate.rows().size());
-        panelY = (height - (CHROME_H + Math.min(fitLimit, tallest) * ROW_H)) / 2;
+        visibleRows = Math.max(railRows(), Math.min(fits, tallest));
+
+        panelW = Panel.EDGE_W + RAIL_BUTTON + RAIL_PAD + CONTENT_W + Panel.EDGE_W;
+        panelX = (width - panelW) / 2;
+        panelY = (height - panelH()) / 2;
 
         filterBox = new EditBox(font, panelX + 11, panelY + Panel.TOP_H + 2,
                 panelW - 22, 12, Component.literal("Filter settings"));
@@ -469,22 +470,23 @@ public final class SettingsScreen extends Screen {
     }
 
     private int contentH() {
-        return visibleRows() * ROW_H + 2;
+        return visibleRows * ROW_H + 2;
     }
 
     private static final int CHROME_H =
             Panel.TOP_H + Panel.SEARCH_H + PAD + 2 + PAD + Panel.BOTTOM_H;
 
-    private int visibleRows() {
-        return Math.max(1, Math.min(fitLimit, rows().size()));
+    private int railRows() {
+        int railH = sections.size() * RAIL_BUTTON + (sections.size() - 1) * RAIL_GAP;
+        return (railH + ROW_H - 1) / ROW_H;
     }
 
     private int panelH() {
-        return CHROME_H + visibleRows() * ROW_H;
+        return CHROME_H + visibleRows * ROW_H;
     }
 
     private boolean overflows() {
-        return rows().size() > fitLimit;
+        return rows().size() > visibleRows;
     }
 
     private int rowsX() {
@@ -504,7 +506,7 @@ public final class SettingsScreen extends Screen {
     }
 
     private int maxScroll() {
-        return Math.max(0, rows().size() - fitLimit);
+        return Math.max(0, rows().size() - visibleRows);
     }
 
     private int closeX() {
@@ -554,7 +556,7 @@ public final class SettingsScreen extends Screen {
 
         if (overflows()) {
             Panel.scrollbar(gfx, scrollbarX(), contentTop() + 1, SCROLLBAR_W, contentH() - 2,
-                    scroll, maxScroll(), rows().size(), visibleRows());
+                    scroll, maxScroll(), rows().size(), visibleRows);
         }
 
         if (draggingRow >= 0 || draggingScrollbar) pendingTooltip = null;
@@ -638,7 +640,7 @@ public final class SettingsScreen extends Screen {
         int right = left + rowsW();
         int hovered = rowAt(mouseX, mouseY);
 
-        for (int i = 0; i < visibleRows(); i++) {
+        for (int i = 0; i < visibleRows; i++) {
             int index = scroll + i;
             if (index >= visible.size()) break;
 
@@ -822,7 +824,7 @@ public final class SettingsScreen extends Screen {
     private int rowAt(int mouseX, int mouseY) {
         if (mouseX < rowsX() || mouseX >= rowsX() + rowsW()) return -1;
         int top = contentTop() + 1;
-        if (mouseY < top || mouseY >= top + visibleRows() * ROW_H) return -1;
+        if (mouseY < top || mouseY >= top + visibleRows * ROW_H) return -1;
         int index = scroll + (mouseY - top) / ROW_H;
         return index < rows().size() ? index : -1;
     }
