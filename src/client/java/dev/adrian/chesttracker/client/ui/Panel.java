@@ -149,7 +149,13 @@ public final class Panel {
      */
     public static void flat(Gfx gfx, int x, int y, int w, int h) {
         if (w <= 0 || h <= 0) return;
-        gfx.blitStretched(TEXTURE, x, y, FLAT_U, ROWS_V, w, h, 1, h, SHEET, SHEET);
+        // One pixel stretched, not an h-tall column stretched. Sampling h
+        // pixels reads down past the slot band - which is only 108 tall - into
+        // the player-inventory art below it and then off the end of the window
+        // entirely. Vanilla's sheet happens to be more grey down there so it
+        // looked right; a pack that paints that region dark filled the bottom
+        // of every panel with black.
+        gfx.blitStretched(TEXTURE, x, y, FLAT_U, ROWS_V, w, h, 1, 1, SHEET, SHEET);
     }
 
     /** The strip vanilla puts a text field in, with the field's groove in it. */
@@ -255,6 +261,71 @@ public final class Panel {
         gfx.fill(x + 3, y + 3, x + 4, y + 6, colour);
         gfx.fill(x + 4, y + 1, x + 5, y + 4, colour);
         gfx.fill(x + 5, y, x + 6, y + 2, colour);
+    }
+
+    /**
+     * The section glyphs, for when the real item cannot be drawn.
+     *
+     * <p>26.2 does not bind an item's components until a world is loaded, so
+     * {@code new ItemStack(item)} throws at the title screen and the rail has
+     * nothing to draw. It used to fall back to the section's initial, which
+     * read as a screen that had failed to load rather than as a deliberate
+     * icon. These are blocky on purpose - the game's own idiom - and sized to
+     * sit where the sixteen-pixel item would.
+     *
+     * @param index which section, in rail order
+     */
+    public static void glyph(Gfx gfx, int index, int x, int y) {
+        switch (index) {
+            case 0 -> chest(gfx, x, y);
+            case 1 -> hopper(gfx, x, y);
+            case 2 -> lens(gfx, x, y);
+            case 3 -> compass(gfx, x, y);
+            default -> torch(gfx, x, y);
+        }
+    }
+
+    private static final int OAK = 0xFF9E6B3F;
+    private static final int OAK_DARK = 0xFF6B4527;
+    private static final int IRON = 0xFF6E6E6E;
+    private static final int IRON_DARK = 0xFF454545;
+
+    private static void chest(Gfx gfx, int x, int y) {
+        gfx.fill(x + 1, y + 3, x + 15, y + 15, OAK);
+        gfx.fill(x + 1, y + 3, x + 15, y + 8, OAK_DARK);
+        gfx.fill(x + 1, y + 8, x + 15, y + 9, OAK_DARK);
+        gfx.fill(x + 7, y + 6, x + 10, y + 11, IRON_DARK);
+    }
+
+    private static void hopper(Gfx gfx, int x, int y) {
+        gfx.fill(x + 1, y + 3, x + 15, y + 6, IRON);
+        gfx.fill(x + 3, y + 6, x + 13, y + 9, IRON);
+        gfx.fill(x + 5, y + 9, x + 11, y + 11, IRON);
+        gfx.fill(x + 6, y + 11, x + 10, y + 15, IRON_DARK);
+    }
+
+    /** A magnifier, for the section about searching. */
+    private static void lens(Gfx gfx, int x, int y) {
+        gfx.fill(x + 3, y + 2, x + 11, y + 3, IRON_DARK);
+        gfx.fill(x + 3, y + 9, x + 11, y + 10, IRON_DARK);
+        gfx.fill(x + 2, y + 3, x + 3, y + 9, IRON_DARK);
+        gfx.fill(x + 11, y + 3, x + 12, y + 9, IRON_DARK);
+        gfx.fill(x + 3, y + 3, x + 11, y + 9, 0xFF9FD3E8);
+        gfx.fill(x + 10, y + 9, x + 13, y + 12, IRON_DARK);
+        gfx.fill(x + 12, y + 11, x + 15, y + 15, IRON_DARK);
+    }
+
+    private static void compass(Gfx gfx, int x, int y) {
+        gfx.fill(x + 3, y + 2, x + 13, y + 14, IRON_DARK);
+        gfx.fill(x + 4, y + 3, x + 12, y + 13, 0xFFD8D8D8);
+        gfx.fill(x + 7, y + 4, x + 9, y + 8, 0xFFC03030);
+        gfx.fill(x + 7, y + 8, x + 9, y + 12, 0xFF4A4A4A);
+    }
+
+    private static void torch(Gfx gfx, int x, int y) {
+        gfx.fill(x + 7, y + 6, x + 9, y + 15, OAK_DARK);
+        gfx.fill(x + 6, y + 2, x + 10, y + 6, 0xFFD03030);
+        gfx.fill(x + 7, y + 3, x + 9, y + 5, 0xFFFF6A6A);
     }
 
     /** A right-pointing chevron, for a row that opens something or cycles. */

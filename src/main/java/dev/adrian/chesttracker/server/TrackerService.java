@@ -247,6 +247,11 @@ public final class TrackerService {
         generations.values().forEach(java.util.concurrent.atomic.AtomicLong::incrementAndGet);
     }
 
+    /** The directory this service's index files live in. */
+    public Path storageRoot() {
+        return storageRoot;
+    }
+
     /** Where the record of already-scanned region files lives. */
     public Path scanLogFile() {
         return storageRoot.resolve("scanned-regions.txt");

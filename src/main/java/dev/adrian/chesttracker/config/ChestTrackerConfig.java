@@ -50,16 +50,17 @@ public final class ChestTrackerConfig {
     /**
      * Servers the mod turns itself off on, matched against the address joined.
      *
-     * <p>Seeded with four large public servers whose rules on client mods are
-     * strict enough that the safe default is off. They are ordinary entries -
-     * removing one is a click - but they are the answer to "I joined and forgot
-     * to think about it", which is when this matters.
+     * <p>Empty by default. It used to ship with four large public servers whose
+     * rules on client mods are strict, on the reasoning that the safe default
+     * is off - but naming four servers out of the thousands with such a rule
+     * is not a safe default, it is an arbitrary one, and it silently switched
+     * the mod off for anyone who happened to play there and never found out
+     * why. Deciding where this runs is the player's call to make.
      *
      * <p>Matched by host suffix, so {@code mcpvp.com} also covers
      * {@code eu.mcpvp.com} and a port on the end changes nothing.
      */
-    public List<String> disabledServers = new ArrayList<>(List.of(
-            "donutsmp.net", "gommehd.net", "mcpvp.com", "mcpvp.club"));
+    public List<String> disabledServers = new ArrayList<>();
 
     /**
      * Whether the mod is switched off for the address currently joined.
@@ -207,11 +208,19 @@ public final class ChestTrackerConfig {
 
     // --- Search -----------------------------------------------------------
 
-    /** Distinct items the grid will show. {@link #UNLIMITED_RESULTS} means no cap. */
-    public int maxResults = 900;
-
     /** The value {@link #maxResults} takes to mean "no limit". */
     public static final int UNLIMITED_RESULTS = 0;
+
+    /**
+     * Distinct items the grid will show. {@link #UNLIMITED_RESULTS} means no cap.
+     *
+     * <p>Unlimited by default. A cap is a performance setting wearing the
+     * clothes of a search setting: nine hundred was chosen to keep the grid
+     * cheap, but what it actually does is quietly not answer the question, and
+     * "it isn't in any of my chests" is a worse outcome than a slow grid. The
+     * slider is still there for anyone who wants the cap back.
+     */
+    public int maxResults = UNLIMITED_RESULTS;
 
     /** {@link #maxResults} as a query limit, where zero already means unlimited. */
     public int resultLimit() {

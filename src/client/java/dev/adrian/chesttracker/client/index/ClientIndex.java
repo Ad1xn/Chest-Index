@@ -130,6 +130,25 @@ public final class ClientIndex {
         bind();
     }
 
+    /** Where this client's index for the bound server lives, or null. */
+    public static Path storageRoot() {
+        return serverKey == null ? null : storageFor(serverKey);
+    }
+
+    /**
+     * Throws away everything held for the bound server.
+     *
+     * <p>The in-memory half of deleting a stored index. Without it, clearing
+     * the files under a live connection achieves nothing: the next autosave
+     * writes the same containers straight back out again.
+     */
+    public static void clearNow() {
+        TrackerService current = tracker;
+        if (current != null) current.clearIndexes();
+        dirty = false;
+        lastSaveAt = System.currentTimeMillis();
+    }
+
     /** Marks the index as having something worth writing. */
     public static void touch() {
         dirty = true;
