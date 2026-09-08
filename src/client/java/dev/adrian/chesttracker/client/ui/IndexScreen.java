@@ -7,6 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 //? if >=26.1 {
@@ -45,6 +46,13 @@ public final class IndexScreen extends Screen {
     private String problem;
 
     private String hoverTitle;
+
+    private List<String> pendingTooltip;
+
+    private int tooltipAvoidTop;
+    private int tooltipAvoidBottom;
+
+    private static final int TOOLTIP_W = 220;
 
     public IndexScreen(Screen parent) {
         super(Component.literal("Stored indexes"));
@@ -123,6 +131,7 @@ public final class IndexScreen extends Screen {
 
     private void draw(Gfx gfx, int mouseX, int mouseY) {
         hoverTitle = null;
+        pendingTooltip = null;
 
         drawCloseButton(gfx, mouseX, mouseY);
         Panel.well(gfx, contentX(), contentTop(), CONTENT_W, contentH());
@@ -138,6 +147,11 @@ public final class IndexScreen extends Screen {
                 panelX + SIDE_PAD, panelY + 6, Panel.TEXT_MAIN);
 
         drawFooter(gfx);
+
+        if (pendingTooltip != null) {
+            Panel.tooltip(gfx, font, pendingTooltip, mouseX, width, height,
+                    tooltipAvoidTop, tooltipAvoidBottom);
+        }
     }
 
     private void drawCloseButton(Gfx gfx, int mouseX, int mouseY) {
@@ -176,7 +190,10 @@ public final class IndexScreen extends Screen {
             if (i > 0) gfx.fill(left + 2, y, right - 2, y + 1, 0x18000000);
             if (index == hovered) {
                 gfx.fill(left, y + 1, right, y + ROW_H, 0x30FFFFFF);
-                hoverTitle = location.directory().toString();
+                hoverTitle = location.name();
+                pendingTooltip = describe(location);
+                tooltipAvoidTop = y;
+                tooltipAvoidBottom = y + ROW_H;
             }
 
             int buttonX = right - 4 - BUTTON_SIZE;
@@ -193,6 +210,35 @@ public final class IndexScreen extends Screen {
             }
             bin(gfx, buttonX + 3, buttonY + 3, primed ? Panel.TEXT_MAIN : Panel.ICON);
         }
+    }
+
+    private List<String> describe(IndexStore.Location location) {
+        List<String> lines = new ArrayList<>();
+        lines.add(location.name());
+        lines.add(location.describe());
+        lines.add("");
+        lines.addAll(wrapPath(location.directory().toString()));
+        return lines;
+    }
+
+    private List<String> wrapPath(String path) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (String part : path.split("(?<=/)")) {
+            if (line.length() > 0 && font.width(line + part) > TOOLTIP_W) {
+                lines.add(line.toString());
+                line.setLength(0);
+            }
+            while (font.width(part) > TOOLTIP_W) {
+                String head = font.plainSubstrByWidth(part, TOOLTIP_W);
+                if (head.isEmpty()) break;
+                lines.add(head);
+                part = part.substring(head.length());
+            }
+            line.append(part);
+        }
+        if (line.length() > 0) lines.add(line.toString());
+        return lines;
     }
 
     private void bin(Gfx gfx, int x, int y, int colour) {
