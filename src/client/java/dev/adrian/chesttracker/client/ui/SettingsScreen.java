@@ -166,6 +166,16 @@ public final class SettingsScreen extends Screen {
                                                 + "containers in chunks you have never visited are found too. "
                                                 + "Costs some throughput for a few seconds on a large world.",
                                         () -> config.scanOnWorldJoin, value -> config.scanOnWorldJoin = value),
+                                new Link("Stored indexes",
+                                        "What has been indexed, and how to throw one away.",
+                                        "Every world and server this machine holds an index for, "
+                                                + "how large each has got, and a button to delete "
+                                                + "one. An index is a cache of somebody's world, so "
+                                                + "deleting one costs a rescan and never the world "
+                                                + "itself - worth doing when a world has been edited "
+                                                + "outside the game, or for a server you played once "
+                                                + "and will not return to.",
+                                        () -> new IndexScreen(this)),
                                 new Choice("LAN/server guests may search",
                                         "Who may search once your world is opened up.",
                                         "Who may search when your world is opened to LAN, or on a server "
@@ -436,7 +446,6 @@ public final class SettingsScreen extends Screen {
                 panelW - 22, 12, Component.literal("Filter settings"));
         filterBox.setBordered(false);
         filterBox.setMaxLength(48);
-        filterBox.setHint(Component.literal("Filter settings"));
         filterBox.setValue(filter);
         filterBox.setResponder(value -> {
             filter = value;
@@ -549,6 +558,7 @@ public final class SettingsScreen extends Screen {
         hoverTitle = null;
         pendingTooltip = null;
 
+        drawPlaceholder(gfx);
         drawCloseButton(gfx, mouseX, mouseY);
         drawRail(gfx, mouseX, mouseY);
         Panel.well(gfx, contentX(), contentTop(), contentW(), contentH());
@@ -582,6 +592,12 @@ public final class SettingsScreen extends Screen {
         return font.width(full) <= titleWidth() ? full : name;
     }
 
+    private void drawPlaceholder(Gfx gfx) {
+        if (!filter.isEmpty() || filterBox == null || filterBox.isFocused()) return;
+        gfx.text(font, Component.literal("Filter settings"),
+                filterBox.getX(), filterBox.getY() + 2, Panel.TEXT_MUTED);
+    }
+
     private void drawCloseButton(Gfx gfx, int mouseX, int mouseY) {
         int x = closeX();
         int y = panelY + 3;
@@ -611,9 +627,7 @@ public final class SettingsScreen extends Screen {
 
             ItemStack icon = iconFor(candidate.icon());
             if (icon.isEmpty()) {
-                String initial = candidate.name().substring(0, 1);
-                gfx.text(font, initial, x + (RAIL_BUTTON - font.width(initial)) / 2, y + 6,
-                        Panel.TEXT_MAIN);
+                Panel.glyph(gfx, i, x + 2, y + 2);
             } else {
                 gfx.item(icon, x + 2, y + 2);
             }

@@ -24,8 +24,7 @@ public final class ChestTrackerConfig {
 
     public boolean enabled = true;
 
-    public List<String> disabledServers = new ArrayList<>(List.of(
-            "donutsmp.net", "gommehd.net", "mcpvp.com", "mcpvp.club"));
+    public List<String> disabledServers = new ArrayList<>();
 
     public boolean disabledOn(String address) {
         return matchesHost(disabledServers, address);
@@ -79,9 +78,9 @@ public final class ChestTrackerConfig {
             "minecraft:jukebox", "minecraft:lectern", "minecraft:decorated_pot",
             "minecraft:chiseled_bookshelf"));
 
-    public int maxResults = 900;
-
     public static final int UNLIMITED_RESULTS = 0;
+
+    public int maxResults = UNLIMITED_RESULTS;
 
     public int resultLimit() {
         return Math.max(0, maxResults);

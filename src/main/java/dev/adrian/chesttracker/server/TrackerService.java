@@ -162,6 +162,10 @@ public final class TrackerService {
         generations.values().forEach(java.util.concurrent.atomic.AtomicLong::incrementAndGet);
     }
 
+    public Path storageRoot() {
+        return storageRoot;
+    }
+
     public Path scanLogFile() {
         return storageRoot.resolve("scanned-regions.txt");
     }

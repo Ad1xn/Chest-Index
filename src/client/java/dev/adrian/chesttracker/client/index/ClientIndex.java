@@ -70,6 +70,17 @@ public final class ClientIndex {
         bind();
     }
 
+    public static Path storageRoot() {
+        return serverKey == null ? null : storageFor(serverKey);
+    }
+
+    public static void clearNow() {
+        TrackerService current = tracker;
+        if (current != null) current.clearIndexes();
+        dirty = false;
+        lastSaveAt = System.currentTimeMillis();
+    }
+
     public static void touch() {
         dirty = true;
     }
