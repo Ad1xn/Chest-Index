@@ -1,7 +1,11 @@
 package dev.adrian.chesttracker.client.ui;
 
 import dev.adrian.chesttracker.client.platform.Gfx;
+import net.minecraft.client.gui.Font;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+
+import java.util.List;
 
 /**
  * The chest window, drawn at whatever size is asked for.
@@ -246,6 +250,42 @@ public final class Panel {
         gfx.fillGradient(right - 1, top + 1, right, bottom - 1, TOOLTIP_EDGE_TOP, TOOLTIP_EDGE_BOTTOM);
         gfx.fill(left, top, right, top + 1, TOOLTIP_EDGE_TOP);
         gfx.fill(left, bottom - 1, right, bottom, TOOLTIP_EDGE_BOTTOM);
+    }
+
+    /**
+     * Lines of text in a vanilla tooltip frame, placed clear of a given band.
+     *
+     * <p>First line white, the rest grey - the game's own way of separating a
+     * name from what is being said about it.
+     *
+     * <p>The band is whatever the tooltip is describing, usually the hovered
+     * row. A tooltip placed at the cursor sits on top of that row, which on a
+     * row whose text is the thing you are trying to read is exactly backwards -
+     * so it goes above the band, or below it, but never over it.
+     */
+    public static void tooltip(Gfx gfx, Font font, List<String> lines,
+                               int mouseX, int screenW, int screenH,
+                               int avoidTop, int avoidBottom) {
+        if (lines.isEmpty()) return;
+
+        int textWidth = 0;
+        for (String line : lines) textWidth = Math.max(textWidth, font.width(line));
+        int textHeight = lines.size() * 10 - 2;
+
+        int textX = mouseX + 12 + textWidth + 4 > screenW ? mouseX - 16 - textWidth : mouseX + 12;
+        textX = Math.max(8, textX);
+
+        // Six pixels of clearance puts the frame's own three-pixel inset clear
+        // of the band rather than flush against it.
+        int textY = avoidTop - 6 - textHeight;
+        if (textY < 8) textY = avoidBottom + 6;
+        textY = Math.max(8, Math.min(textY, screenH - textHeight - 8));
+
+        tooltipFrame(gfx, textX, textY, textWidth, textHeight);
+        for (int i = 0; i < lines.size(); i++) {
+            gfx.text(font, Component.literal(lines.get(i)),
+                    textX, textY + i * 10, i == 0 ? TEXT_MAIN : TEXT_MUTED);
+        }
     }
 
     /**

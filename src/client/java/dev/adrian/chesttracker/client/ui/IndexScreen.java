@@ -7,6 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 //? if >=26.1 {
@@ -69,6 +70,21 @@ public final class IndexScreen extends Screen {
     private String problem;
 
     private String hoverTitle;
+
+    /** Set while drawing, drawn last so nothing covers it. */
+    private List<String> pendingTooltip;
+
+    /** The band the tooltip must stay clear of: the hovered row. */
+    private int tooltipAvoidTop;
+    private int tooltipAvoidBottom;
+
+    /**
+     * How wide the path tooltip may grow.
+     *
+     * <p>Wider than a prose tooltip. A path is one long unbreakable-looking
+     * token and the whole point of showing it is that it can be read.
+     */
+    private static final int TOOLTIP_W = 220;
 
     public IndexScreen(Screen parent) {
         super(Component.literal("Stored indexes"));
@@ -165,6 +181,7 @@ public final class IndexScreen extends Screen {
 
     private void draw(Gfx gfx, int mouseX, int mouseY) {
         hoverTitle = null;
+        pendingTooltip = null;
 
         drawCloseButton(gfx, mouseX, mouseY);
         Panel.well(gfx, contentX(), contentTop(), CONTENT_W, contentH());
@@ -180,6 +197,12 @@ public final class IndexScreen extends Screen {
                 panelX + SIDE_PAD, panelY + 6, Panel.TEXT_MAIN);
 
         drawFooter(gfx);
+
+        // Last, so nothing on the window is drawn over it.
+        if (pendingTooltip != null) {
+            Panel.tooltip(gfx, font, pendingTooltip, mouseX, width, height,
+                    tooltipAvoidTop, tooltipAvoidBottom);
+        }
     }
 
     private void drawCloseButton(Gfx gfx, int mouseX, int mouseY) {
@@ -220,7 +243,16 @@ public final class IndexScreen extends Screen {
             if (i > 0) gfx.fill(left + 2, y, right - 2, y + 1, 0x18000000);
             if (index == hovered) {
                 gfx.fill(left, y + 1, right, y + ROW_H, 0x30FFFFFF);
-                hoverTitle = location.directory().toString();
+                // The name in the title row and the path in a tooltip, rather
+                // than the path in the title row. The title row is about a
+                // hundred and forty pixels and every one of these paths is far
+                // longer than that, so it only ever showed the first third of
+                // one - which is the least useful third, being the same for all
+                // of them.
+                hoverTitle = location.name();
+                pendingTooltip = describe(location);
+                tooltipAvoidTop = y;
+                tooltipAvoidBottom = y + ROW_H;
             }
 
             int buttonX = right - 4 - BUTTON_SIZE;
@@ -237,6 +269,46 @@ public final class IndexScreen extends Screen {
             }
             bin(gfx, buttonX + 3, buttonY + 3, primed ? Panel.TEXT_MAIN : Panel.ICON);
         }
+    }
+
+    /** What the hovered row's tooltip says: what it is, and where it is. */
+    private List<String> describe(IndexStore.Location location) {
+        List<String> lines = new ArrayList<>();
+        lines.add(location.name());
+        lines.add(location.describe());
+        lines.add("");
+        lines.addAll(wrapPath(location.directory().toString()));
+        return lines;
+    }
+
+    /**
+     * Breaks a path across lines at its separators.
+     *
+     * <p>Word wrapping is no use here: a path has no spaces, so a prose wrapper
+     * puts the whole thing on one line and lets it run off the screen. Broken
+     * after the slashes instead, which is where a path reads as being divisible
+     * - and any single segment still too wide for a line is cut by width, so
+     * the tooltip cannot overflow whatever somebody has named a world.
+     */
+    private List<String> wrapPath(String path) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        // Split after each separator, keeping it on the end of its segment.
+        for (String part : path.split("(?<=/)")) {
+            if (line.length() > 0 && font.width(line + part) > TOOLTIP_W) {
+                lines.add(line.toString());
+                line.setLength(0);
+            }
+            while (font.width(part) > TOOLTIP_W) {
+                String head = font.plainSubstrByWidth(part, TOOLTIP_W);
+                if (head.isEmpty()) break;
+                lines.add(head);
+                part = part.substring(head.length());
+            }
+            line.append(part);
+        }
+        if (line.length() > 0) lines.add(line.toString());
+        return lines;
     }
 
     /** A six-by-six waste bin, because no font glyph reads as one. */

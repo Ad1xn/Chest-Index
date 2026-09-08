@@ -1036,33 +1036,9 @@ public final class SettingsScreen extends Screen {
         return lines.isEmpty() ? List.of(text) : lines;
     }
 
-    /**
-     * Lines of text in a vanilla tooltip frame, placed beside the cursor.
-     *
-     * <p>First line in white, the rest in grey: that is how the game separates
-     * a name from what is being said about it.
-     */
     private void drawTooltip(Gfx gfx, Hover hover, int mouseX) {
-        List<String> lines = hover.lines();
-        int textWidth = 0;
-        for (String line : lines) textWidth = Math.max(textWidth, font.width(line));
-        int textHeight = lines.size() * 10 - 2;
-
-        int textX = mouseX + 12 + textWidth + 4 > width ? mouseX - 16 - textWidth : mouseX + 12;
-        textX = Math.max(8, textX);
-
-        // Above the row if it fits there, below it otherwise. Six pixels of
-        // clearance puts the frame's own three-pixel inset clear of the row
-        // rather than flush against it.
-        int textY = hover.avoidTop() - 6 - textHeight;
-        if (textY < 8) textY = hover.avoidBottom() + 6;
-        textY = Math.max(8, Math.min(textY, height - textHeight - 8));
-
-        Panel.tooltipFrame(gfx, textX, textY, textWidth, textHeight);
-        for (int i = 0; i < lines.size(); i++) {
-            gfx.text(font, Component.literal(lines.get(i)),
-                    textX, textY + i * 10, i == 0 ? Panel.TEXT_MAIN : Panel.TEXT_MUTED);
-        }
+        Panel.tooltip(gfx, font, hover.lines(), mouseX, width, height,
+                hover.avoidTop(), hover.avoidBottom());
     }
 
     /**
