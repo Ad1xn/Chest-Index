@@ -155,7 +155,9 @@ public final class HighlightColourScreen extends Screen {
 
         // Inside the groove drawn for it rather than beside it, the way the
         // other two screens place their boxes.
-        hex = new EditBox(font, contentX() + 4, panelY + HEX_Y + 2, HEX_W - 8, 12,
+        // See SettingsScreen: an unbordered box draws its text at getY(), so
+        // this is the text's top row rather than the box's.
+        hex = new EditBox(font, contentX() + 4, panelY + HEX_Y + 3, HEX_W - 8, 10,
                 Component.literal("Hex"));
         hex.setBordered(false);
         hex.setMaxLength(7);

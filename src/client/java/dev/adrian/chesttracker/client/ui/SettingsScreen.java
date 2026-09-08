@@ -580,8 +580,12 @@ public final class SettingsScreen extends Screen {
 
         // Sized and placed to sit inside the groove the strip draws for it,
         // rather than beside it - the same way the tracker screen's box does.
-        filterBox = new EditBox(font, panelX + 11, panelY + Panel.TOP_H + 2,
-                panelW - 22, 12, Component.literal("Filter settings"));
+        // Four below the strip's top, not two. An unbordered EditBox draws its
+        // text at getY() with no centring at all - vanilla only centres when
+        // it is drawing its own border - so the box's y is literally the text's
+        // top row, and at +2 that row was the groove's own bevel.
+        filterBox = new EditBox(font, panelX + 11, panelY + Panel.TOP_H + 4,
+                panelW - 22, 10, Component.literal("Filter settings"));
         filterBox.setBordered(false);
         filterBox.setMaxLength(48);
         // No setHint: vanilla draws a hint at the box's top edge rather than
@@ -782,7 +786,7 @@ public final class SettingsScreen extends Screen {
     private void drawPlaceholder(Gfx gfx) {
         if (!filter.isEmpty() || filterBox == null || filterBox.isFocused()) return;
         gfx.text(font, Component.literal("Filter settings"),
-                filterBox.getX(), filterBox.getY() + 2, Panel.TEXT_MUTED);
+                filterBox.getX(), filterBox.getY(), Panel.TEXT_MUTED);
     }
 
     private void drawCloseButton(Gfx gfx, int mouseX, int mouseY) {

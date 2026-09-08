@@ -1,5 +1,6 @@
 package dev.adrian.chesttracker.client.ui;
 
+import dev.adrian.chesttracker.ChestTracker;
 import dev.adrian.chesttracker.client.index.IndexStore;
 import dev.adrian.chesttracker.client.platform.Gfx;
 import net.minecraft.client.gui.screens.Screen;
@@ -77,15 +78,38 @@ public final class IndexScreen extends Screen {
     private static final int CHROME_H =
             Panel.TOP_H + PAD + 2 + PAD + Panel.BOTTOM_H;
 
+    /**
+     * Lays the window out first, then reads the disk.
+     *
+     * <p>The order matters and is the whole reason this is commented. Reading
+     * came first, and when it threw - a corrupted mod jar, in the case that
+     * found this - {@code init} never reached the two lines that place the
+     * window. Vanilla carries on rendering a screen whose init failed, so the
+     * panel drew at 0,0 with a zero size: a window jammed into the top-left
+     * corner, which looks like a layout bug and is actually an exception three
+     * frames earlier.
+     *
+     * <p>So the geometry is set from {@code width} and {@code height} alone,
+     * which cannot fail, and the listing is fetched afterwards behind a guard.
+     */
     @Override
     protected void init() {
-        locations = IndexStore.all();
-
         int room = height - 40 - CHROME_H;
         visibleRows = Math.max(MIN_ROWS, Math.min(MAX_ROWS, room / ROW_H));
 
         panelX = (width - PANEL_W) / 2;
         panelY = (height - panelH()) / 2;
+
+        try {
+            locations = IndexStore.all();
+            problem = null;
+        } catch (RuntimeException unreadable) {
+            // Nothing here is worth taking the game down for. The screen still
+            // draws, and the footer says why it is empty.
+            locations = List.of();
+            problem = "Could not read the index folders.";
+            ChestTracker.LOG.warn("Could not list stored indexes: {}", unreadable.toString());
+        }
         scroll = Math.min(scroll, maxScroll());
     }
 
@@ -284,12 +308,17 @@ public final class IndexScreen extends Screen {
             return true;
         }
 
-        problem = IndexStore.delete(locations.get(index));
+        try {
+            problem = IndexStore.delete(locations.get(index));
+            // Re-read rather than removing the row by hand, so a delete that
+            // only half worked shows what is actually left.
+            locations = IndexStore.all();
+        } catch (RuntimeException failed) {
+            problem = "Could not delete it.";
+            ChestTracker.LOG.warn("Could not delete a stored index: {}", failed.toString());
+        }
         armed = -1;
         VanillaButton.playClick();
-        // Re-read rather than removing the row by hand, so a delete that only
-        // half worked shows what is actually left.
-        locations = IndexStore.all();
         scroll = Math.min(scroll, maxScroll());
         return true;
     }

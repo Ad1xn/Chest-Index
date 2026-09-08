@@ -158,8 +158,17 @@ public final class IndexStore {
         return new Location(name, directory, kind, bytes, dimensions, active);
     }
 
-    /** The world the integrated server is running, or null if none is. */
+    /**
+     * The world the integrated server is running, or null if none is.
+     *
+     * <p>Gated on there being a singleplayer server at all, so that at the
+     * title screen this never loads {@link Trackers} - a class the client has
+     * no other reason to touch, and whose loading is the one thing here that
+     * can fail for reasons that have nothing to do with indexes.
+     */
     private static Path activeWorldRoot() {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.getSingleplayerServer() == null) return null;
         var service = Trackers.current();
         return service == null ? null : service.storageRoot();
     }
