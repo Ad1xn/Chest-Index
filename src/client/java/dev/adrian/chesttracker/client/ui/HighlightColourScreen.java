@@ -89,7 +89,7 @@ public final class HighlightColourScreen extends Screen {
         panelX = (width - PANEL_W) / 2;
         panelY = (height - PANEL_H) / 2;
 
-        hex = new EditBox(font, contentX() + 4, panelY + HEX_Y + 2, HEX_W - 8, 12,
+        hex = new EditBox(font, contentX() + 4, panelY + HEX_Y + 3, HEX_W - 8, 10,
                 Component.literal("Hex"));
         hex.setBordered(false);
         hex.setMaxLength(7);

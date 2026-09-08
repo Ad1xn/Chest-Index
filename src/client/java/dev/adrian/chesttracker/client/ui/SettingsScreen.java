@@ -442,8 +442,8 @@ public final class SettingsScreen extends Screen {
         panelX = (width - panelW) / 2;
         panelY = (height - panelH()) / 2;
 
-        filterBox = new EditBox(font, panelX + 11, panelY + Panel.TOP_H + 2,
-                panelW - 22, 12, Component.literal("Filter settings"));
+        filterBox = new EditBox(font, panelX + 11, panelY + Panel.TOP_H + 4,
+                panelW - 22, 10, Component.literal("Filter settings"));
         filterBox.setBordered(false);
         filterBox.setMaxLength(48);
         filterBox.setValue(filter);
@@ -595,7 +595,7 @@ public final class SettingsScreen extends Screen {
     private void drawPlaceholder(Gfx gfx) {
         if (!filter.isEmpty() || filterBox == null || filterBox.isFocused()) return;
         gfx.text(font, Component.literal("Filter settings"),
-                filterBox.getX(), filterBox.getY() + 2, Panel.TEXT_MUTED);
+                filterBox.getX(), filterBox.getY(), Panel.TEXT_MUTED);
     }
 
     private void drawCloseButton(Gfx gfx, int mouseX, int mouseY) {

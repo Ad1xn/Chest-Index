@@ -102,6 +102,8 @@ public final class IndexStore {
     }
 
     private static Path activeWorldRoot() {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.getSingleplayerServer() == null) return null;
         var service = Trackers.current();
         return service == null ? null : service.storageRoot();
     }

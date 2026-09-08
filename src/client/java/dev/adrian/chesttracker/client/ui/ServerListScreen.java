@@ -225,8 +225,8 @@ public final class ServerListScreen extends Screen {
         panelX = (width - PANEL_W) / 2;
         panelY = (height - panelH()) / 2;
 
-        input = new EditBox(font, panelX + 11, panelY + Panel.TOP_H + 2,
-                PANEL_W - 22, 12, Component.literal("Add"));
+        input = new EditBox(font, panelX + 11, panelY + Panel.TOP_H + 4,
+                PANEL_W - 22, 10, Component.literal("Add"));
         input.setBordered(false);
         input.setMaxLength(120);
         input.setResponder(typed -> {
@@ -263,7 +263,7 @@ public final class ServerListScreen extends Screen {
     private void drawPlaceholder(Gfx gfx) {
         if (input == null || !input.getValue().isEmpty() || input.isFocused()) return;
         gfx.text(font, Component.literal("Type one (e.g. " + hint + ") and press enter"),
-                input.getX(), input.getY() + 2, Panel.TEXT_MUTED);
+                input.getX(), input.getY(), Panel.TEXT_MUTED);
     }
 
     private void drawCloseButton(Gfx gfx, int mouseX, int mouseY) {

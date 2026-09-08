@@ -1,5 +1,6 @@
 package dev.adrian.chesttracker.client.ui;
 
+import dev.adrian.chesttracker.ChestTracker;
 import dev.adrian.chesttracker.client.index.IndexStore;
 import dev.adrian.chesttracker.client.platform.Gfx;
 import net.minecraft.client.gui.screens.Screen;
@@ -55,13 +56,20 @@ public final class IndexScreen extends Screen {
 
     @Override
     protected void init() {
-        locations = IndexStore.all();
-
         int room = height - 40 - CHROME_H;
         visibleRows = Math.max(MIN_ROWS, Math.min(MAX_ROWS, room / ROW_H));
 
         panelX = (width - PANEL_W) / 2;
         panelY = (height - panelH()) / 2;
+
+        try {
+            locations = IndexStore.all();
+            problem = null;
+        } catch (RuntimeException unreadable) {
+            locations = List.of();
+            problem = "Could not read the index folders.";
+            ChestTracker.LOG.warn("Could not list stored indexes: {}", unreadable.toString());
+        }
         scroll = Math.min(scroll, maxScroll());
     }
 
@@ -251,10 +259,15 @@ public final class IndexScreen extends Screen {
             return true;
         }
 
-        problem = IndexStore.delete(locations.get(index));
+        try {
+            problem = IndexStore.delete(locations.get(index));
+            locations = IndexStore.all();
+        } catch (RuntimeException failed) {
+            problem = "Could not delete it.";
+            ChestTracker.LOG.warn("Could not delete a stored index: {}", failed.toString());
+        }
         armed = -1;
         VanillaButton.playClick();
-        locations = IndexStore.all();
         scroll = Math.min(scroll, maxScroll());
         return true;
     }
