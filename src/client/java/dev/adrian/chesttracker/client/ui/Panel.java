@@ -263,69 +263,81 @@ public final class Panel {
         gfx.fill(x + 5, y, x + 6, y + 2, colour);
     }
 
+    // --- section icons, for when the real item cannot be drawn ---------------
+
     /**
-     * The section glyphs, for when the real item cannot be drawn.
+     * Vanilla's own art for the five settings sections.
      *
      * <p>26.2 does not bind an item's components until a world is loaded, so
      * {@code new ItemStack(item)} throws at the title screen and the rail has
-     * nothing to draw. It used to fall back to the section's initial, which
-     * read as a screen that had failed to load rather than as a deliberate
-     * icon. These are blocky on purpose - the game's own idiom - and sized to
-     * sit where the sixteen-pixel item would.
+     * no item to render. It used to fall back to the section's initial, and
+     * then to glyphs drawn here by hand - which was this mod's idea of what a
+     * hopper looks like rather than the game's, the same mistake the tooltips
+     * and buttons elsewhere were written to avoid.
+     *
+     * <p>These are the textures themselves, blitted straight out of the
+     * assets. They need no components and no world, they are the pixels Mojang
+     * drew, and a resource pack repaints them along with everything else on
+     * the window.
+     */
+    private static final Identifier HOPPER = Identifier.parse("minecraft:textures/item/hopper.png");
+    private static final Identifier SPYGLASS = Identifier.parse("minecraft:textures/item/spyglass.png");
+
+    /** One frame of the compass, which is thirty-two files rather than one. */
+    private static final Identifier COMPASS = Identifier.parse("minecraft:textures/item/compass_16.png");
+
+    private static final Identifier REDSTONE_TORCH =
+            Identifier.parse("minecraft:textures/block/redstone_torch.png");
+
+    /**
+     * The chest, which has no flat texture of its own.
+     *
+     * <p>A chest is a block entity: its art is an unwrapped 64x64 model sheet,
+     * not a sixteen-pixel icon. So the front is rebuilt from it - the lid's
+     * front face, the base's front face under it, and the lock across the seam
+     * - at the offsets the chest model itself uses.
+     */
+    private static final Identifier CHEST =
+            Identifier.parse("minecraft:textures/entity/chest/normal.png");
+
+    private static final int CHEST_SHEET = 64;
+
+    /** Where a sixteen-pixel icon sits inside a twenty-pixel rail button. */
+    private static final int ICON_INSET = 2;
+
+    /**
+     * Draws one section's icon at its rail button's top-left corner.
      *
      * @param index which section, in rail order
      */
-    public static void glyph(Gfx gfx, int index, int x, int y) {
+    public static void sectionIcon(Gfx gfx, int index, int x, int y) {
         switch (index) {
-            case 0 -> chest(gfx, x, y);
-            case 1 -> hopper(gfx, x, y);
-            case 2 -> lens(gfx, x, y);
-            case 3 -> compass(gfx, x, y);
-            default -> torch(gfx, x, y);
+            case 0 -> chestFront(gfx, x + 3, y + ICON_INSET);
+            case 1 -> icon(gfx, HOPPER, x, y);
+            case 2 -> icon(gfx, SPYGLASS, x, y);
+            case 3 -> icon(gfx, COMPASS, x, y);
+            default -> icon(gfx, REDSTONE_TORCH, x, y);
         }
     }
 
-    private static final int OAK = 0xFF9E6B3F;
-    private static final int OAK_DARK = 0xFF6B4527;
-    private static final int IRON = 0xFF6E6E6E;
-    private static final int IRON_DARK = 0xFF454545;
-
-    private static void chest(Gfx gfx, int x, int y) {
-        gfx.fill(x + 1, y + 3, x + 15, y + 15, OAK);
-        gfx.fill(x + 1, y + 3, x + 15, y + 8, OAK_DARK);
-        gfx.fill(x + 1, y + 8, x + 15, y + 9, OAK_DARK);
-        gfx.fill(x + 7, y + 6, x + 10, y + 11, IRON_DARK);
+    /** A whole 16x16 texture, drawn where the item would have been. */
+    private static void icon(Gfx gfx, Identifier texture, int x, int y) {
+        gfx.blit(texture, x + ICON_INSET, y + ICON_INSET, 0, 0, 16, 16, 16, 16);
     }
 
-    private static void hopper(Gfx gfx, int x, int y) {
-        gfx.fill(x + 1, y + 3, x + 15, y + 6, IRON);
-        gfx.fill(x + 3, y + 6, x + 13, y + 9, IRON);
-        gfx.fill(x + 5, y + 9, x + 11, y + 11, IRON);
-        gfx.fill(x + 6, y + 11, x + 10, y + 15, IRON_DARK);
-    }
-
-    /** A magnifier, for the section about searching. */
-    private static void lens(Gfx gfx, int x, int y) {
-        gfx.fill(x + 3, y + 2, x + 11, y + 3, IRON_DARK);
-        gfx.fill(x + 3, y + 9, x + 11, y + 10, IRON_DARK);
-        gfx.fill(x + 2, y + 3, x + 3, y + 9, IRON_DARK);
-        gfx.fill(x + 11, y + 3, x + 12, y + 9, IRON_DARK);
-        gfx.fill(x + 3, y + 3, x + 11, y + 9, 0xFF9FD3E8);
-        gfx.fill(x + 10, y + 9, x + 13, y + 12, IRON_DARK);
-        gfx.fill(x + 12, y + 11, x + 15, y + 15, IRON_DARK);
-    }
-
-    private static void compass(Gfx gfx, int x, int y) {
-        gfx.fill(x + 3, y + 2, x + 13, y + 14, IRON_DARK);
-        gfx.fill(x + 4, y + 3, x + 12, y + 13, 0xFFD8D8D8);
-        gfx.fill(x + 7, y + 4, x + 9, y + 8, 0xFFC03030);
-        gfx.fill(x + 7, y + 8, x + 9, y + 12, 0xFF4A4A4A);
-    }
-
-    private static void torch(Gfx gfx, int x, int y) {
-        gfx.fill(x + 7, y + 6, x + 9, y + 15, OAK_DARK);
-        gfx.fill(x + 6, y + 2, x + 10, y + 6, 0xFFD03030);
-        gfx.fill(x + 7, y + 3, x + 9, y + 5, 0xFFFF6A6A);
+    /**
+     * The chest's front, 14 wide and 15 tall.
+     *
+     * <p>The offsets are the chest model's own: the lid is a 14x5x14 box at
+     * texture origin (0,0) and the base a 14x10x14 box at (0,19), and a box's
+     * front face sits one depth in and one depth down from its origin - so
+     * (14,14) and (14,33). The lock is a 2x4x1 box at (0,0), front face at
+     * (1,1), and it straddles the seam between the two.
+     */
+    private static void chestFront(Gfx gfx, int x, int y) {
+        gfx.blit(CHEST, x, y, 14, 14, 14, 5, CHEST_SHEET, CHEST_SHEET);
+        gfx.blit(CHEST, x, y + 5, 14, 33, 14, 10, CHEST_SHEET, CHEST_SHEET);
+        gfx.blit(CHEST, x + 6, y + 3, 1, 1, 2, 4, CHEST_SHEET, CHEST_SHEET);
     }
 
     /** A right-pointing chevron, for a row that opens something or cycles. */

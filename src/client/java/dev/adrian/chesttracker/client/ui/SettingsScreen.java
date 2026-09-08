@@ -829,11 +829,12 @@ public final class SettingsScreen extends Screen {
             ItemStack icon = iconFor(candidate.icon());
             if (icon.isEmpty()) {
                 // 26.2 does not bind item components until a world is loaded,
-                // so the real item cannot be built at the title screen. A drawn
-                // glyph rather than the section's initial: a letter in a button
-                // reads as an icon that failed to load, which is exactly what
-                // it was being mistaken for.
-                Panel.glyph(gfx, i, x + 2, y + 2);
+                // so the real item cannot be built at the title screen. The
+                // texture can be, though - so the same art is blitted straight
+                // out of the assets rather than approximated or replaced by a
+                // letter, and the rail looks the same before and after a world
+                // is open.
+                Panel.sectionIcon(gfx, i, x, y);
             } else {
                 gfx.item(icon, x + 2, y + 2);
             }
@@ -1095,10 +1096,12 @@ public final class SettingsScreen extends Screen {
 
         Identifier identifier = Identifier.tryParse(itemId);
         Item item = identifier == null ? null : BuiltInRegistries.ITEM.getValue(identifier);
-        if (item == null) {
-            ICON_CACHE.put(itemId, ItemStack.EMPTY);
-            return ItemStack.EMPTY;
-        }
+        // A miss is never cached. The cache is static and outlives every
+        // screen, so caching one would mean a lookup that failed once - during
+        // a resource reload, or before a registry holds what it will hold -
+        // leaving that section on its fallback for the rest of the session
+        // with no way back short of restarting the game.
+        if (item == null) return ItemStack.EMPTY;
 
         try {
             ItemStack icon = new ItemStack(item);
