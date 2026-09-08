@@ -627,7 +627,7 @@ public final class SettingsScreen extends Screen {
 
             ItemStack icon = iconFor(candidate.icon());
             if (icon.isEmpty()) {
-                Panel.glyph(gfx, i, x + 2, y + 2);
+                Panel.sectionIcon(gfx, i, x, y);
             } else {
                 gfx.item(icon, x + 2, y + 2);
             }
@@ -821,10 +821,7 @@ public final class SettingsScreen extends Screen {
 
         Identifier identifier = Identifier.tryParse(itemId);
         Item item = identifier == null ? null : BuiltInRegistries.ITEM.getValue(identifier);
-        if (item == null) {
-            ICON_CACHE.put(itemId, ItemStack.EMPTY);
-            return ItemStack.EMPTY;
-        }
+        if (item == null) return ItemStack.EMPTY;
 
         try {
             ItemStack icon = new ItemStack(item);
