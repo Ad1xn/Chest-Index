@@ -298,6 +298,7 @@ public final class ChestTrackerScreen extends Screen {
                 minecraft.execute(() -> {
                     if (response.requestId() <= newestItemsReply) return;
                     newestItemsReply = response.requestId();
+                    backgroundAnswered();
                     items = sorted(withoutOtherTabs(response.items()));
                     itemsStale = false;
                     if (!resetView) {
@@ -317,6 +318,7 @@ public final class ChestTrackerScreen extends Screen {
                     if (!itemId.equals(selectedItemId)) return;
                     if (response.requestId() <= newestContainersReply) return;
                     newestContainersReply = response.requestId();
+                    backgroundAnswered();
                     containers = response.hits();
                     containersPending = false;
                     detailScroll = Math.min(detailScroll, maxDetailScroll());
@@ -336,9 +338,10 @@ public final class ChestTrackerScreen extends Screen {
         if (token == lastChangeToken) return;
 
         long now = System.currentTimeMillis();
-        if (now - lastAutoRefresh < AUTO_REFRESH_MIN_MS) return;
+        if (now - lastAutoRefresh < backgroundInterval()) return;
         lastChangeToken = token;
         lastAutoRefresh = now;
+        backgroundStartedAt = now;
 
         if (selectedItemId == null) {
             refreshItems(false);
@@ -346,6 +349,25 @@ public final class ChestTrackerScreen extends Screen {
             refreshContainers();
             itemsStale = true;
         }
+    }
+
+    private long backgroundInterval() {
+        long scaled = lastQueryMs * BACKGROUND_COST_MULTIPLE;
+        return Math.max(AUTO_REFRESH_MIN_MS, Math.min(AUTO_REFRESH_MAX_MS, scaled));
+    }
+
+    private static final int BACKGROUND_COST_MULTIPLE = 8;
+
+    private static final long AUTO_REFRESH_MAX_MS = 3000;
+
+    private long backgroundStartedAt;
+
+    private long lastQueryMs;
+
+    private void backgroundAnswered() {
+        if (backgroundStartedAt == 0L) return;
+        lastQueryMs = Math.max(0L, System.currentTimeMillis() - backgroundStartedAt);
+        backgroundStartedAt = 0L;
     }
 
     private boolean canQuery() {

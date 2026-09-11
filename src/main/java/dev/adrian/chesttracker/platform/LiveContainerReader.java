@@ -16,8 +16,14 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.component.ItemContainerContents;
 
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
+
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class LiveContainerReader {
 
@@ -46,7 +52,15 @@ public final class LiveContainerReader {
     }
 
     private static List<Integer> detailsOf(ItemStack stack, String customName, StringPalette palette) {
-        List<Integer> details = new ArrayList<>(0);
+        if (customName == null
+                && stack.get(DataComponents.ENCHANTMENTS) == null
+                && stack.get(DataComponents.STORED_ENCHANTMENTS) == null
+                && stack.get(DataComponents.POTION_CONTENTS) == null
+                && stack.get(DataComponents.LORE) == null) {
+            return List.of();
+        }
+
+        List<Integer> details = new ArrayList<>(4);
 
         addEnchantments(stack.get(DataComponents.ENCHANTMENTS), details, palette);
         addEnchantments(stack.get(DataComponents.STORED_ENCHANTMENTS), details, palette);
@@ -86,12 +100,27 @@ public final class LiveContainerReader {
         if (!details.contains(id)) details.add(id);
     }
 
+    private static final Map<Item, String> ITEM_IDS =
+            Collections.synchronizedMap(new IdentityHashMap<>());
+
+    private static String idOf(Item item) {
+        String cached = ITEM_IDS.get(item);
+        if (cached != null) return cached;
+
+        Identifier key = BuiltInRegistries.ITEM.getKey(item);
+        if (key == null) return null;
+        String id = key.toString();
+        ITEM_IDS.put(item, id);
+        return id;
+    }
+
     private static void appendStack(ItemStack stack, List<StackEntry> out, int depth, StringPalette palette) {
         if (depth > MAX_NESTING) return;
 
         if (stack == null || stack.isEmpty()) return;
 
-        String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        String itemId = idOf(stack.getItem());
+        if (itemId == null) return;
         Component customName = stack.get(DataComponents.CUSTOM_NAME);
         String name = customName == null ? null : customName.getString();
         out.add(new StackEntry(

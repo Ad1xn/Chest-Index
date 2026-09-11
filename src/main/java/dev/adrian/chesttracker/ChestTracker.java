@@ -52,13 +52,14 @@ public final class ChestTracker implements ModInitializer {
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            Trackers.drainDirty();
+            long tickNanos = (long) (server.getCurrentSmoothedTickTime() * 1_000_000.0f);
+
+            Trackers.drainDirty(tickNanos);
 
             ChestTrackerNetwork.flushChanges(server);
 
             RegionScanner scanner = Trackers.regionScanner();
             if (scanner == null) return;
-            long tickNanos = (long) (server.getCurrentSmoothedTickTime() * 1_000_000.0f);
             scanner.drain(Trackers::isChunkLoaded, Trackers::liveScanChunk, tickNanos);
         });
 

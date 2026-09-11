@@ -33,10 +33,20 @@ public final class ContainerTypes {
 
     private final Set<String> known = Collections.synchronizedSet(new LinkedHashSet<>(VANILLA));
 
+    private static final java.util.Map<BlockEntityType<?>, String> IDS =
+            java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+
     public static String idOf(BlockEntity blockEntity) {
         BlockEntityType<?> type = blockEntity.getType();
+
+        String cached = IDS.get(type);
+        if (cached != null) return cached;
+
         var key = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type);
-        return key == null ? null : key.toString();
+        if (key == null) return null;
+        String id = key.toString();
+        IDS.put(type, id);
+        return id;
     }
 
     public static boolean isContainer(BlockEntity blockEntity) {

@@ -34,6 +34,20 @@ public final class Session {
     }
 
     public static boolean active() {
+        long now = System.currentTimeMillis();
+        if (now - activeAt < ACTIVE_CACHE_MS) return activeAnswer;
+        activeAnswer = computeActive();
+        activeAt = now;
+        return activeAnswer;
+    }
+
+    private static final long ACTIVE_CACHE_MS = 50;
+
+    private static boolean activeAnswer;
+
+    private static long activeAt;
+
+    private static boolean computeActive() {
         ChestTrackerConfig config = ChestTrackerConfig.get();
         if (!config.enabled) return false;
         if (ownWorld()) return true;
@@ -110,7 +124,10 @@ public final class Session {
     public static void warnAboutEntities() {
         if (warnedAboutEntities || !active()) return;
         if (Minecraft.getInstance().level == null) return;
-        if (ownWorld()) return;
+        if (ownWorld()) {
+            warnedAboutEntities = true;
+            return;
+        }
 
         ChestTrackerConfig config = ChestTrackerConfig.get();
         if (!config.trackEntityContainers) return;
@@ -126,5 +143,6 @@ public final class Session {
         wasActive = true;
         lastReminderAt = 0L;
         warnedAboutEntities = false;
+        activeAt = 0L;
     }
 }

@@ -33,9 +33,9 @@ public final class SlotHighlight {
         Set<Item> targets = resolve(wanted);
         if (targets.isEmpty()) return;
 
-        retireWhatIsFound(screen, wanted);
-
         Set<Item> hints = resolveHints(ContainerHighlight.get().hintItemIds());
+
+        byte[] marks = marks(screen, wanted, targets, hints);
 
         ChestTrackerConfig config = ChestTrackerConfig.get();
         int direct = alpha(0xFF000000 | config.nearestColour);
@@ -45,19 +45,13 @@ public final class SlotHighlight {
         boolean outline = style.drawsOutline();
         boolean background = style.drawsBackground();
 
-        for (Slot slot : screen.getMenu().slots) {
-            ItemStack stack = slot.getItem();
-            if (stack.isEmpty()) continue;
+        java.util.List<Slot> slots = screen.getMenu().slots;
+        for (int index = 0; index < slots.size() && index < marks.length; index++) {
+            byte mark = marks[index];
+            if (mark == NOT_MARKED) continue;
 
-            int colour;
-            if (targets.contains(stack.getItem())) {
-                colour = direct;
-            } else if (hints.contains(stack.getItem()) || holds(stack, targets, MAX_DEPTH)) {
-                colour = inside;
-            } else {
-                continue;
-            }
-
+            int colour = mark == MARK_DIRECT ? direct : inside;
+            Slot slot = slots.get(index);
             int x = leftPos + slot.x;
             int y = topPos + slot.y;
 
@@ -71,6 +65,50 @@ public final class SlotHighlight {
                 gfx.fill(x + 16, y, x + 17, y + 16, colour);
             }
         }
+    }
+
+    private static final byte NOT_MARKED = 0;
+
+    private static final byte MARK_DIRECT = 1;
+
+    private static final byte MARK_INSIDE = 2;
+
+    private static final long RECOMPUTE_MS = 100;
+
+    private static byte[] marked = new byte[0];
+    private static java.lang.ref.WeakReference<Object> markedMenu = new java.lang.ref.WeakReference<>(null);
+    private static Set<String> markedFor = Set.of();
+    private static long markedAt;
+
+    private static byte[] marks(AbstractContainerScreen<?> screen, Set<String> wanted,
+                                Set<Item> targets, Set<Item> hints) {
+        java.util.List<Slot> slots = screen.getMenu().slots;
+        long now = System.currentTimeMillis();
+
+        boolean current = markedMenu.get() == screen.getMenu()
+                && markedFor == wanted
+                && marked.length == slots.size()
+                && now - markedAt < RECOMPUTE_MS;
+        if (current) return marked;
+
+        retireWhatIsFound(screen, wanted);
+
+        byte[] decided = new byte[slots.size()];
+        for (int index = 0; index < slots.size(); index++) {
+            ItemStack stack = slots.get(index).getItem();
+            if (stack.isEmpty()) continue;
+            if (targets.contains(stack.getItem())) {
+                decided[index] = MARK_DIRECT;
+            } else if (hints.contains(stack.getItem()) || holds(stack, targets, MAX_DEPTH)) {
+                decided[index] = MARK_INSIDE;
+            }
+        }
+
+        marked = decided;
+        markedMenu = new java.lang.ref.WeakReference<>(screen.getMenu());
+        markedFor = wanted;
+        markedAt = now;
+        return decided;
     }
 
     private static int dim(int colour) {

@@ -11,6 +11,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class ClientIndex {
 
@@ -23,6 +28,17 @@ public final class ClientIndex {
     private static boolean dirty;
 
     private static long lastSaveAt;
+
+    private static final ExecutorService WRITER = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "ChestTracker-ClientIndexSave");
+        thread.setDaemon(true);
+        thread.setPriority(Thread.MIN_PRIORITY);
+        return thread;
+    });
+
+    private static final AtomicInteger outstanding = new AtomicInteger();
+
+    private static final Map<String, Long> savedGenerations = new ConcurrentHashMap<>();
 
     private static final long SAVE_INTERVAL_MS = 60_000;
 
@@ -59,10 +75,11 @@ public final class ClientIndex {
     }
 
     public static void unbind() {
-        if (tracker != null) saveNow();
+        if (tracker != null) save(true);
         tracker = null;
         serverKey = null;
         dirty = false;
+        savedGenerations.clear();
     }
 
     public static void bindIfNeeded() {
@@ -79,6 +96,7 @@ public final class ClientIndex {
         if (current != null) current.clearIndexes();
         dirty = false;
         lastSaveAt = System.currentTimeMillis();
+        savedGenerations.clear();
     }
 
     public static void touch() {
@@ -93,10 +111,17 @@ public final class ClientIndex {
     }
 
     public static void saveNow() {
+        save(false);
+    }
+
+    private static void save(boolean force) {
         TrackerService current = tracker;
         if (current == null) return;
 
         lastSaveAt = System.currentTimeMillis();
+
+        if (!force && outstanding.get() > 0) return;
+
         dirty = false;
 
         Path root = storageFor(serverKey);
@@ -104,27 +129,33 @@ public final class ClientIndex {
         for (String dimensionId : current.dimensions()) {
             WorldIndex index = current.index(dimensionId);
             if (index.isEmpty()) continue;
-            saves.add(new Save(root.resolve(fileNameFor(dimensionId)),
+            long generation = current.generation(dimensionId);
+            Long written = savedGenerations.get(dimensionId);
+            if (written != null && written == generation) continue;
+            saves.add(new Save(root.resolve(fileNameFor(dimensionId)), dimensionId, generation,
                     IndexCodec.Frozen.of(current.palette(), index)));
         }
         if (saves.isEmpty()) return;
 
-        Thread writer = new Thread(() -> {
-            for (Save save : saves) {
-                try {
-                    IndexCodec.write(save.file(), save.frozen());
-                } catch (IOException e) {
-                    ChestTracker.LOG.warn("Could not save the client index {}: {}",
-                            save.file(), e.toString());
+        outstanding.incrementAndGet();
+        WRITER.execute(() -> {
+            try {
+                for (Save save : saves) {
+                    try {
+                        IndexCodec.write(save.file(), save.frozen());
+                        savedGenerations.put(save.dimensionId(), save.generation());
+                    } catch (IOException e) {
+                        ChestTracker.LOG.warn("Could not save the client index {}: {}",
+                                save.file(), e.toString());
+                    }
                 }
+            } finally {
+                outstanding.decrementAndGet();
             }
-        }, "ChestTracker-ClientIndexSave");
-        writer.setDaemon(true);
-        writer.setPriority(Thread.MIN_PRIORITY);
-        writer.start();
+        });
     }
 
-    private record Save(Path file, IndexCodec.Frozen frozen) {}
+    private record Save(Path file, String dimensionId, long generation, IndexCodec.Frozen frozen) {}
 
     private static Path storageFor(String key) {
         return FabricLoader.getInstance().getConfigDir()

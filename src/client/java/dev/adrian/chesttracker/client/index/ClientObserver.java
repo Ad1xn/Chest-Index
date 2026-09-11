@@ -101,10 +101,20 @@ public final class ClientObserver {
         if (tracker == null) return;
 
         String dimensionId = dimensionOf(level);
+        long chunkKey = BlockKey.chunkKey(
+                ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
+
+        Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
+        if (blockEntities.isEmpty()
+                && tracker.index(dimensionId).positionsInChunk(chunkKey).isEmpty()) {
+            return;
+        }
+
         int dimensionKey = tracker.palette().intern(dimensionId);
         long tick = level.getGameTime();
+        long before = tracker.generation(dimensionId);
 
-        for (Map.Entry<BlockPos, BlockEntity> entry : chunk.getBlockEntities().entrySet()) {
+        for (Map.Entry<BlockPos, BlockEntity> entry : blockEntities.entrySet()) {
             BlockEntity blockEntity = entry.getValue();
             if (!ContainerTypes.isContainer(blockEntity)) continue;
 
@@ -122,10 +132,8 @@ public final class ClientObserver {
                     key, dimensionKey, tracker.palette().intern(typeId), Origin.UNKNOWN, tick));
         }
 
-        long chunkKey = BlockKey.chunkKey(
-                ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
         dropBrokenContainers(tracker, dimensionId, chunkKey, chunk);
-        ClientIndex.touch();
+        if (tracker.generation(dimensionId) != before) ClientIndex.touch();
     }
 
     private static void dropBrokenContainers(TrackerService tracker, String dimensionId,
@@ -142,21 +150,29 @@ public final class ClientObserver {
     }
 
     private static void onBlockChanged(Level level, BlockPos pos) {
-        TrackerService tracker = active();
-        if (tracker == null) return;
         if (level != Minecraft.getInstance().level) return;
         if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) return;
 
         long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
-        String dimensionId = dimensionOf(level);
-        if (tracker.index(dimensionId).get(key) == null) return;
+
+        dev.adrian.chesttracker.client.highlight.ContainerHighlight highlight =
+                dev.adrian.chesttracker.client.highlight.ContainerHighlight.get();
+        boolean highlighted = highlight.holds(key);
+
+        TrackerService tracker = active();
+        String dimensionId = tracker == null ? null : dimensionOf(level);
+        boolean indexed = tracker != null && tracker.index(dimensionId).get(key) != null;
+
+        if (!highlighted && !indexed) return;
 
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (blockEntity != null && ContainerTypes.isContainer(blockEntity)) return;
 
-        tracker.remove(dimensionId, key);
-        ClientIndex.touch();
-        dev.adrian.chesttracker.client.highlight.ContainerHighlight.get().forget(key);
+        if (indexed) {
+            tracker.remove(dimensionId, key);
+            ClientIndex.touch();
+        }
+        if (highlighted) highlight.forget(key);
     }
 
     private static void beginWatching(Screen screen) {

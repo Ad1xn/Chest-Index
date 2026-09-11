@@ -163,6 +163,13 @@ public final class ContainerHighlight {
         return carriedUntil > 0 && System.currentTimeMillis() < carriedUntil;
     }
 
+    public boolean holds(long position) {
+        for (int i = 0; i < positions.size(); i++) {
+            if (positions.get(i) == position) return true;
+        }
+        return false;
+    }
+
     public void forget(long position) {
         if (positions.isEmpty()) return;
         List<Long> remaining = new java.util.ArrayList<>(positions.size());
@@ -279,12 +286,12 @@ public final class ContainerHighlight {
         java.util.Set<Long> present = positionSet();
 
         int drawn = 0;
-        for (Long position : positions) {
+        for (int index = 0; index < positions.size(); index++) {
             if (drawn >= MAX_BOXES) break;
+            long position = positions.get(index);
 
             Entity entity = entityAt(position);
-            Span span = entity != null ? SINGLE_SPAN
-                    : spanAt(BlockKey.x(position), BlockKey.y(position), BlockKey.z(position));
+            Span span = entity != null ? SINGLE_SPAN : spanFor(index, position);
 
             if (span.partner() != NO_PARTNER && present.contains(span.partner())
                     && span.partner() < position) {
@@ -334,6 +341,29 @@ public final class ContainerHighlight {
             }
             drawn++;
         }
+    }
+
+    private static final long SPAN_CACHE_MS = 500;
+
+    private List<Long> spanSource;
+    private Span[] spans = new Span[0];
+    private long spansAt;
+
+    private Span spanFor(int index, long position) {
+        long now = System.currentTimeMillis();
+        if (spanSource != positions || spans.length != positions.size()
+                || now - spansAt >= SPAN_CACHE_MS) {
+            spans = new Span[positions.size()];
+            spanSource = positions;
+            spansAt = now;
+        }
+
+        Span cached = spans[index];
+        if (cached != null) return cached;
+
+        Span span = spanAt(BlockKey.x(position), BlockKey.y(position), BlockKey.z(position));
+        spans[index] = span;
+        return span;
     }
 
     private static Span spanAt(int x, int y, int z) {

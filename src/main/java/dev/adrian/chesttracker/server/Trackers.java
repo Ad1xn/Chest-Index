@@ -27,6 +27,8 @@ public final class Trackers {
 
     private static final int DIRTY_BUDGET_PER_TICK = 48;
 
+    private static final long TICK_TIME_BUDGET_NANOS = 45_000_000L;
+
     private Trackers() {}
 
     public static void setCurrent(TrackerService service, net.minecraft.server.MinecraftServer minecraftServer) {
@@ -105,9 +107,10 @@ public final class Trackers {
         TrackerService tracker = current;
         if (tracker == null) return;
 
+        if (!ContainerTypes.isContainer(blockEntity)) return;
+
         Level level = blockEntity.getLevel();
         if (!(level instanceof ServerLevel)) return;
-        if (!ContainerTypes.isContainer(blockEntity)) return;
 
         BlockPos pos = blockEntity.getBlockPos();
         if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) return;
@@ -116,7 +119,9 @@ public final class Trackers {
                 .add(BlockKey.pack(pos.getX(), pos.getY(), pos.getZ()));
     }
 
-    public static int drainDirty() {
+    public static int drainDirty(long tickTimeNanos) {
+        if (tickTimeNanos > TICK_TIME_BUDGET_NANOS) return 0;
+
         TrackerService tracker = current;
         if (tracker == null || DIRTY.isEmpty()) return 0;
 

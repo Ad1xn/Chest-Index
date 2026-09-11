@@ -42,10 +42,29 @@ public final class QueryService {
         if (filters != null && !filters.includeEntities()) return null;
         if (!dimensionId.equals(hereDimension)) return null;
 
+        long now = System.currentTimeMillis();
+        if (entityCacheLevel.get() == level
+                && entityCacheTracker.get() == tracker
+                && dimensionId.equals(entityCacheDimension)
+                && now - entityCacheAt < ENTITY_CACHE_MS
+                && withinDrift(entityCacheCentre, centre)) {
+            return entityCache;
+        }
+
         List<dev.adrian.chesttracker.platform.EntityContainers.Found> found =
                 dev.adrian.chesttracker.platform.EntityContainers
                         .near(level, dimensionId, tracker.palette(), centre);
-        if (found.isEmpty()) return null;
+
+        entityCacheLevel = new java.lang.ref.WeakReference<>(level);
+        entityCacheTracker = new java.lang.ref.WeakReference<>(tracker);
+        entityCacheDimension = dimensionId;
+        entityCacheCentre = centre;
+        entityCacheAt = now;
+
+        if (found.isEmpty()) {
+            entityCache = null;
+            return null;
+        }
 
         WorldIndex index = new WorldIndex(tracker.palette().intern(dimensionId));
         java.util.Map<ContainerRecord, Integer> ids = new java.util.IdentityHashMap<>();
@@ -53,7 +72,27 @@ public final class QueryService {
             index.put(one.record());
             ids.put(one.record(), one.entityId());
         }
-        return new Entities(index, ids);
+        entityCache = new Entities(index, ids);
+        return entityCache;
+    }
+
+    private static final long ENTITY_CACHE_MS = 250;
+
+    private static final int CACHE_DRIFT_BLOCKS = 16;
+
+    private static java.lang.ref.WeakReference<Level> entityCacheLevel =
+            new java.lang.ref.WeakReference<>(null);
+    private static java.lang.ref.WeakReference<TrackerService> entityCacheTracker =
+            new java.lang.ref.WeakReference<>(null);
+    private static String entityCacheDimension;
+    private static long entityCacheCentre;
+    private static long entityCacheAt;
+    private static Entities entityCache;
+
+    private static boolean withinDrift(long a, long b) {
+        return Math.abs(BlockKey.x(a) - BlockKey.x(b)) <= CACHE_DRIFT_BLOCKS
+                && Math.abs(BlockKey.y(a) - BlockKey.y(b)) <= CACHE_DRIFT_BLOCKS
+                && Math.abs(BlockKey.z(a) - BlockKey.z(b)) <= CACHE_DRIFT_BLOCKS;
     }
 
     private record Entities(WorldIndex index, java.util.Map<ContainerRecord, Integer> entityIds) {}

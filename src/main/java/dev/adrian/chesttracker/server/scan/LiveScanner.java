@@ -63,6 +63,13 @@ public final class LiveScanner {
         long tick = level.getGameTime();
         Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
 
+        long chunkKey = BlockKey.chunkKey(ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
+
+        if (blockEntities.isEmpty()
+                && tracker.index(dimensionId).positionsInChunk(chunkKey).isEmpty()) {
+            return new ChunkScan(0, 0);
+        }
+
         Set<Long> actual = new HashSet<>();
         int found = 0;
 
@@ -84,7 +91,6 @@ public final class LiveScanner {
             found++;
         }
 
-        long chunkKey = BlockKey.chunkKey(ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
         int removed = tracker.reconcileChunk(dimensionId, chunkKey, actual);
         return new ChunkScan(found, removed);
     }

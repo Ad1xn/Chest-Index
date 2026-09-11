@@ -70,16 +70,21 @@ public final class IndexScreen extends Screen {
         panelX = (width - PANEL_W) / 2;
         panelY = (height - panelH()) / 2;
 
-        try {
-            locations = IndexStore.all();
-            problem = null;
-        } catch (RuntimeException unreadable) {
-            locations = List.of();
-            problem = "Could not read the index folders.";
-            ChestTracker.LOG.warn("Could not list stored indexes: {}", unreadable.toString());
+        if (!loaded) {
+            loaded = true;
+            try {
+                locations = IndexStore.all();
+                problem = null;
+            } catch (RuntimeException unreadable) {
+                locations = List.of();
+                problem = "Could not read the index folders.";
+                ChestTracker.LOG.warn("Could not list stored indexes: {}", unreadable.toString());
+            }
         }
         scroll = Math.min(scroll, maxScroll());
     }
+
+    private boolean loaded;
 
     private int panelH() {
         return CHROME_H + visibleRows * ROW_H;
