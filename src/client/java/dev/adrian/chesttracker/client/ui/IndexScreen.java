@@ -116,18 +116,29 @@ public final class IndexScreen extends Screen {
         panelX = (width - PANEL_W) / 2;
         panelY = (height - panelH()) / 2;
 
-        try {
-            locations = IndexStore.all();
-            problem = null;
-        } catch (RuntimeException unreadable) {
-            // Nothing here is worth taking the game down for. The screen still
-            // draws, and the footer says why it is empty.
-            locations = List.of();
-            problem = "Could not read the index folders.";
-            ChestTracker.LOG.warn("Could not list stored indexes: {}", unreadable.toString());
+        // Read once. init() runs again on every resize, and re-listing the
+        // saves directory and every stored server from disk to redraw the same
+        // rows is work a window drag should not be able to ask for. The scroll
+        // clamp below still runs each time, because how many rows fit does
+        // change with the window.
+        if (!loaded) {
+            loaded = true;
+            try {
+                locations = IndexStore.all();
+                problem = null;
+            } catch (RuntimeException unreadable) {
+                // Nothing here is worth taking the game down for. The screen
+                // still draws, and the footer says why it is empty.
+                locations = List.of();
+                problem = "Could not read the index folders.";
+                ChestTracker.LOG.warn("Could not list stored indexes: {}", unreadable.toString());
+            }
         }
         scroll = Math.min(scroll, maxScroll());
     }
+
+    /** Whether the listing has been read from disk for this screen yet. */
+    private boolean loaded;
 
     private int panelH() {
         return CHROME_H + visibleRows * ROW_H;

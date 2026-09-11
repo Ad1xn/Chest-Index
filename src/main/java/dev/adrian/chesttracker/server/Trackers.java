@@ -44,6 +44,22 @@ public final class Trackers {
     /** Re-reads per tick. Enough to feel instant, small enough to be invisible. */
     private static final int DIRTY_BUDGET_PER_TICK = 48;
 
+    /**
+     * Past this much of a tick already spent, the drain waits for a better one.
+     *
+     * <p>The budget above is a count, and a count is only "invisible" while a
+     * tick has room to spare. Every loaded furnace, hopper and crafter reports
+     * a change as it runs, so on a base with enough of them the drain is
+     * saturated permanently - forty-eight full container re-reads every tick,
+     * for as long as those chunks stay loaded, on top of whatever made the tick
+     * slow in the first place. Staleness is already covered where it shows:
+     * {@link #refreshDirty} re-reads the containers about to be displayed.
+     *
+     * <p>The same threshold the region scanner drains against, for the same
+     * reason - see {@code RegionScanner#drain}.
+     */
+    private static final long TICK_TIME_BUDGET_NANOS = 45_000_000L; // 45ms of a 50ms tick
+
     private Trackers() {}
 
     public static void setCurrent(TrackerService service, net.minecraft.server.MinecraftServer minecraftServer) {
@@ -146,15 +162,25 @@ public final class Trackers {
      * <p>Marks it for re-reading; the work happens on the tick drain. Without
      * this the index only ever learns a container's contents when its chunk
      * unloads, so filling a chest you just placed would never show up.
+     *
+     * <p>Marking is all this does, and it has to stay that way: a single item
+     * sorter produces hundreds of these per tick, and the set is what collapses
+     * them into one entry each.
      */
     public static void onContainerChanged(BlockEntity blockEntity) {
         TrackerService tracker = current;
         if (tracker == null) return;
 
+        // Cheapest test first. This runs inside setChanged, which is one of the
+        // hottest methods in the game - every furnace, hopper and crafter calls
+        // it as it works - and the great majority of those are not containers
+        // at all. An instanceof against the object already in hand settles it
+        // without reaching through to the level.
+        if (!ContainerTypes.isContainer(blockEntity)) return;
+
         Level level = blockEntity.getLevel();
         // setChanged fires on the client too, where there is nothing to index.
         if (!(level instanceof ServerLevel)) return;
-        if (!ContainerTypes.isContainer(blockEntity)) return;
 
         BlockPos pos = blockEntity.getBlockPos();
         if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) return;
@@ -168,7 +194,9 @@ public final class Trackers {
      *
      * @return how many were refreshed this tick
      */
-    public static int drainDirty() {
+    public static int drainDirty(long tickTimeNanos) {
+        if (tickTimeNanos > TICK_TIME_BUDGET_NANOS) return 0;
+
         TrackerService tracker = current;
         if (tracker == null || DIRTY.isEmpty()) return 0;
 

@@ -1,6 +1,6 @@
 # ChestTracker
 
-Find your stuff without opening a single chest.
+**Find your stuff without opening a single chest.**
 
 ChestTracker indexes **every container in your world** within a configurable radius — including
 chunks that aren't loaded — and lets you search it. It's a proactive replacement for
@@ -34,6 +34,9 @@ configurations — a parallel build path to maintain, not a version bump.
   the item panel tells you how many of your total are sealed inside something.
 - **Every container type**, individually toggleable: chests, barrels, shulker boxes, ender chests,
   hoppers, droppers, dispensers, furnaces, brewing stands, crafters, and more.
+- **Containers that move.** Chest minecarts, hopper minecarts and chest boats are found too. They're
+  read live rather than indexed, because a stored position for something on rails is a lie the
+  moment it's written.
 - **Removed containers disappear.** Break a chest — or let a creeper do it — and it leaves the index
   immediately. Anything broken while the mod wasn't running is cleaned up on the next scan.
 
@@ -63,8 +66,26 @@ configurations — a parallel build path to maintain, not a version bump.
   time you open the screen.
 - A **bar under the search field** appears while the world is still being read.
 
+### Searching
+
 Typing matches **words, in any order**: `blue wool` finds `light_blue_wool`, and so does
 `wool blue`.
+
+A word with a prefix asks about a property instead. Click the search box for the list, or start
+typing a prefix and it completes:
+
+| Prefix | Finds |
+|---|---|
+| `@` | items from one mod — `@create` |
+| `#` | items sharing an item tag — `#logs` |
+| `>` | only containers of one kind — `>barrel` |
+| `tab:` | the game's own creative tab — `tab:redstone` |
+| `ench:` | enchanted with this — `ench:mending` |
+| `potion:` | this potion, however bottled — `potion:swiftness` |
+| `text:` | words anywhere in the tooltip — `text:mining` |
+
+Prefixes combine with each other and with plain words, so `@create ench:efficiency drill` is a
+single question.
 
 **In any container window**, a small magnifier sits at the top right. Left-click opens the search
 screen; **right-drag** moves it. Each kind of window remembers its own position, so the button can
@@ -74,8 +95,9 @@ sit in the middle of a hopper's title bar and in the corner of a double chest.
 marks rising from it so it's findable across a base, and the nearest one picked out in a second
 colour. A double chest gets one box across both halves. Containers past render distance are drawn at
 the horizon rather than not at all. When you arrive and open the chest, the slot holding your item
-pulses — and if it's inside a shulker box, the shulker pulses instead, then the item once you open
-that, and the bundle inside that if that's where it ended up.
+pulses — an outline, a wash over the item, or both, whichever you prefer — and if it's inside a
+shulker box, the shulker pulses instead, then the item once you open that, and the bundle inside
+that if that's where it ended up.
 
 **If it's in your ender chest**, that whole trail still works: the nearest ender chest in the world
 is boxed, an ender chest *item* in whatever you have open is marked, and the item itself is marked
@@ -84,7 +106,10 @@ once the chest is open.
 **If it isn't in this dimension**, the search says where it is rather than saying you don't have
 any — the ender chest is checked first, then every other dimension the index knows about.
 
-Everything above is configurable through Mod Menu, including the marker colours.
+Everything above is configurable through Mod Menu. The settings are grouped into General,
+Containers, Searching, Guidance and Assist, and the box at the top filters every section at once —
+by the wording of the explanations as well as the labels, so you can find a setting by what it does
+rather than by what it's called.
 
 ### With Litematica
 
@@ -138,7 +163,8 @@ and auto-interact from the far end, and the far end doesn't get to hear why. In 
 on for *every* server you ever join, which means answering for the strictest one.
 
 The client-side index is kept per server address under `config/chest-tracker/servers/`, and can be
-turned off with `clientSideIndex`.
+turned off with `clientSideIndex`. **Stored indexes** in the settings lists every world and server
+this machine holds one for, showing where each one lives and offering to throw it away.
 
 ### Switching it off
 
@@ -180,8 +206,11 @@ no mod installed.
 
 ### Commands
 
+Operator-only, since a full index is loot x-ray.
+
 | Command | What it does |
 |---|---|
+| `/chesttracker scan [chunkRadius]` | Reads the chunks around you, out to a radius |
 | `/chesttracker scanworld` | Reads region files that changed since the last scan |
 | `/chesttracker scanworld override` | Throws the index away and reads the whole world again |
 | `/chesttracker scanworld cancel` | Stops a running scan; what it read is kept |

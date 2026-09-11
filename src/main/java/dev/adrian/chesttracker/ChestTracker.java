@@ -69,10 +69,14 @@ public final class ChestTracker implements ModInitializer {
         // Applying scan results happens here, on the server thread, under a
         // per-tick budget. The scanner thread only ever reads and parses.
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            // How much of this tick is already gone. Both drains below stand
+            // down on a tick that is already late rather than adding to it.
+            long tickNanos = (long) (server.getCurrentSmoothedTickTime() * 1_000_000.0f);
+
             // Containers whose contents changed since last tick. Without this the
             // index only learns contents when a chunk unloads, so filling a chest
             // you just placed would never show up.
-            Trackers.drainDirty();
+            Trackers.drainDirty(tickNanos);
 
             // Tell anyone with the screen open that what they are looking at
             // has moved. Rate-limited inside; the drain above is what makes the
@@ -81,7 +85,6 @@ public final class ChestTracker implements ModInitializer {
 
             RegionScanner scanner = Trackers.regionScanner();
             if (scanner == null) return;
-            long tickNanos = (long) (server.getCurrentSmoothedTickTime() * 1_000_000.0f);
             scanner.drain(Trackers::isChunkLoaded, Trackers::liveScanChunk, tickNanos);
         });
 

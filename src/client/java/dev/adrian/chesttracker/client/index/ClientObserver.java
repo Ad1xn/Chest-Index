@@ -186,10 +186,22 @@ public final class ClientObserver {
         if (tracker == null) return;
 
         String dimensionId = dimensionOf(level);
+        long chunkKey = BlockKey.chunkKey(
+                ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
+
+        // Nothing in it and nothing recorded in it. Most chunks a player walks
+        // through are exactly that, and this runs for every one of them.
+        Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
+        if (blockEntities.isEmpty()
+                && tracker.index(dimensionId).positionsInChunk(chunkKey).isEmpty()) {
+            return;
+        }
+
         int dimensionKey = tracker.palette().intern(dimensionId);
         long tick = level.getGameTime();
+        long before = tracker.generation(dimensionId);
 
-        for (Map.Entry<BlockPos, BlockEntity> entry : chunk.getBlockEntities().entrySet()) {
+        for (Map.Entry<BlockPos, BlockEntity> entry : blockEntities.entrySet()) {
             BlockEntity blockEntity = entry.getValue();
             if (!ContainerTypes.isContainer(blockEntity)) continue;
 
@@ -208,10 +220,12 @@ public final class ClientObserver {
                     key, dimensionKey, tracker.palette().intern(typeId), Origin.UNKNOWN, tick));
         }
 
-        long chunkKey = BlockKey.chunkKey(
-                ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
         dropBrokenContainers(tracker, dimensionId, chunkKey, chunk);
-        ClientIndex.touch();
+        // Only if the chunk actually said something new - which most of them do
+        // not, on ground already walked. Marking the index dirty for every
+        // chunk load meant the autosave fired every minute for the life of the
+        // session and rewrote files that had not changed.
+        if (tracker.generation(dimensionId) != before) ClientIndex.touch();
     }
 
     /**
@@ -245,12 +259,14 @@ public final class ClientObserver {
     }
 
     /**
-     * Drops an indexed container the world says is no longer there.
+     * Drops a container the world says is no longer there - from the index if
+     * this client keeps one, and from the highlight either way.
      *
-     * <p>Only ever removes, and only when the position is one we had indexed
-     * and the block there is now not a container. Every other change through
-     * {@code setBlock} - a torch placed next to a chest, a server correcting a
-     * block a hundred blocks away - costs one map lookup and nothing else.
+     * <p>Only ever removes, and only when the position is one of those two
+     * knows about and the block there is now not a container. Every other
+     * change through {@code setBlock} - a torch placed next to a chest, a
+     * server correcting a block a hundred blocks away - costs a walk of an
+     * empty list and at most one map lookup.
      *
      * <p>Unlike the chunk-load reconciliation this does not need the air test.
      * A {@code setBlock} is a definite statement that the block at this
@@ -258,24 +274,43 @@ public final class ClientObserver {
      * left out of it.
      */
     private static void onBlockChanged(Level level, BlockPos pos) {
-        TrackerService tracker = active();
-        if (tracker == null) return;
         if (level != Minecraft.getInstance().level) return;
         if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) return;
 
         long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
-        String dimensionId = dimensionOf(level);
-        if (tracker.index(dimensionId).get(key) == null) return;
+
+        // Two separate reasons to care, and they do not come together. The
+        // index only exists on a vanilla server; the highlight is the client's
+        // own however the search was answered, so a box left standing on a
+        // broken chest has to be taken down in singleplayer and on a server
+        // running the mod too - where there is no client index at all. Asking
+        // for the tracker first, as this did, meant the box only ever came down
+        // in the one case out of three where a client index happened to exist.
+        dev.adrian.chesttracker.client.highlight.ContainerHighlight highlight =
+                dev.adrian.chesttracker.client.highlight.ContainerHighlight.get();
+        boolean highlighted = highlight.holds(key);
+
+        TrackerService tracker = active();
+        String dimensionId = tracker == null ? null : dimensionOf(level);
+        boolean indexed = tracker != null && tracker.index(dimensionId).get(key) != null;
+
+        // Every other change through setBlock - a torch placed next to a chest,
+        // a server correcting a block a hundred blocks away - is two cheap
+        // tests and nothing else. Only a position one of them knows about is
+        // worth reading the block entity for.
+        if (!highlighted && !indexed) return;
 
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (blockEntity != null && ContainerTypes.isContainer(blockEntity)) return;
 
-        tracker.remove(dimensionId, key);
-        ClientIndex.touch();
+        if (indexed) {
+            tracker.remove(dimensionId, key);
+            ClientIndex.touch();
+        }
         // The boxes are drawn from a list captured when the search ran, so one
         // standing on a chest that has just been broken would keep standing
         // there until the highlight timed out.
-        dev.adrian.chesttracker.client.highlight.ContainerHighlight.get().forget(key);
+        if (highlighted) highlight.forget(key);
     }
 
     // --- What is in them ----------------------------------------------------

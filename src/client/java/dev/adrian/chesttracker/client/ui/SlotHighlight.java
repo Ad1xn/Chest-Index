@@ -62,13 +62,13 @@ public final class SlotHighlight {
         Set<Item> targets = resolve(wanted);
         if (targets.isEmpty()) return;
 
-        retireWhatIsFound(screen, wanted);
-
         // Items that are not the answer but hold it - the ender chest, when the
         // search was for something inside it. Marked in the same colour a
         // shulker holding the item is, because they mean the same thing: this
         // is the thing to open next.
         Set<Item> hints = resolveHints(ContainerHighlight.get().hintItemIds());
+
+        byte[] marks = marks(screen, wanted, targets, hints);
 
         ChestTrackerConfig config = ChestTrackerConfig.get();
         int direct = alpha(0xFF000000 | config.nearestColour);
@@ -78,19 +78,13 @@ public final class SlotHighlight {
         boolean outline = style.drawsOutline();
         boolean background = style.drawsBackground();
 
-        for (Slot slot : screen.getMenu().slots) {
-            ItemStack stack = slot.getItem();
-            if (stack.isEmpty()) continue;
+        java.util.List<Slot> slots = screen.getMenu().slots;
+        for (int index = 0; index < slots.size() && index < marks.length; index++) {
+            byte mark = marks[index];
+            if (mark == NOT_MARKED) continue;
 
-            int colour;
-            if (targets.contains(stack.getItem())) {
-                colour = direct;
-            } else if (hints.contains(stack.getItem()) || holds(stack, targets, MAX_DEPTH)) {
-                colour = inside;
-            } else {
-                continue;
-            }
-
+            int colour = mark == MARK_DIRECT ? direct : inside;
+            Slot slot = slots.get(index);
             int x = leftPos + slot.x;
             int y = topPos + slot.y;
 
@@ -111,6 +105,81 @@ public final class SlotHighlight {
                 gfx.fill(x + 16, y, x + 17, y + 16, colour);
             }
         }
+    }
+
+    /** This slot holds nothing worth marking. */
+    private static final byte NOT_MARKED = 0;
+
+    /** This slot holds the item that was searched for. */
+    private static final byte MARK_DIRECT = 1;
+
+    /** This slot holds something the item is inside, or the thing to open next. */
+    private static final byte MARK_INSIDE = 2;
+
+    /**
+     * How often the marking is worked out again.
+     *
+     * <p>A tenth of a second is well below what anybody notices on a screen
+     * they are reaching across, and it is the difference between deciding six
+     * hundred times a minute and sixty thousand.
+     */
+    private static final long RECOMPUTE_MS = 100;
+
+    /** The last decision, the menu it describes, and when it was made. */
+    private static byte[] marked = new byte[0];
+    private static java.lang.ref.WeakReference<Object> markedMenu = new java.lang.ref.WeakReference<>(null);
+    private static Set<String> markedFor = Set.of();
+    private static long markedAt;
+
+    /**
+     * Which slots to mark, worked out on a timer rather than once per frame.
+     *
+     * <p>Deciding is not cheap: it descends into every container item on the
+     * screen, and a chest of shulkers is fifty-four stacks each holding
+     * twenty-seven more - three levels deep, and a bundle has to be copied
+     * before it can be read at all. Per frame that was tens of thousands of
+     * stack reads a second, to answer a question whose answer only changes
+     * when somebody moves an item.
+     *
+     * <p>What still runs per frame is the pulse, which is the part that has to
+     * be smooth. Only the decision behind it is cached.
+     *
+     * <p>Held by weak reference, so a cached decision cannot keep a closed
+     * screen's menu - and through it that container's block entity - alive.
+     */
+    private static byte[] marks(AbstractContainerScreen<?> screen, Set<String> wanted,
+                                Set<Item> targets, Set<Item> hints) {
+        java.util.List<Slot> slots = screen.getMenu().slots;
+        long now = System.currentTimeMillis();
+
+        boolean current = markedMenu.get() == screen.getMenu()
+                && markedFor == wanted
+                && marked.length == slots.size()
+                && now - markedAt < RECOMPUTE_MS;
+        if (current) return marked;
+
+        // Picking the item up or hovering it retires it, which replaces the
+        // set this is keyed on - so it belongs inside the recompute rather
+        // than beside it, where it was costing two registry lookups and two
+        // throwaway strings every frame.
+        retireWhatIsFound(screen, wanted);
+
+        byte[] decided = new byte[slots.size()];
+        for (int index = 0; index < slots.size(); index++) {
+            ItemStack stack = slots.get(index).getItem();
+            if (stack.isEmpty()) continue;
+            if (targets.contains(stack.getItem())) {
+                decided[index] = MARK_DIRECT;
+            } else if (hints.contains(stack.getItem()) || holds(stack, targets, MAX_DEPTH)) {
+                decided[index] = MARK_INSIDE;
+            }
+        }
+
+        marked = decided;
+        markedMenu = new java.lang.ref.WeakReference<>(screen.getMenu());
+        markedFor = wanted;
+        markedAt = now;
+        return decided;
     }
 
     /**

@@ -524,6 +524,7 @@ public final class ChestTrackerScreen extends Screen {
                     // A slow earlier query must not overwrite a newer one's results.
                     if (response.requestId() <= newestItemsReply) return;
                     newestItemsReply = response.requestId();
+                    backgroundAnswered();
                     items = sorted(withoutOtherTabs(response.items()));
                     itemsStale = false;
                     if (!resetView) {
@@ -551,6 +552,7 @@ public final class ChestTrackerScreen extends Screen {
                     if (!itemId.equals(selectedItemId)) return;
                     if (response.requestId() <= newestContainersReply) return;
                     newestContainersReply = response.requestId();
+                    backgroundAnswered();
                     containers = response.hits();
                     containersPending = false;
                     // A background refresh can shorten the list under a kept
@@ -586,9 +588,10 @@ public final class ChestTrackerScreen extends Screen {
         if (token == lastChangeToken) return;
 
         long now = System.currentTimeMillis();
-        if (now - lastAutoRefresh < AUTO_REFRESH_MIN_MS) return;
+        if (now - lastAutoRefresh < backgroundInterval()) return;
         lastChangeToken = token;
         lastAutoRefresh = now;
+        backgroundStartedAt = now;
 
         if (selectedItemId == null) {
             refreshItems(false);
@@ -599,6 +602,47 @@ public final class ChestTrackerScreen extends Screen {
             refreshContainers();
             itemsStale = true;
         }
+    }
+
+    /**
+     * How long to leave between background refreshes, given what the last one
+     * cost.
+     *
+     * <p>A fixed rate is the wrong shape here. Answering costs a walk of every
+     * record and every stack in the dimension whenever the index has moved -
+     * and the index moves on every chunk that loads, so walking around with
+     * this screen open re-ran that walk two and a half times a second. On a
+     * small world it is free and the fixed rate was right; on a large one it
+     * was most of a frame, repeatedly.
+     *
+     * <p>So the interval follows the measured cost: eight times however long
+     * the last answer took, floored at the fixed rate and capped so the view
+     * never goes properly stale. A cheap world keeps the old cadence exactly;
+     * an expensive one settles at a few per cent of a frame either way, which
+     * is the number that actually matters.
+     */
+    private long backgroundInterval() {
+        long scaled = lastQueryMs * BACKGROUND_COST_MULTIPLE;
+        return Math.max(AUTO_REFRESH_MIN_MS, Math.min(AUTO_REFRESH_MAX_MS, scaled));
+    }
+
+    /** How much of the interval an answer is allowed to be; see {@link #backgroundInterval}. */
+    private static final int BACKGROUND_COST_MULTIPLE = 8;
+
+    /** However slow answering gets, the screen still catches up this often. */
+    private static final long AUTO_REFRESH_MAX_MS = 3000;
+
+    /** When the running background refresh was asked for, or 0. */
+    private long backgroundStartedAt;
+
+    /** How long the last background refresh took to come back. */
+    private long lastQueryMs;
+
+    /** Notes how long a background refresh took, to pace the next one. */
+    private void backgroundAnswered() {
+        if (backgroundStartedAt == 0L) return;
+        lastQueryMs = Math.max(0L, System.currentTimeMillis() - backgroundStartedAt);
+        backgroundStartedAt = 0L;
     }
 
     /** Whether there is anything to show right now. */

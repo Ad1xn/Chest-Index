@@ -83,6 +83,17 @@ public final class LiveScanner {
         long tick = level.getGameTime();
         Map<BlockPos, BlockEntity> blockEntities = chunk.getBlockEntities();
 
+        long chunkKey = BlockKey.chunkKey(ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
+
+        // Nothing here and nothing recorded here: there is no scan to do and no
+        // reconciliation to make. Worth testing first because this runs for
+        // every chunk that unloads, and most of the world is empty ground -
+        // without it each of those still allocated a set and walked a map.
+        if (blockEntities.isEmpty()
+                && tracker.index(dimensionId).positionsInChunk(chunkKey).isEmpty()) {
+            return new ChunkScan(0, 0);
+        }
+
         Set<Long> actual = new HashSet<>();
         int found = 0;
 
@@ -105,7 +116,6 @@ public final class LiveScanner {
             found++;
         }
 
-        long chunkKey = BlockKey.chunkKey(ChunkPosCompat.x(chunk.getPos()), ChunkPosCompat.z(chunk.getPos()));
         int removed = tracker.reconcileChunk(dimensionId, chunkKey, actual);
         return new ChunkScan(found, removed);
     }

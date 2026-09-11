@@ -67,6 +67,43 @@ public final class Session {
      * answer here because every caller wants the same thing from both.
      */
     public static boolean active() {
+        long now = System.currentTimeMillis();
+        if (now - activeAt < ACTIVE_CACHE_MS) return activeAnswer;
+        activeAnswer = computeActive();
+        activeAt = now;
+        return activeAnswer;
+    }
+
+    /**
+     * How long an answer to {@link #active()} is reused.
+     *
+     * <p>It is asked once per frame by the highlight and once per tick by
+     * several others, and answering it walks the off-list: the address is
+     * lower-cased, its port stripped and its trailing dots trimmed, and the
+     * same is done to every entry it is compared against. That is a handful of
+     * throwaway strings per frame to answer a question whose answer changes
+     * when the player edits a setting.
+     *
+     * <p>A twentieth of a second rather than a tick, so it stays correct while
+     * the game is paused - which is exactly when the settings screen that can
+     * change the answer is open.
+     */
+    private static final long ACTIVE_CACHE_MS = 50;
+
+    private static boolean activeAnswer;
+
+    /**
+     * When {@link #activeAnswer} was worked out.
+     *
+     * <p>Zero, not {@code Long.MIN_VALUE}: the test below is
+     * {@code now - activeAt}, and subtracting the minimum from a current
+     * millisecond count overflows to a negative number - which reads as "just
+     * computed", so the cache never filled and every caller was told the mod
+     * was switched off, permanently.
+     */
+    private static long activeAt;
+
+    private static boolean computeActive() {
         ChestTrackerConfig config = ChestTrackerConfig.get();
         if (!config.enabled) return false;
         if (ownWorld()) return true;
@@ -222,7 +259,13 @@ public final class Session {
     public static void warnAboutEntities() {
         if (warnedAboutEntities || !active()) return;
         if (Minecraft.getInstance().level == null) return;
-        if (ownWorld()) return;
+        // Spent, not skipped: whether this is the player's own world cannot
+        // change without a new connection, and returning without spending it
+        // left this whole check running on every tick for the session.
+        if (ownWorld()) {
+            warnedAboutEntities = true;
+            return;
+        }
 
         ChestTrackerConfig config = ChestTrackerConfig.get();
         if (!config.trackEntityContainers) return;
@@ -241,5 +284,8 @@ public final class Session {
         wasActive = true;
         lastReminderAt = 0L;
         warnedAboutEntities = false;
+        // A new connection is a new answer, and the cached one is about the
+        // server being left. Zero rather than the minimum; see activeAt.
+        activeAt = 0L;
     }
 }

@@ -80,10 +80,31 @@ public final class QueryService {
         if (filters != null && !filters.includeEntities()) return null;
         if (!dimensionId.equals(hereDimension)) return null;
 
+        long now = System.currentTimeMillis();
+        if (entityCacheLevel.get() == level
+                && entityCacheTracker.get() == tracker
+                && dimensionId.equals(entityCacheDimension)
+                && now - entityCacheAt < ENTITY_CACHE_MS
+                && withinDrift(entityCacheCentre, centre)) {
+            return entityCache;
+        }
+
         List<dev.adrian.chesttracker.platform.EntityContainers.Found> found =
                 dev.adrian.chesttracker.platform.EntityContainers
                         .near(level, dimensionId, tracker.palette(), centre);
-        if (found.isEmpty()) return null;
+
+        entityCacheLevel = new java.lang.ref.WeakReference<>(level);
+        entityCacheTracker = new java.lang.ref.WeakReference<>(tracker);
+        entityCacheDimension = dimensionId;
+        entityCacheCentre = centre;
+        entityCacheAt = now;
+
+        if (found.isEmpty()) {
+            // Cached too. "There are no carts near you" is the common answer
+            // and the one that costs a full sweep to establish.
+            entityCache = null;
+            return null;
+        }
 
         WorldIndex index = new WorldIndex(tracker.palette().intern(dimensionId));
         // Keyed on the record itself rather than on its position, because a
@@ -95,7 +116,50 @@ public final class QueryService {
             index.put(one.record());
             ids.put(one.record(), one.entityId());
         }
-        return new Entities(index, ids);
+        entityCache = new Entities(index, ids);
+        return entityCache;
+    }
+
+    /**
+     * How long a sweep's answer is reused.
+     *
+     * <p>The sweep is the most expensive thing a query does: a box five
+     * hundred blocks on a side handed to the level's entity storage, and then
+     * every container entity in it read slot by slot. A query runs on every
+     * keystroke and again whenever the index moves - which, while the player
+     * is walking, is every chunk that loads - so the same sweep was being paid
+     * for several times a second to produce the same handful of minecarts.
+     *
+     * <p>A quarter of a second bounds how stale a cart's contents can be, and
+     * bounds how far the player can have travelled since: even under elytra
+     * that is under ten blocks against a radius of two hundred and fifty-six.
+     */
+    private static final long ENTITY_CACHE_MS = 250;
+
+    /**
+     * How far the asker may have moved and still be answered from the cache.
+     *
+     * <p>A belt to the timer's braces, for the one case the timer cannot see:
+     * a teleport. Drifting a few blocks changes nothing about what is within
+     * the sweep's radius; arriving somewhere else entirely changes everything.
+     */
+    private static final int CACHE_DRIFT_BLOCKS = 16;
+
+    private static java.lang.ref.WeakReference<Level> entityCacheLevel =
+            new java.lang.ref.WeakReference<>(null);
+    private static java.lang.ref.WeakReference<TrackerService> entityCacheTracker =
+            new java.lang.ref.WeakReference<>(null);
+    private static String entityCacheDimension;
+    private static long entityCacheCentre;
+    /** Zero, not the minimum: {@code now - entityCacheAt} would overflow. */
+    private static long entityCacheAt;
+    private static Entities entityCache;
+
+    /** Whether two packed positions are close enough to share a sweep. */
+    private static boolean withinDrift(long a, long b) {
+        return Math.abs(BlockKey.x(a) - BlockKey.x(b)) <= CACHE_DRIFT_BLOCKS
+                && Math.abs(BlockKey.y(a) - BlockKey.y(b)) <= CACHE_DRIFT_BLOCKS
+                && Math.abs(BlockKey.z(a) - BlockKey.z(b)) <= CACHE_DRIFT_BLOCKS;
     }
 
     /**

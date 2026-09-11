@@ -321,6 +321,22 @@ public final class ContainerHighlight {
     }
 
     /**
+     * Whether this position is one of the ones being pointed at.
+     *
+     * <p>Asked for every block change on the client's copy of the world, which
+     * on a busy server is a great many - so it walks the list by hand rather
+     * than through {@code contains}, which would box the key each time. The
+     * list is empty whenever no search is being shown, which is almost always,
+     * and then this does nothing at all.
+     */
+    public boolean holds(long position) {
+        for (int i = 0; i < positions.size(); i++) {
+            if (positions.get(i) == position) return true;
+        }
+        return false;
+    }
+
+    /**
      * Drops one container from the highlight, because it no longer exists.
      *
      * <p>The last one going takes the whole highlight with it: boxes over
@@ -567,8 +583,9 @@ public final class ContainerHighlight {
         java.util.Set<Long> present = positionSet();
 
         int drawn = 0;
-        for (Long position : positions) {
+        for (int index = 0; index < positions.size(); index++) {
             if (drawn >= MAX_BOXES) break;
+            long position = positions.get(index);
 
             // A double chest is two blocks the player thinks of as one, and the
             // index agrees with the game rather than with the player: each half
@@ -579,8 +596,7 @@ public final class ContainerHighlight {
             // An entity is wherever it is this frame, and is its own size;
             // only a block can be half of a double chest.
             Entity entity = entityAt(position);
-            Span span = entity != null ? SINGLE_SPAN
-                    : spanAt(BlockKey.x(position), BlockKey.y(position), BlockKey.z(position));
+            Span span = entity != null ? SINGLE_SPAN : spanFor(index, position);
 
             // Both halves hit: one of them draws the pair and the other stands
             // down. Either may do it - the box is anchored at the pair's lower
@@ -654,6 +670,47 @@ public final class ContainerHighlight {
             }
             drawn++;
         }
+    }
+
+    /**
+     * How often a box re-asks the world what shape it is.
+     *
+     * <p>Twice a second rather than sixty times. The question is whether this
+     * block is half of a double chest, and the answer changes only when
+     * somebody builds or breaks one - but asking it costs a {@code BlockPos},
+     * a chunk test and a block-state lookup, per box, per frame.
+     */
+    private static final long SPAN_CACHE_MS = 500;
+
+    /** Spans for the current {@link #positions}, and when they were worked out. */
+    private List<Long> spanSource;
+    private Span[] spans = new Span[0];
+    private long spansAt;
+
+    /**
+     * The span of one highlighted position, remembered between frames.
+     *
+     * <p>Keyed by index into {@link #positions} rather than by the packed
+     * position, so reading it costs an array access and boxes nothing. The
+     * whole set is dropped when the selection changes or the timer runs out,
+     * which also covers a chest that gained or lost its other half while the
+     * highlight was standing on it.
+     */
+    private Span spanFor(int index, long position) {
+        long now = System.currentTimeMillis();
+        if (spanSource != positions || spans.length != positions.size()
+                || now - spansAt >= SPAN_CACHE_MS) {
+            spans = new Span[positions.size()];
+            spanSource = positions;
+            spansAt = now;
+        }
+
+        Span cached = spans[index];
+        if (cached != null) return cached;
+
+        Span span = spanAt(BlockKey.x(position), BlockKey.y(position), BlockKey.z(position));
+        spans[index] = span;
+        return span;
     }
 
     /**

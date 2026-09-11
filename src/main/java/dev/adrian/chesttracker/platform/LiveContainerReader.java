@@ -16,8 +16,14 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.component.ItemContainerContents;
 
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
+
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Reads a live {@link Container} into the index's own representation.
@@ -78,7 +84,18 @@ public final class LiveContainerReader {
      * it.
      */
     private static List<Integer> detailsOf(ItemStack stack, String customName, StringPalette palette) {
-        List<Integer> details = new ArrayList<>(0);
+        // The overwhelming majority of stacks in a world carry none of these.
+        // Asking first costs four component lookups either way; not asking
+        // cost an ArrayList per stack on every read path in the mod.
+        if (customName == null
+                && stack.get(DataComponents.ENCHANTMENTS) == null
+                && stack.get(DataComponents.STORED_ENCHANTMENTS) == null
+                && stack.get(DataComponents.POTION_CONTENTS) == null
+                && stack.get(DataComponents.LORE) == null) {
+            return List.of();
+        }
+
+        List<Integer> details = new ArrayList<>(4);
 
         addEnchantments(stack.get(DataComponents.ENCHANTMENTS), details, palette);
         // A book's enchantments are stored rather than applied, and looking for
@@ -125,6 +142,33 @@ public final class LiveContainerReader {
         if (!details.contains(id)) details.add(id);
     }
 
+    /**
+     * The registry id of an item, worked out once per item rather than per
+     * stack.
+     *
+     * <p>{@code ResourceLocation.toString()} joins its namespace and path into
+     * a fresh string every time it is asked, and this is asked for every stack
+     * in every container on every read path - a chunk unloading, the dirty
+     * drain, a container being opened. The set of items in a game is fixed
+     * once the registries are frozen, so the answer can simply be kept.
+     *
+     * <p>Identity-keyed because items are singletons, which makes the lookup a
+     * reference comparison rather than a hash of the item's own fields.
+     */
+    private static final Map<Item, String> ITEM_IDS =
+            Collections.synchronizedMap(new IdentityHashMap<>());
+
+    private static String idOf(Item item) {
+        String cached = ITEM_IDS.get(item);
+        if (cached != null) return cached;
+
+        Identifier key = BuiltInRegistries.ITEM.getKey(item);
+        if (key == null) return null;
+        String id = key.toString();
+        ITEM_IDS.put(item, id);
+        return id;
+    }
+
     private static void appendStack(ItemStack stack, List<StackEntry> out, int depth, StringPalette palette) {
         if (depth > MAX_NESTING) return;
 
@@ -136,7 +180,8 @@ public final class LiveContainerReader {
         // That reached the grid as an "Air" item saying "0 in 1".
         if (stack == null || stack.isEmpty()) return;
 
-        String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        String itemId = idOf(stack.getItem());
+        if (itemId == null) return;
         Component customName = stack.get(DataComponents.CUSTOM_NAME);
         String name = customName == null ? null : customName.getString();
         out.add(new StackEntry(

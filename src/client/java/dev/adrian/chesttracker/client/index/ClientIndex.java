@@ -11,6 +11,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The index this client keeps for itself, for servers that have no index of
@@ -34,8 +39,9 @@ import java.util.Locale;
  * Bound, read and written on the client thread only - {@link WorldIndex} is not
  * thread-safe and this one has no server thread to hide behind. Saving is the
  * exception: it takes an immutable {@link IndexCodec.Frozen} snapshot on the
- * client thread and writes it on a background one, because gzipping a few
- * megabytes in the middle of a frame is a visible stutter.
+ * client thread and writes it on a single background one, because gzipping a
+ * few megabytes in the middle of a frame is a visible stutter. One thread
+ * rather than one per save: see {@link #WRITER}.
  */
 public final class ClientIndex {
 
@@ -51,6 +57,41 @@ public final class ClientIndex {
     private static boolean dirty;
 
     private static long lastSaveAt;
+
+    /**
+     * One writer, reused, with never more than one save outstanding.
+     *
+     * <p>A save holds a snapshot of every record in the index until it has
+     * finished gzipping it. This used to start a fresh minimum-priority thread
+     * every minute with nothing stopping a second from beginning while the
+     * first was still going - so on a large index, on a busy machine, saves
+     * overlapped: each one kept a full copy of the index alive, they competed
+     * for the same CPU, and every overlap made the next save slower still.
+     * That compounds rather than settling, which is why it ended in a restart.
+     *
+     * <p>A single thread cannot race itself, and declining to start a save
+     * while one is outstanding bounds what is being held to the one in flight.
+     */
+    private static final ExecutorService WRITER = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "ChestTracker-ClientIndexSave");
+        thread.setDaemon(true);
+        thread.setPriority(Thread.MIN_PRIORITY);
+        return thread;
+    });
+
+    /** Saves handed to the writer and not yet finished. */
+    private static final AtomicInteger outstanding = new AtomicInteger();
+
+    /**
+     * The generation each dimension was last written at.
+     *
+     * <p>What turns the autosave from "write the whole index every minute" into
+     * "write the dimensions that have changed". A chunk load marks the index
+     * dirty whether or not it found anything new, so on ground already walked
+     * the timer fired every minute for the life of the session and rewrote
+     * every dimension byte for byte identically.
+     */
+    private static final Map<String, Long> savedGenerations = new ConcurrentHashMap<>();
 
     /**
      * How often an in-progress session is written out.
@@ -109,10 +150,16 @@ public final class ClientIndex {
 
     /** Saves and drops the current index. Called on disconnect. */
     public static void unbind() {
-        if (tracker != null) saveNow();
+        // Forced: there is no later autosave to fall back on, so a write that
+        // happens to be in flight must not cost this session its last minute.
+        if (tracker != null) save(true);
         tracker = null;
         serverKey = null;
         dirty = false;
+        // Generations belong to the service being dropped. The next server's
+        // start again at zero, and a stale entry here would read as "already
+        // written" and skip its first save.
+        savedGenerations.clear();
     }
 
     /**
@@ -147,6 +194,7 @@ public final class ClientIndex {
         if (current != null) current.clearIndexes();
         dirty = false;
         lastSaveAt = System.currentTimeMillis();
+        savedGenerations.clear();
     }
 
     /** Marks the index as having something worth writing. */
@@ -176,10 +224,26 @@ public final class ClientIndex {
      * the index change under it.
      */
     public static void saveNow() {
+        save(false);
+    }
+
+    /**
+     * @param force write even if a save is already outstanding. For the
+     *              disconnect, which has no later autosave to fall back on -
+     *              skipping that one would lose the session.
+     */
+    private static void save(boolean force) {
         TrackerService current = tracker;
         if (current == null) return;
 
         lastSaveAt = System.currentTimeMillis();
+
+        // A save in flight is already holding a snapshot of the whole index.
+        // Starting another beside it would hold a second one. Left dirty on
+        // purpose: nothing was written, so nothing may be recorded as written,
+        // and the timer brings us back in a minute.
+        if (!force && outstanding.get() > 0) return;
+
         dirty = false;
 
         Path root = storageFor(serverKey);
@@ -187,29 +251,40 @@ public final class ClientIndex {
         for (String dimensionId : current.dimensions()) {
             WorldIndex index = current.index(dimensionId);
             if (index.isEmpty()) continue;
-            saves.add(new Save(root.resolve(fileNameFor(dimensionId)),
+            // Unchanged since it was last written. Freezing and gzipping it
+            // again would produce the same bytes at the same path.
+            long generation = current.generation(dimensionId);
+            Long written = savedGenerations.get(dimensionId);
+            if (written != null && written == generation) continue;
+            saves.add(new Save(root.resolve(fileNameFor(dimensionId)), dimensionId, generation,
                     IndexCodec.Frozen.of(current.palette(), index)));
         }
         if (saves.isEmpty()) return;
 
-        Thread writer = new Thread(() -> {
-            for (Save save : saves) {
-                try {
-                    IndexCodec.write(save.file(), save.frozen());
-                } catch (IOException e) {
-                    // A lost save costs re-observing containers, never
-                    // correctness, so it is never worth interrupting play for.
-                    ChestTracker.LOG.warn("Could not save the client index {}: {}",
-                            save.file(), e.toString());
+        outstanding.incrementAndGet();
+        WRITER.execute(() -> {
+            try {
+                for (Save save : saves) {
+                    try {
+                        IndexCodec.write(save.file(), save.frozen());
+                        // Recorded only once it is actually on disk. A failed
+                        // write that claimed its generation would never be
+                        // retried, and the session would be lost silently.
+                        savedGenerations.put(save.dimensionId(), save.generation());
+                    } catch (IOException e) {
+                        // A lost save costs re-observing containers, never
+                        // correctness, so it is never worth interrupting play for.
+                        ChestTracker.LOG.warn("Could not save the client index {}: {}",
+                                save.file(), e.toString());
+                    }
                 }
+            } finally {
+                outstanding.decrementAndGet();
             }
-        }, "ChestTracker-ClientIndexSave");
-        writer.setDaemon(true);
-        writer.setPriority(Thread.MIN_PRIORITY);
-        writer.start();
+        });
     }
 
-    private record Save(Path file, IndexCodec.Frozen frozen) {}
+    private record Save(Path file, String dimensionId, long generation, IndexCodec.Frozen frozen) {}
 
     // --- Where it lives -----------------------------------------------------
 

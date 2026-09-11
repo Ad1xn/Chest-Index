@@ -53,11 +53,29 @@ public final class ContainerTypes {
     private final Set<String> known = Collections.synchronizedSet(new LinkedHashSet<>(VANILLA));
 
 
+    /**
+     * Registry ids by block-entity type, worked out once each.
+     *
+     * <p>The id is asked for every container in every chunk that loads,
+     * unloads or is re-read, and building it means joining a namespace and a
+     * path into a fresh string every time. There are a few dozen types in a
+     * game and they are fixed once the registries are frozen.
+     */
+    private static final java.util.Map<BlockEntityType<?>, String> IDS =
+            java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+
     /** Registry id of a block entity's type, or null if it is not registered. */
     public static String idOf(BlockEntity blockEntity) {
         BlockEntityType<?> type = blockEntity.getType();
+
+        String cached = IDS.get(type);
+        if (cached != null) return cached;
+
         var key = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type);
-        return key == null ? null : key.toString();
+        if (key == null) return null;
+        String id = key.toString();
+        IDS.put(type, id);
+        return id;
     }
 
     /** Exact test for a live block entity. Covers modded containers automatically. */
