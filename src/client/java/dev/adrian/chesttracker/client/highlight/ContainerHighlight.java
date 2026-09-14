@@ -2,6 +2,7 @@ package dev.adrian.chesttracker.client.highlight;
 
 import dev.adrian.chesttracker.client.ActionBar;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
+import dev.adrian.chesttracker.core.highlight.HighlightPulse;
 import dev.adrian.chesttracker.core.highlight.HighlightTargets;
 import dev.adrian.chesttracker.core.highlight.HighlightTimer;
 import dev.adrian.chesttracker.core.util.BlockKey;
@@ -474,23 +475,18 @@ public final class ContainerHighlight {
      */
     private static final double MAX_GROW = 0.75;
 
-    /** Below this the container is in plain sight and a beam only clutters it. */
-    private static final double BEAM_MIN_DISTANCE = 8.0;
-
     /**
-     * How far the trail of marks rises above its container up close.
+     * The shortest a trail may be, for a container already at the build limit.
      *
-     * <p>This is the part that has to be seen from across a world, so it grows
-     * with distance rather than staying a fixed height: thirty-two blocks is a
-     * tall column at ten blocks and an invisible speck at a thousand.
+     * <p>The trail runs from the container to the top of the world, which for
+     * one built on the roof is no distance at all - and a trail of zero height
+     * is fourteen marks stacked on one another, which is a dot. This is the
+     * floor under that, so the marks are still a column.
      */
-    private static final double BEAM_HEIGHT = 48.0;
+    private static final double MIN_BEAM_HEIGHT = 24.0;
 
-    /** Added to the trail's height per block of distance. */
-    private static final double BEAM_HEIGHT_PER_BLOCK = 0.6;
-
-    /** Tall enough to cross the sky; more would simply leave the world. */
-    private static final double MAX_BEAM_HEIGHT = 420.0;
+    /** Where the world ends when it has not said - overworld, since 1.18. */
+    private static final int DEFAULT_WORLD_TOP = 320;
 
     /**
      * How much of what is left to turn is taken per second.
@@ -542,6 +538,33 @@ public final class ContainerHighlight {
     }
 
     /**
+     * Whether anything is far enough away to have a trail stood on it.
+     *
+     * <p>Asked before the trail pass is submitted at all, because the trails
+     * are drawn in a second pass against a different render type and a pass
+     * that turns out to emit nothing still costs a node, a buffer and a draw.
+     * In a base - which is where this mod is used most - nothing is ever twenty
+     * chunks away and the answer is no on every frame.
+     */
+    public boolean hasTrails() {
+        if (!hasBoxes() || !ChestTrackerConfig.get().guideBeam) return false;
+
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return false;
+
+        double from = ChestTrackerConfig.get().guideBeamFromBlocks();
+        double fromSq = from * from;
+        Vec3 eye = client.player.position();
+        for (Long position : positions) {
+            double dx = BlockKey.x(position) + 0.5 - eye.x;
+            double dy = BlockKey.y(position) + 0.5 - eye.y;
+            double dz = BlockKey.z(position) + 0.5 - eye.z;
+            if (dx * dx + dy * dy + dz * dz >= fromSq) return true;
+        }
+        return false;
+    }
+
+    /**
      * The highlighted positions as a set, rebuilt only when they change.
      *
      * <p>Used to spot a double chest whose halves are both hits. It was a fresh
@@ -561,7 +584,19 @@ public final class ContainerHighlight {
     private java.util.Set<Long> positionSet = java.util.Set.of();
 
     /**
-     * Draws a box around each highlighted container.
+     * Which of the two passes a walk of the markers is drawing.
+     *
+     * <p>Two passes rather than one because the box and the trail are drawn
+     * against different render types - the box through the world, the trail
+     * behind it - and a vertex consumer is opened on exactly one. The geometry
+     * either one needs is worked out the same way, so the walk is shared and
+     * only the emitting differs.
+     */
+    private enum Pass { BOXES, TRAILS }
+
+    /**
+     * Draws a box around each highlighted container, through whatever is in
+     * front of it.
      *
      * <p>Called from the render thread, once per frame, so it reads state and
      * allocates nothing. Positions far enough away to be off screen are skipped
@@ -571,12 +606,45 @@ public final class ContainerHighlight {
      * @param eye the camera position; boxes are drawn relative to it
      */
     public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        draw(pose, lines, eye, Pass.BOXES);
+    }
+
+    /**
+     * Stands a trail of marks on every match far enough away to need one.
+     *
+     * <p>A separate call from {@link #drawBoxes} because it is drawn against
+     * the world rather than through it - see {@code HighlightRenderTypes}.
+     */
+    public void drawTrails(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        draw(pose, lines, eye, Pass.TRAILS);
+    }
+
+    /**
+     * The colour of the marker being drawn this iteration.
+     *
+     * <p>One array, reused down the loop and between frames. The pulse is the
+     * same for every marker in a frame but the resting colour is not - the
+     * nearest does not pulse at all - so the mix is per marker, and a fresh
+     * three-float array per marker per frame is a few thousand allocations a
+     * second to say something about a colour. Render thread only.
+     */
+    private final float[] pulsed = new float[3];
+
+    private void draw(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye, Pass pass) {
         // Read once. This runs per container per frame, and the config lookup
         // does not change between two boxes of the same frame.
         ChestTrackerConfig config = ChestTrackerConfig.get();
-        boolean beams = config.guideBeam;
         float[] nearestColour = config.nearestRgb();
         float[] otherColour = config.otherRgb();
+
+        // One phase for the whole frame, so the markers breathe together rather
+        // than each on its own clock - which would read as flickering rather
+        // than as one thing the mod is saying about all of them.
+        float pulse = HighlightPulse.at(System.currentTimeMillis());
+        HighlightPulse.mix(otherColour, nearestColour, pulse, pulsed);
+
+        double trailFrom = pass == Pass.TRAILS ? config.guideBeamFromBlocks() : 0.0;
+        int worldTop = worldTop();
 
         // Which positions are in play, so a double chest whose halves are both
         // hits can be recognised as one chest rather than drawn twice.
@@ -591,8 +659,8 @@ public final class ContainerHighlight {
             // index agrees with the game rather than with the player: each half
             // is a container of its own, so an item in both halves is two hits.
             // Drawn literally that is two boxes with a line down the middle of
-            // one chest, two beams, and one half picked out as "nearest" - which
-            // reads as the mod pointing at half a chest.
+            // one chest, two trails, and one half picked out as "nearest" -
+            // which reads as the mod pointing at half a chest.
             // An entity is wherever it is this frame, and is its own size;
             // only a block can be half of a double chest.
             Entity entity = entityAt(position);
@@ -628,6 +696,12 @@ public final class ContainerHighlight {
             double distSq = dx * dx + dy * dy + dz * dz;
             double distance = Math.sqrt(distSq);
 
+            // Counted as drawn either way, so the cap picks the same markers in
+            // both passes and a trail can never belong to a box that was cut.
+            drawn++;
+
+            if (pass == Pass.TRAILS && distance < trailFrom) continue;
+
             // Past the far plane nothing is drawn at all - the projection
             // clips it, which is why a container thousands of blocks away
             // showed nothing whatever its size. Those are pulled in to the
@@ -644,32 +718,48 @@ public final class ContainerHighlight {
             float lineWidth = (float) Math.round(Math.min(MAX_LINE_WIDTH,
                     BASE_LINE_WIDTH + Math.max(0.0, distance - GROW_FROM) * LINE_WIDTH_PER_BLOCK));
 
-            // The nearest one is picked out, because that is the one the action
-            // bar is talking about and the one the player is walking towards.
+            // The nearest one holds the accent colour outright; the rest rest
+            // at the other colour and swell through it. That is what picks out
+            // the one the guidance is talking about, without a second shape.
             // A pair drawn as one box is the nearest if either of its halves is.
             boolean nearest = position == pos
                     || (span.partner() != NO_PARTNER && span.partner() == pos);
-            float[] colour = nearest ? nearestColour : otherColour;
+            float[] colour = nearest ? nearestColour : pulsed;
 
             double drawX = dx * pull - sizeX / 2.0;
             double drawY = dy * pull - sizeY / 2.0;
             double drawZ = dz * pull - sizeZ / 2.0;
 
-            HighlightBox.emit(pose, lines, drawX, drawY, drawZ, sizeX, sizeY, sizeZ,
-                    colour[0], colour[1], colour[2], 0.9f, grow, lineWidth);
+            if (pass == Pass.BOXES) {
+                HighlightBox.emit(pose, lines, drawX, drawY, drawZ, sizeX, sizeY, sizeZ,
+                        colour[0], colour[1], colour[2], 0.9f, grow, lineWidth);
+                continue;
+            }
 
             // The column is what carries at range, and the only part of this
-            // that means anything where no terrain is drawn to place it.
-            if (beams && distance > BEAM_MIN_DISTANCE) {
-                double beamHeight = Math.min(MAX_BEAM_HEIGHT,
-                        BEAM_HEIGHT + distance * BEAM_HEIGHT_PER_BLOCK);
-                HighlightBox.beam(pose, lines,
-                        drawX + sizeX / 2.0, drawY + sizeY + 0.5, drawZ + sizeZ / 2.0,
-                        beamHeight * pull,
-                        colour[0], colour[1], colour[2], 0.75f, lineWidth);
-            }
-            drawn++;
+            // that means anything where no terrain is drawn to place it. It
+            // runs from the top of the container to the build limit rather than
+            // to a height worked out from the distance: the limit is a real
+            // place in the world, so the trail ends where the world does and
+            // reads as standing in it.
+            double height = Math.max(MIN_BEAM_HEIGHT, worldTop - (y + sizeY));
+            HighlightBox.beam(pose, lines,
+                    drawX + sizeX / 2.0, drawY + sizeY, drawZ + sizeZ / 2.0,
+                    height * pull,
+                    colour[0], colour[1], colour[2], 0.75f, lineWidth);
         }
+    }
+
+    /**
+     * The build limit of the world the player is in.
+     *
+     * <p>Asked of the level rather than assumed to be 320: a superflat, a
+     * datapack or the nether all put it somewhere else, and a trail that
+     * overshoots into empty sky is as wrong as one that stops short.
+     */
+    private static int worldTop() {
+        Minecraft client = Minecraft.getInstance();
+        return client.level == null ? DEFAULT_WORLD_TOP : client.level.getMaxY() + 1;
     }
 
     /**

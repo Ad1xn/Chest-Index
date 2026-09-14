@@ -552,6 +552,52 @@ public final class ChestTrackerConfig {
      */
     public boolean guideBeam = true;
 
+    /**
+     * Draw the boxes through whatever is in front of them.
+     *
+     * <p>On, because a marker you can only see once you can already see the
+     * chest is telling you something you no longer need to know - the whole
+     * point of pointing at a container is that it is behind something.
+     *
+     * <p>The one setting here that exists partly as an escape hatch. Drawing
+     * through the world needs a line type vanilla does not have, so the mod
+     * builds one out of vanilla's own line pipeline with the depth test taken
+     * out; that is the only place this mod reaches past the API into how the
+     * game draws. If a shader pack or another rendering mod does not like it,
+     * turning this off puts the boxes back on vanilla's ordinary line type,
+     * where the worst that happens is that a box hides behind a wall.
+     *
+     * <p>Never applies to the trail, which is drawn against the world on
+     * purpose - see {@link #guideBeamFromChunks}.
+     */
+    public boolean highlightThroughWalls = true;
+
+    /**
+     * How far away a match has to be before a trail is stood on it, in chunks.
+     *
+     * <p>Nought would mean one on every match, which is what it used to do and
+     * why the trail was the first thing people turned off: a chest across the
+     * room does not need a column of marks over it, and a base full of them is
+     * a picket fence you cannot see the chests through. The box already says
+     * everything there is to say at that range.
+     *
+     * <p>Twenty chunks is deliberately past most render distances. That is the
+     * distance at which the box stops being enough - there is no terrain drawn
+     * to place it against, and the marker is being pulled in to the horizon
+     * rather than drawn where it is - and it is exactly where a column that
+     * rises to the build limit starts being the only thing that can be seen.
+     *
+     * <p>Unlike the box, the trail is drawn <em>behind</em> the world rather
+     * than through it, so it reads as standing somewhere in the landscape
+     * instead of floating in front of it.
+     */
+    public int guideBeamFromChunks = 20;
+
+    /** Where the trail starts, in blocks. */
+    public double guideBeamFromBlocks() {
+        return Math.max(0, guideBeamFromChunks) * 16.0;
+    }
+
     /** When the search grid's detail panel appears over an item. */
     public enum Detail {
         /** Always, as an ordinary tooltip does. */
@@ -667,18 +713,31 @@ public final class ChestTrackerConfig {
     // --- Highlight colours -------------------------------------------------
 
     /**
-     * The nearest match, as 0xRRGGBB.
+     * The nearest match, as 0xRRGGBB, and the colour the rest pulse through.
      *
-     * <p>Not yellow, and not blue. Those were the first choice and the wrong
-     * one: the sun is yellow and the sky is blue, so a marker in either
-     * disappears into exactly the background it is most often seen against.
-     * Red is worse - it reads as damage. Magenta occurs almost nowhere in
-     * Minecraft's terrain, which is what makes it legible against all of it.
+     * <p>Purple because it does two jobs at once. It is what the nearest match
+     * holds steadily - the one the guidance is talking about and the one being
+     * walked towards - and it is also the far end of every other marker's
+     * pulse. So "the marker that is always this colour" is the answer, and the
+     * ones that only pass through it are the alternatives, without either
+     * needing a label.
+     *
+     * <p>It also survives the backgrounds it is seen against: the sun is yellow
+     * and the sky is blue, so a marker in either disappears into exactly what
+     * it is most often in front of, and red reads as damage. Purple occurs
+     * almost nowhere in Minecraft's terrain.
      */
-    public int nearestColour = 0xFF2BD0;
+    public int nearestColour = 0x9B30E0;
 
-    /** Every other match, dimmer so the nearest still stands out. */
-    public int otherColour = 0xB478FF;
+    /**
+     * What every other match rests at, as 0xRRGGBB.
+     *
+     * <p>Yellow, and the markers sit here most of the time - the pulse towards
+     * {@link #nearestColour} is a swell out of this colour and back, not an
+     * even alternation between the two. See {@code HighlightPulse}, where that
+     * curve lives and is tested.
+     */
+    public int otherColour = 0xFFD21E;
 
     // Unpacked once per colour change rather than per frame. The box renderer
     // asks for both every frame it draws; the colours move only when somebody

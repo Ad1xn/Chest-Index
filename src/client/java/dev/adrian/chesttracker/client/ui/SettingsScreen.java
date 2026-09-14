@@ -69,7 +69,7 @@ import net.minecraft.client.gui.GuiGraphics;
  *
  * <h2>The filter</h2>
  *
- * <p>Twenty-eight settings in five sections is few enough to browse and too
+ * <p>Thirty-one settings in five sections is few enough to browse and too
  * many to hunt through, and somebody who already knows the word they want
  * should not have to guess which section it landed in. Typing in the strip
  * under the title searches labels <em>and</em> explanations across every
@@ -136,6 +136,14 @@ public final class SettingsScreen extends Screen {
     private static final int RESULTS_STEP = 50;
     private static final int HIGHLIGHT_MAX = 300;
     private static final int GRACE_MAX = 120;
+
+    /**
+     * The furthest out a trail can be held back to, in chunks.
+     *
+     * <p>Two render distances past the largest anybody plays at. Past this the
+     * setting would be "never", which the toggle above it already says.
+     */
+    private static final int BEAM_FROM_MAX = 64;
 
     /** Registry lookups are not free and the rail redraws every frame. */
     private static final Map<String, ItemStack> ICON_CACHE = new HashMap<>();
@@ -448,16 +456,43 @@ public final class SettingsScreen extends Screen {
                                         () -> config.highlightRecedingGraceSeconds,
                                         value -> config.highlightRecedingGraceSeconds = value,
                                         1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"),
+                                new Toggle("Boxes show through walls",
+                                        "A marker you can only see in the open says little.",
+                                        "Draws the boxes through whatever is in front of them, which is the "
+                                                + "point of pointing at a container - it is behind something. "
+                                                + "Turn it off if a shader pack or another rendering mod "
+                                                + "disagrees with it; the boxes then hide behind walls as any "
+                                                + "other line in the game does. The trail is always drawn "
+                                                + "against the world rather than through it.",
+                                        () -> config.highlightThroughWalls,
+                                        value -> config.highlightThroughWalls = value),
                                 new Toggle("Trail of marks above matches",
                                         "Works past render distance, where boxes cannot.",
-                                        "Stands a column of fading marks on every match. This is the part "
-                                                + "that still works past render distance, where there is no "
-                                                + "terrain drawn to place a box against.",
+                                        "Stands a column of marks on every distant match, running up to the "
+                                                + "build limit. This is the part that still works past render "
+                                                + "distance, where there is no terrain drawn to place a box "
+                                                + "against. Unlike the boxes it is drawn behind the world "
+                                                + "rather than through it, so it reads as standing somewhere "
+                                                + "in the landscape rather than floating in front of it.",
                                         () -> config.guideBeam, value -> config.guideBeam = value),
+                                new Range("Trails start at",
+                                        "How far off a match must be to get a trail.",
+                                        "How far away a match has to be before a trail is stood on it. A "
+                                                + "container across the room does not need a column over it - "
+                                                + "the box already says which one it is - and a base full of "
+                                                + "them is a fence you cannot see the chests through. The "
+                                                + "default is past most render distances, which is where the "
+                                                + "box stops being enough.",
+                                        () -> config.guideBeamFromChunks,
+                                        value -> config.guideBeamFromChunks = value,
+                                        0, BEAM_FROM_MAX, 1,
+                                        value -> "Trails start at: " + value + " chunks"),
                                 new Link("Highlight colours",
                                         "The two colours the world markers are drawn in.",
-                                        "The colours the in-world markers are drawn in - one for the nearest "
-                                                + "match, one for the rest.",
+                                        "The colours the in-world markers are drawn in. The nearest match "
+                                                + "holds the first one; every other match rests at the second "
+                                                + "and swells through the first, which is what picks the "
+                                                + "nearest out without labelling it.",
                                         () -> new HighlightColourScreen(this)),
                                 new Choice("Marked slots",
                                         "How a matching slot is marked in an open container.",

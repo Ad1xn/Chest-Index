@@ -2,7 +2,6 @@ package dev.adrian.chesttracker.client.platform;
 
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
 import net.minecraft.client.Camera;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -26,9 +25,14 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>What is <em>not</em> shimmed, because it turned out identical on both:
  * {@code SubmitNodeCollector} (byte for byte), {@code VertexConsumer},
- * {@code PoseStack.Pose}, {@code RenderTypes.lines()} and {@code Camera}. So
- * both branches below do nothing but obtain a pose and a consumer, and hand
- * them to the same drawing code.
+ * {@code PoseStack.Pose} and {@code Camera}. So both branches below do nothing
+ * but obtain a pose and a consumer, and hand them to the same drawing code.
+ *
+ * <p>Two passes, not one. The boxes are drawn against a see-through line type
+ * and the trails against vanilla's ordinary one, and a vertex consumer belongs
+ * to exactly one render type - so each pass asks for its own. The trail pass is
+ * skipped outright when nothing is far enough away to have a trail, which in a
+ * base is every frame.
  */
 public final class WorldHighlightHook {
 
@@ -51,11 +55,15 @@ public final class WorldHighlightHook {
                     // own movement: strafing slid every box sideways by exactly
                     // how far the camera had travelled in between.
                     context.submitNodeCollector().submitCustomGeometry(
-                            context.poseStack(), RenderTypes.lines(),
+                            context.poseStack(), HighlightRenderTypes.throughWalls(),
                             (pose, lines) -> ContainerHighlight.get().drawBoxes(
-                                    pose, lines,
-                                    net.minecraft.client.Minecraft.getInstance()
-                                            .gameRenderer.mainCamera().position()));
+                                    pose, lines, camera()));
+
+                    if (!ContainerHighlight.get().hasTrails()) return;
+                    context.submitNodeCollector().submitCustomGeometry(
+                            context.poseStack(), HighlightRenderTypes.occluded(),
+                            (pose, lines) -> ContainerHighlight.get().drawTrails(
+                                    pose, lines, camera()));
                 });
         *///?} else {
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AFTER_ENTITIES
@@ -65,9 +73,22 @@ public final class WorldHighlightHook {
                     Camera camera = context.gameRenderer().getMainCamera();
                     ContainerHighlight.get().drawBoxes(
                             context.matrices().last(),
-                            context.consumers().getBuffer(RenderTypes.lines()),
+                            context.consumers().getBuffer(HighlightRenderTypes.throughWalls()),
+                            camera.position());
+
+                    if (!ContainerHighlight.get().hasTrails()) return;
+                    ContainerHighlight.get().drawTrails(
+                            context.matrices().last(),
+                            context.consumers().getBuffer(HighlightRenderTypes.occluded()),
                             camera.position());
                 });
         //?}
     }
+
+    //? if >=26.1 {
+    /*// The camera at replay time, not at submit time - see the note above.
+    private static Vec3 camera() {
+        return net.minecraft.client.Minecraft.getInstance().gameRenderer.mainCamera().position();
+    }
+    *///?}
 }

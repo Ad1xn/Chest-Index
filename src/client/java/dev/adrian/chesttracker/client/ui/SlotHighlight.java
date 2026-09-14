@@ -3,6 +3,7 @@ package dev.adrian.chesttracker.client.ui;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
 import dev.adrian.chesttracker.client.platform.Gfx;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
+import dev.adrian.chesttracker.core.highlight.HighlightPulse;
 import dev.adrian.chesttracker.platform.ItemContentsCompat;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.component.DataComponents;
@@ -51,8 +52,6 @@ public final class SlotHighlight {
      */
     private static final int MAX_DEPTH = 3;
 
-    private static final int PULSE_MS = 1400;
-
     public static void draw(Gfx gfx, AbstractContainerScreen<?> screen, int leftPos, int topPos) {
         if (!ChestTrackerConfig.get().highlightFoundSlots) return;
 
@@ -71,8 +70,20 @@ public final class SlotHighlight {
         byte[] marks = marks(screen, wanted, targets, hints);
 
         ChestTrackerConfig config = ChestTrackerConfig.get();
-        int direct = alpha(0xFF000000 | config.nearestColour);
-        int inside = alpha(0xFF000000 | config.otherColour);
+
+        // The mark settles on the resting colour and stays there. It arrives
+        // animated - see settleAmount - because a border that is simply there
+        // when the container opens is easy to read as part of the container's
+        // own texture, especially in a modded GUI; and it stops moving once
+        // that has landed, because a slot that never stops pulsing is one more
+        // thing to dismiss rather than an answer.
+        float settle = settleAmount(screen);
+        int direct = 0xFF000000 | mix(config.otherColour, config.nearestColour, settle);
+
+        // What holds the answer rather than being it - a shulker box, or the
+        // ender chest. Steady on the accent colour, so "open this next" does
+        // not compete with the mark that means "here it is".
+        int inside = 0xFF000000 | config.nearestColour;
 
         ChestTrackerConfig.SlotStyle style = config.slotHighlightStyle();
         boolean outline = style.drawsOutline();
@@ -227,17 +238,65 @@ public final class SlotHighlight {
         if (wanted.contains(itemId)) ContainerHighlight.get().retire(itemId);
     }
 
+    /** The screen the settling animation is timing, and when it opened. */
+    private static java.lang.ref.WeakReference<Object> openedMenu =
+            new java.lang.ref.WeakReference<>(null);
+    private static long openedAt;
+
     /**
-     * Fades the mark in and out.
+     * How far towards the accent colour the mark is, while it settles.
      *
-     * <p>A static border on a slot is easy to mistake for part of the container
-     * texture, especially in a modded GUI. Movement is what makes it read as
-     * something the mod is saying rather than something that was always there.
+     * <p>The mark swings between the two colours for the first moment a
+     * container is open and then holds the resting one. That is the same curve
+     * the world markers pulse on, run once instead of forever: the arrival is
+     * what says a mark has appeared, and stopping is what lets the player get
+     * on with reading the container.
+     *
+     * <p>Timed from the menu rather than from the search, so opening a second
+     * chest animates again - each one is a fresh thing to find the item in -
+     * and re-opening the same one does too, because the menu is new every time
+     * the screen is.
      */
-    private static int alpha(int colour) {
-        double phase = (System.currentTimeMillis() % PULSE_MS) / (double) PULSE_MS;
-        float wave = (float) (0.55 + 0.45 * Math.sin(phase * Math.PI * 2));
-        return (colour & 0x00FFFFFF) | ((int) (wave * 255) << 24);
+    private static float settleAmount(AbstractContainerScreen<?> screen) {
+        Object menu = screen.getMenu();
+        long now = System.currentTimeMillis();
+
+        if (openedMenu.get() != menu) {
+            openedMenu = new java.lang.ref.WeakReference<>(menu);
+            openedAt = now;
+        }
+
+        long since = now - openedAt;
+        if (since >= SETTLE_MS) return 0.0f;
+        return HighlightPulse.at(since, SETTLE_MS / SETTLE_SWINGS);
+    }
+
+    /**
+     * How long the mark takes to settle.
+     *
+     * <p>Short. This is an arrival, not an animation to watch - long enough to
+     * catch the eye while it is still moving to the container, over before it
+     * is something being waited out.
+     */
+    private static final long SETTLE_MS = 1600L;
+
+    /** Swings through the accent colour before settling. */
+    private static final int SETTLE_SWINGS = 2;
+
+    /** Two {@code 0xRRGGBB} colours mixed, {@code amount} 0 giving the first. */
+    private static int mix(int rest, int accent, float amount) {
+        if (amount <= 0.0f) return rest & 0x00FFFFFF;
+        float t = Math.min(1.0f, amount);
+        int red = channel(rest, 16, accent, t);
+        int green = channel(rest, 8, accent, t);
+        int blue = channel(rest, 0, accent, t);
+        return (red << 16) | (green << 8) | blue;
+    }
+
+    private static int channel(int rest, int shift, int accent, float t) {
+        int from = (rest >> shift) & 0xFF;
+        int to = (accent >> shift) & 0xFF;
+        return Math.clamp(Math.round(from + (to - from) * t), 0, 255);
     }
 
 

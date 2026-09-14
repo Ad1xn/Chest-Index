@@ -106,16 +106,17 @@ public final class HighlightBox {
     }
 
     /**
-     * A column of light standing on the container, fading out with height.
+     * A column of marks standing on the container, up to the build limit.
      *
      * <p>The box alone is no use where it is most needed. Past render distance
      * there is no terrain drawn to place it against, and a wireframe cube
      * floating in an empty sky says nothing about where it is - the chunk it
      * sits in has never been loaded, so there is nothing around it to read. A
-     * column is visible over whatever is in the way and reads as a position on
-     * the ground rather than a shape in the air.
+     * column reads as a position on the ground rather than a shape in the air,
+     * and one that runs all the way to the build limit clears whatever is in
+     * front of it without having to ignore it.
      *
-     * <p>Drawn as segments rather than one line so the fade is visible: alpha
+     * <p>Drawn as segments rather than one line so the taper is visible: alpha
      * is a vertex attribute, and a two-vertex line can only fade linearly from
      * end to end, which at this length is barely a gradient at all.
      */
@@ -124,6 +125,19 @@ public final class HighlightBox {
 
     /** How much of each step is drawn; the rest is the gap. */
     private static final double BEAM_DUTY = 0.18;
+
+    /**
+     * What is left of the trail's alpha at the top of it.
+     *
+     * <p>Not nothing, which is what it used to be. A trail that fades out is
+     * fine when it is a fixed forty blocks tall and the point is that it rises
+     * from the container; it is wrong now that it runs to the build limit,
+     * because the part that fades away is exactly the part that clears the
+     * mountain in the way. It still tapers - the bottom is where the container
+     * is, and that should read as the solid end - but it stays visible the
+     * whole way up.
+     */
+    private static final float BEAM_TOP_ALPHA = 0.4f;
 
     public static void beam(PoseStack.Pose pose, VertexConsumer lines,
                             double x, double y, double z, double height,
@@ -135,9 +149,11 @@ public final class HighlightBox {
         double mark = step * BEAM_DUTY;
         for (int i = 0; i < BEAM_MARKS; i++) {
             double at = i * step;
-            // Fades out with height, so the trail reads as rising from the
-            // container rather than falling on it.
-            float fade = alpha * (1.0f - (float) i / BEAM_MARKS);
+            // Tapers with height, so the trail reads as rising from the
+            // container rather than falling on it, without thinning to nothing
+            // before it has cleared what is standing in front of it.
+            float up = (float) i / BEAM_MARKS;
+            float fade = alpha * (1.0f - up * (1.0f - BEAM_TOP_ALPHA));
             if (fade <= 0.02f) break;
             line(pose, lines, x, y + at, z, x, y + at + mark, z,
                     red, green, blue, fade, lineWidth);

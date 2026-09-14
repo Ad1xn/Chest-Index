@@ -6,7 +6,9 @@
   "client": [
     "ContainerScreenAccessor",
     "KeyMappingAccessor",
-    "MalilibScreenMixin"
+    "MalilibScreenMixin",
+    "RenderPipelinesAccessor",
+    "RenderTypeInvoker"
   ],
   "injectors": {
     "defaultRequire": 1

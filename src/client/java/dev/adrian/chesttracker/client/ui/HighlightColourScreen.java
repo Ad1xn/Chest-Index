@@ -316,7 +316,9 @@ public final class HighlightColourScreen extends Screen {
             }
             if (hovered) {
                 gfx.fill(x + 1, y + 1, x + w - 1, y + TAB_H - 1, Panel.HOVER);
-                hoverTitle = nearest ? "The nearest match" : "Every other match";
+                hoverTitle = nearest
+                        ? "The nearest match, and what the rest pulse through"
+                        : "What every other match rests at";
             }
         }
     }
@@ -401,8 +403,8 @@ public final class HighlightColourScreen extends Screen {
      */
     private void drawFooter(Gfx gfx) {
         String footer = editingNearest
-                ? "Editing the colour the nearest match is drawn in."
-                : "Editing the colour every other match is drawn in.";
+                ? "The nearest match holds this colour; the rest swell through it."
+                : "Editing the colour every other match rests at.";
         gfx.text(font, Component.literal(footer),
                 panelX + (PANEL_W - font.width(footer)) / 2, panelY + PANEL_H + 6,
                 Panel.TEXT_MUTED);
