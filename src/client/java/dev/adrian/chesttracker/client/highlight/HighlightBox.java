@@ -52,6 +52,8 @@ public final class HighlightBox {
 
     private static final double BEAM_DUTY = 0.18;
 
+    private static final float BEAM_TOP_ALPHA = 0.4f;
+
     public static void beam(PoseStack.Pose pose, VertexConsumer lines,
                             double x, double y, double z, double height,
                             float red, float green, float blue, float alpha, float lineWidth) {
@@ -59,7 +61,8 @@ public final class HighlightBox {
         double mark = step * BEAM_DUTY;
         for (int i = 0; i < BEAM_MARKS; i++) {
             double at = i * step;
-            float fade = alpha * (1.0f - (float) i / BEAM_MARKS);
+            float up = (float) i / BEAM_MARKS;
+            float fade = alpha * (1.0f - up * (1.0f - BEAM_TOP_ALPHA));
             if (fade <= 0.02f) break;
             line(pose, lines, x, y + at, z, x, y + at + mark, z,
                     red, green, blue, fade, lineWidth);

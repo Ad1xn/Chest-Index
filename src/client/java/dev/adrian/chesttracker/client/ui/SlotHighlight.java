@@ -3,6 +3,7 @@ package dev.adrian.chesttracker.client.ui;
 import dev.adrian.chesttracker.client.highlight.ContainerHighlight;
 import dev.adrian.chesttracker.client.platform.Gfx;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
+import dev.adrian.chesttracker.core.highlight.HighlightPulse;
 import dev.adrian.chesttracker.platform.ItemContentsCompat;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.component.DataComponents;
@@ -22,8 +23,6 @@ public final class SlotHighlight {
 
     private static final int MAX_DEPTH = 3;
 
-    private static final int PULSE_MS = 1400;
-
     public static void draw(Gfx gfx, AbstractContainerScreen<?> screen, int leftPos, int topPos) {
         if (!ChestTrackerConfig.get().highlightFoundSlots) return;
 
@@ -38,8 +37,11 @@ public final class SlotHighlight {
         byte[] marks = marks(screen, wanted, targets, hints);
 
         ChestTrackerConfig config = ChestTrackerConfig.get();
-        int direct = alpha(0xFF000000 | config.nearestColour);
-        int inside = alpha(0xFF000000 | config.otherColour);
+
+        float settle = settleAmount(screen);
+        int direct = 0xFF000000 | mix(config.otherColour, config.nearestColour, settle);
+
+        int inside = 0xFF000000 | config.nearestColour;
 
         ChestTrackerConfig.SlotStyle style = config.slotHighlightStyle();
         boolean outline = style.drawsOutline();
@@ -136,10 +138,41 @@ public final class SlotHighlight {
         if (wanted.contains(itemId)) ContainerHighlight.get().retire(itemId);
     }
 
-    private static int alpha(int colour) {
-        double phase = (System.currentTimeMillis() % PULSE_MS) / (double) PULSE_MS;
-        float wave = (float) (0.55 + 0.45 * Math.sin(phase * Math.PI * 2));
-        return (colour & 0x00FFFFFF) | ((int) (wave * 255) << 24);
+    private static java.lang.ref.WeakReference<Object> openedMenu =
+            new java.lang.ref.WeakReference<>(null);
+    private static long openedAt;
+
+    private static float settleAmount(AbstractContainerScreen<?> screen) {
+        Object menu = screen.getMenu();
+        long now = System.currentTimeMillis();
+
+        if (openedMenu.get() != menu) {
+            openedMenu = new java.lang.ref.WeakReference<>(menu);
+            openedAt = now;
+        }
+
+        long since = now - openedAt;
+        if (since >= SETTLE_MS) return 0.0f;
+        return HighlightPulse.at(since, SETTLE_MS / SETTLE_SWINGS);
+    }
+
+    private static final long SETTLE_MS = 1600L;
+
+    private static final int SETTLE_SWINGS = 2;
+
+    private static int mix(int rest, int accent, float amount) {
+        if (amount <= 0.0f) return rest & 0x00FFFFFF;
+        float t = Math.min(1.0f, amount);
+        int red = channel(rest, 16, accent, t);
+        int green = channel(rest, 8, accent, t);
+        int blue = channel(rest, 0, accent, t);
+        return (red << 16) | (green << 8) | blue;
+    }
+
+    private static int channel(int rest, int shift, int accent, float t) {
+        int from = (rest >> shift) & 0xFF;
+        int to = (accent >> shift) & 0xFF;
+        return Math.clamp(Math.round(from + (to - from) * t), 0, 255);
     }
 
     private static boolean holds(ItemStack stack, Set<Item> targets, int depth) {

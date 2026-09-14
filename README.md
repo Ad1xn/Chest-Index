@@ -91,13 +91,22 @@ single question.
 screen; **right-drag** moves it. Each kind of window remembers its own position, so the button can
 sit in the middle of a hopper's title bar and in the corner of a double chest.
 
-**Once you find something**, ChestTracker marks it in the world: a box on each container, a trail of
-marks rising from it so it's findable across a base, and the nearest one picked out in a second
-colour. A double chest gets one box across both halves. Containers past render distance are drawn at
-the horizon rather than not at all. When you arrive and open the chest, the slot holding your item
-pulses — an outline, a wash over the item, or both, whichever you prefer — and if it's inside a
-shulker box, the shulker pulses instead, then the item once you open that, and the bundle inside
-that if that's where it ended up.
+**Once you find something**, ChestTracker marks it in the world: a box on each container, drawn
+through whatever is in front of it, because a marker you can only see once you can already see the
+chest isn't telling you anything. Every box rests yellow and swells through purple and back; the
+nearest one holds the purple outright, which is what picks it out without labelling it. A double
+chest gets one box across both halves. Containers past render distance are drawn at the horizon
+rather than not at all.
+
+**Further out than twenty chunks** — editable, and past most render distances — each match also gets
+a trail of marks standing on it, running up to the build limit. That one is drawn *behind* the
+world rather than through it, so it reads as standing somewhere in the landscape instead of floating
+in front of it. Closer in it stays out of the way: the box already says which container it is.
+
+When you arrive and open the chest, the slot holding your item swings between the two colours for a
+moment and then settles on yellow — an outline, a wash over the item, or both, whichever you prefer
+— and if it's inside a shulker box, the shulker is marked in purple instead, then the item once you
+open that, and the bundle inside that if that's where it ended up.
 
 **If it's in your ender chest**, that whole trail still works: the nearest ender chest in the world
 is boxed, an ender chest *item* in whatever you have open is marked, and the item itself is marked

@@ -197,6 +197,14 @@ public final class ChestTrackerConfig {
 
     public boolean guideBeam = true;
 
+    public boolean highlightThroughWalls = true;
+
+    public int guideBeamFromChunks = 20;
+
+    public double guideBeamFromBlocks() {
+        return Math.max(0, guideBeamFromChunks) * 16.0;
+    }
+
     public enum Detail {
         ALWAYS,
         SHIFT,
@@ -259,9 +267,9 @@ public final class ChestTrackerConfig {
         }
     }
 
-    public int nearestColour = 0xFF2BD0;
+    public int nearestColour = 0x9B30E0;
 
-    public int otherColour = 0xB478FF;
+    public int otherColour = 0xFFD21E;
 
     private transient int nearestRgbFor;
     private transient float[] nearestRgb;

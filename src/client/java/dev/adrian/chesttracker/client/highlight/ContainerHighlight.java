@@ -2,6 +2,7 @@ package dev.adrian.chesttracker.client.highlight;
 
 import dev.adrian.chesttracker.client.ActionBar;
 import dev.adrian.chesttracker.config.ChestTrackerConfig;
+import dev.adrian.chesttracker.core.highlight.HighlightPulse;
 import dev.adrian.chesttracker.core.highlight.HighlightTargets;
 import dev.adrian.chesttracker.core.highlight.HighlightTimer;
 import dev.adrian.chesttracker.core.util.BlockKey;
@@ -237,13 +238,9 @@ public final class ContainerHighlight {
 
     private static final double MAX_GROW = 0.75;
 
-    private static final double BEAM_MIN_DISTANCE = 8.0;
+    private static final double MIN_BEAM_HEIGHT = 24.0;
 
-    private static final double BEAM_HEIGHT = 48.0;
-
-    private static final double BEAM_HEIGHT_PER_BLOCK = 0.6;
-
-    private static final double MAX_BEAM_HEIGHT = 420.0;
+    private static final int DEFAULT_WORLD_TOP = 320;
 
     private static final float TURN_EASE_PER_SECOND = 6.0f;
 
@@ -265,6 +262,24 @@ public final class ContainerHighlight {
                 && ChestTrackerConfig.get().highlightDisplay().drawsBoxes();
     }
 
+    public boolean hasTrails() {
+        if (!hasBoxes() || !ChestTrackerConfig.get().guideBeam) return false;
+
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return false;
+
+        double from = ChestTrackerConfig.get().guideBeamFromBlocks();
+        double fromSq = from * from;
+        Vec3 eye = client.player.position();
+        for (Long position : positions) {
+            double dx = BlockKey.x(position) + 0.5 - eye.x;
+            double dy = BlockKey.y(position) + 0.5 - eye.y;
+            double dz = BlockKey.z(position) + 0.5 - eye.z;
+            if (dx * dx + dy * dy + dz * dz >= fromSq) return true;
+        }
+        return false;
+    }
+
     private java.util.Set<Long> positionSet() {
         if (positionSetSource != positions) {
             positionSetSource = positions;
@@ -277,11 +292,28 @@ public final class ContainerHighlight {
     private List<Long> positionSetSource;
     private java.util.Set<Long> positionSet = java.util.Set.of();
 
+    private enum Pass { BOXES, TRAILS }
+
     public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        draw(pose, lines, eye, Pass.BOXES);
+    }
+
+    public void drawTrails(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
+        draw(pose, lines, eye, Pass.TRAILS);
+    }
+
+    private final float[] pulsed = new float[3];
+
+    private void draw(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye, Pass pass) {
         ChestTrackerConfig config = ChestTrackerConfig.get();
-        boolean beams = config.guideBeam;
         float[] nearestColour = config.nearestRgb();
         float[] otherColour = config.otherRgb();
+
+        float pulse = HighlightPulse.at(System.currentTimeMillis());
+        HighlightPulse.mix(otherColour, nearestColour, pulse, pulsed);
+
+        double trailFrom = pass == Pass.TRAILS ? config.guideBeamFromBlocks() : 0.0;
+        int worldTop = worldTop();
 
         java.util.Set<Long> present = positionSet();
 
@@ -313,6 +345,10 @@ public final class ContainerHighlight {
             double distSq = dx * dx + dy * dy + dz * dz;
             double distance = Math.sqrt(distSq);
 
+            drawn++;
+
+            if (pass == Pass.TRAILS && distance < trailFrom) continue;
+
             double limit = horizon();
             double pull = distance > limit ? limit / distance : 1.0;
 
@@ -322,25 +358,29 @@ public final class ContainerHighlight {
 
             boolean nearest = position == pos
                     || (span.partner() != NO_PARTNER && span.partner() == pos);
-            float[] colour = nearest ? nearestColour : otherColour;
+            float[] colour = nearest ? nearestColour : pulsed;
 
             double drawX = dx * pull - sizeX / 2.0;
             double drawY = dy * pull - sizeY / 2.0;
             double drawZ = dz * pull - sizeZ / 2.0;
 
-            HighlightBox.emit(pose, lines, drawX, drawY, drawZ, sizeX, sizeY, sizeZ,
-                    colour[0], colour[1], colour[2], 0.9f, grow, lineWidth);
-
-            if (beams && distance > BEAM_MIN_DISTANCE) {
-                double beamHeight = Math.min(MAX_BEAM_HEIGHT,
-                        BEAM_HEIGHT + distance * BEAM_HEIGHT_PER_BLOCK);
-                HighlightBox.beam(pose, lines,
-                        drawX + sizeX / 2.0, drawY + sizeY + 0.5, drawZ + sizeZ / 2.0,
-                        beamHeight * pull,
-                        colour[0], colour[1], colour[2], 0.75f, lineWidth);
+            if (pass == Pass.BOXES) {
+                HighlightBox.emit(pose, lines, drawX, drawY, drawZ, sizeX, sizeY, sizeZ,
+                        colour[0], colour[1], colour[2], 0.9f, grow, lineWidth);
+                continue;
             }
-            drawn++;
+
+            double height = Math.max(MIN_BEAM_HEIGHT, worldTop - (y + sizeY));
+            HighlightBox.beam(pose, lines,
+                    drawX + sizeX / 2.0, drawY + sizeY, drawZ + sizeZ / 2.0,
+                    height * pull,
+                    colour[0], colour[1], colour[2], 0.75f, lineWidth);
         }
+    }
+
+    private static int worldTop() {
+        Minecraft client = Minecraft.getInstance();
+        return client.level == null ? DEFAULT_WORLD_TOP : client.level.getMaxY() + 1;
     }
 
     private static final long SPAN_CACHE_MS = 500;
