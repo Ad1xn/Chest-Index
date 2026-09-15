@@ -400,11 +400,16 @@ public final class ChestIndexConfig {
     }
 
     private static Path file() {
-        return FabricLoader.getInstance().getConfigDir().resolve(ChestIndex.MOD_ID + ".json");
+        try {
+            return FabricLoader.getInstance().getConfigDir().resolve(ChestIndex.MOD_ID + ".json");
+        } catch (RuntimeException | LinkageError noLoader) {
+            return null;
+        }
     }
 
     private static ChestIndexConfig load() {
         Path path = file();
+        if (path == null) return new ChestIndexConfig();
         if (!Files.isRegularFile(path)) {
             ChestIndexConfig fresh = new ChestIndexConfig();
             fresh.save();
@@ -433,6 +438,7 @@ public final class ChestIndexConfig {
 
     public void save() {
         Path path = file();
+        if (path == null) return;
         try {
             Files.createDirectories(path.getParent());
             try (Writer writer = Files.newBufferedWriter(path)) {
