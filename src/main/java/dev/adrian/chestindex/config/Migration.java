@@ -17,6 +17,14 @@ public final class Migration {
 
     private static boolean done;
 
+    private static boolean newer(Path a, Path b) {
+        try {
+            return Files.getLastModifiedTime(a).compareTo(Files.getLastModifiedTime(b)) > 0;
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
+
     public static void run() {
         if (done) return;
         done = true;
@@ -38,10 +46,19 @@ public final class Migration {
         if (!Files.exists(from)) return;
 
         if (Files.exists(to)) {
-            ChestIndex.LOG.warn("Both {} and {} exist; keeping the newer one. "
-                    + "The old {} at {} is no longer read and can be deleted.",
-                    from.getFileName(), to.getFileName(), what, from);
-            return;
+            if (newer(to, from)) {
+                ChestIndex.LOG.info("Keeping the newer {} already at {}; the older one at {} "
+                        + "is no longer read.", what, to, from);
+                return;
+            }
+            Path aside = to.resolveSibling(to.getFileName() + ".superseded");
+            try {
+                Files.move(to, aside, StandardCopyOption.REPLACE_EXISTING);
+                ChestIndex.LOG.info("Set aside a stale {} at {}", what, aside);
+            } catch (IOException e) {
+                ChestIndex.LOG.warn("Could not set aside {}: {}", to, e.toString());
+                return;
+            }
         }
 
         try {
