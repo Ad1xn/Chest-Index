@@ -969,12 +969,26 @@ public final class ChestIndexConfig {
         return instance;
     }
 
+    /**
+     * Where the settings live, or null when there is nowhere to put them.
+     *
+     * <p>Null happens outside a running game - a unit test, or anything else
+     * holding this class without a mod loader under it. The settings are then
+     * whatever the defaults are, which is a working answer; the alternative was
+     * the loader's own failure thrown from a getter that every caller treats as
+     * infallible, and it reached {@code applyFilters} on the query path.
+     */
     private static Path file() {
-        return FabricLoader.getInstance().getConfigDir().resolve(ChestIndex.MOD_ID + ".json");
+        try {
+            return FabricLoader.getInstance().getConfigDir().resolve(ChestIndex.MOD_ID + ".json");
+        } catch (RuntimeException | LinkageError noLoader) {
+            return null;
+        }
     }
 
     private static ChestIndexConfig load() {
         Path path = file();
+        if (path == null) return new ChestIndexConfig();
         if (!Files.isRegularFile(path)) {
             ChestIndexConfig fresh = new ChestIndexConfig();
             fresh.save();
@@ -1013,6 +1027,7 @@ public final class ChestIndexConfig {
 
     public void save() {
         Path path = file();
+        if (path == null) return;
         try {
             Files.createDirectories(path.getParent());
             try (Writer writer = Files.newBufferedWriter(path)) {
