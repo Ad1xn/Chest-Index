@@ -1,8 +1,8 @@
-# ChestTracker
+# ChestIndex
 
 **Find your stuff without opening a single chest.**
 
-ChestTracker indexes **every container in your world** within a configurable radius — including
+ChestIndex indexes **every container in your world** within a configurable radius — including
 chunks that aren't loaded — and lets you search it. It's a proactive replacement for
 [Chest Tracker](https://modrinth.com/mod/chest-tracker), which only remembers containers after
 you've physically opened them.
@@ -42,7 +42,7 @@ configurations — a parallel build path to maintain, not a version bump.
 
 ## Using it
 
-**Two keys**, both under a **ChestTracker** heading in Controls:
+**Two keys**, both under a **ChestIndex** heading in Controls:
 
 | Default | What it does |
 |---|---|
@@ -91,7 +91,7 @@ single question.
 screen; **right-drag** moves it. Each kind of window remembers its own position, so the button can
 sit in the middle of a hopper's title bar and in the corner of a double chest.
 
-**Once you find something**, ChestTracker marks it in the world: a box on each container, drawn
+**Once you find something**, ChestIndex marks it in the world: a box on each container, drawn
 through whatever is in front of it, because a marker you can only see once you can already see the
 chest isn't telling you anything. Every box rests yellow and swells through purple and back; the
 nearest one holds the purple outright, which is what picks it out without labelling it. A double
@@ -116,9 +116,27 @@ once the chest is open.
 any — the ender chest is checked first, then every other dimension the index knows about.
 
 Everything above is configurable through Mod Menu. The settings are grouped into General,
-Containers, Searching, Guidance and Assist, and the box at the top filters every section at once —
+Containers, Searching, Guidance and Cheats, and the box at the top filters every section at once —
 by the wording of the explanations as well as the labels, so you can find a setting by what it does
 rather than by what it's called.
+
+### Cheats
+
+Some of what this mod *can* do crosses a line, and where that line is depends on which world you're
+in and what you agreed to there — which isn't something the mod can work out from the outside. So
+those features live in one section behind one switch, **Enable cheat-like features**, off by
+default. Nothing in there does anything until it's on, and each setting keeps its own value while
+it's off, so you can switch the lot off for one server and back on at home without setting them up
+again.
+
+| Setting | What it does |
+| --- | --- |
+| `indexGeneratedChests` | Indexes **unopened** structure loot, including in chunks nobody has ever loaded. This is x-ray in the plainest sense. A generated chest someone has already opened is kept either way — remembering what you've seen is the whole mod. |
+| `entityContainersOnVanillaServers` | Reads chest minecarts and boats on servers without the mod, where they've moved since they were seen |
+| `turnToTarget` | Turns your view to face the nearest match |
+| `openInReach` | Opens a match that's already within reach |
+
+The last two are also gated per server — see below.
 
 ### With Litematica
 
@@ -143,7 +161,7 @@ fact decides what's possible in each setup:
 | Setup | Container locations | Contents | Unloaded chunks |
 |---|---|---|---|
 | Singleplayer / LAN host | yes | yes | yes |
-| Server with ChestTracker installed | yes | yes (permission-gated) | yes |
+| Server with ChestIndex installed | yes | yes (permission-gated) | yes |
 | Vanilla server (no mod on the server) | chunks you've visited | containers you've opened | no |
 
 Singleplayer gets everything, because there the client *is* the server.
@@ -165,19 +183,20 @@ is never moved. A vanilla server cannot tell the mod is running, which is the po
 this exists for are the ones that would ban you for the alternative.
 
 The two features that *do* move you — turning to face a match, and opening a container already
-within reach — are off on anyone else's server for exactly that reason. They look like aim-assist
-and auto-interact from the far end, and the far end doesn't get to hear why. In your own world
-(including hosting a LAN game) they work as before. On a server they need naming that server under
+within reach — need **Enable cheat-like features** on at all, and are still off on anyone else's
+server for exactly that reason. They look like aim-assist and auto-interact from the far end, and
+the far end doesn't get to hear why. In your own world (including hosting a LAN game) they work as
+before. On a server they need naming that server under
 **Servers those two are allowed on**, which is the setting to prefer — `assistOnServers` turns them
 on for *every* server you ever join, which means answering for the strictest one.
 
-The client-side index is kept per server address under `config/chest-tracker/servers/`, and can be
+The client-side index is kept per server address under `config/chestindex/servers/`, and can be
 turned off with `clientSideIndex`. **Stored indexes** in the settings lists every world and server
 this machine holds one for, showing where each one lives and offering to throw it away.
 
 ### Switching it off
 
-**ChestTracker: off** stops everything — no search screen, no button on containers, no key, nothing
+**ChestIndex: off** stops everything — no search screen, no button on containers, no key, nothing
 indexed, nothing drawn. Not hidden: stopped.
 
 **Servers it stays off on** does the same automatically for the addresses listed, for as long as
@@ -192,7 +211,7 @@ other when it doesn't match, rather than silently misreading one another.
 ## Server operators
 
 By default **everyone on the server can search** — installing the mod is the decision that players
-should be able to. Narrow it with `/chesttracker access <tier>` (takes effect immediately, no
+should be able to. Narrow it with `/chestindex access <tier>` (takes effect immediately, no
 restart) or the `permissionTier` config key:
 
 | `permissionTier` | Who can search | What they see |
@@ -210,7 +229,7 @@ their own world is never gated — their screen reads the world directly.
 Clients connecting to a server without the mod fall back automatically; no configuration is needed
 on either side.
 
-The server side is useful on its own — `/chesttracker find <item>` works from a vanilla client with
+The server side is useful on its own — `/chestindex find <item>` works from a vanilla client with
 no mod installed.
 
 ### Commands
@@ -219,18 +238,18 @@ Operator-only, since a full index is loot x-ray.
 
 | Command | What it does |
 |---|---|
-| `/chesttracker scan [chunkRadius]` | Reads the chunks around you, out to a radius |
-| `/chesttracker scanworld` | Reads region files that changed since the last scan |
-| `/chesttracker scanworld override` | Throws the index away and reads the whole world again |
-| `/chesttracker scanworld cancel` | Stops a running scan; what it read is kept |
-| `/chesttracker stats` | Container counts, origins, scan progress |
-| `/chesttracker find <item>` | Where an item is, in chat |
-| `/chesttracker access [tier]` | Show or set who may search |
+| `/chestindex scan [chunkRadius]` | Reads the chunks around you, out to a radius |
+| `/chestindex scanworld` | Reads region files that changed since the last scan |
+| `/chestindex scanworld override` | Throws the index away and reads the whole world again |
+| `/chestindex scanworld cancel` | Stops a running scan; what it read is kept |
+| `/chestindex stats` | Container counts, origins, scan progress |
+| `/chestindex find <item>` | Where an item is, in chat |
+| `/chestindex access [tier]` | Show or set who may search |
 
 Use `override` when the index looks *wrong* rather than merely incomplete: an ordinary scan corrects
 and adds, but never removes something it doesn't encounter. Searches are empty until it finishes.
 
-The index lives in the world folder, at `<world>/data/chest-tracker/`, beside a plain-text record of
+The index lives in the world folder, at `<world>/data/chestindex/`, beside a plain-text record of
 which region files have been read. Deleting that record makes the next scan read everything again;
 deleting the folder starts from nothing.
 
@@ -239,10 +258,23 @@ deleting the folder starts from nothing.
 Drop the jar for your Minecraft version in `mods/`. Fabric API is required; Mod Menu is optional and
 only adds the settings screen.
 
-The mod id is **`chest-tracker`**, deliberately *not* the original mod's `chesttracker` — the two
-would collide, and Fabric resolves duplicate ids by silently loading one of them. If you are
-upgrading from a build that called itself `chestindex`, delete that jar: the ids differ, so both
-would load at once.
+The mod id is **`chestindex`**, deliberately *not* the original mod's `chesttracker` — the two
+would collide, and Fabric resolves duplicate ids by silently loading one of them.
+
+### Upgrading from ChestTracker
+
+The mod was called ChestTracker up to 1.1, under the id `chest-tracker`. **Delete that jar** before
+adding this one: the ids differ, so Fabric would happily load both and you would get two search
+screens bound to the same keys.
+
+Nothing else needs doing. On first launch everything kept under the old id is *moved* to the new
+one — your settings (`config/chest-tracker.json`), the per-server indexes beside them, and the
+index inside every world save (`<world>/data/chest-tracker/`). Moved rather than copied, so no
+stale duplicate is left behind. Worlds you don't open again are carried across the first time you
+open **Stored indexes** in the settings, which is the one place every save gets looked at.
+
+The one thing that does not survive is a connection to a server still on 1.1: the network namespace
+moved with the id, so client and server must both be on 1.2.
 
 ## Building
 

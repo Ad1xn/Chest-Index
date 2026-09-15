@@ -1,0 +1,77 @@
+package dev.adrian.chestindex.core.index;
+
+import dev.adrian.chestindex.core.model.Origin;
+
+import java.util.Set;
+import java.util.UUID;
+
+public record IndexQuery(
+        Set<Integer> itemIds,
+        Set<Origin> origins,
+        Set<Integer> typeIds,
+        Set<Integer> excludedTypeIds,
+        Set<Integer> detailIds,
+        boolean unlootedOnly,
+        boolean knownContentsOnly,
+        UUID owner,
+        boolean includeNested,
+        long center,
+        double maxDistance,
+        int limit
+) {
+
+    public IndexQuery {
+        itemIds = itemIds == null ? Set.of() : Set.copyOf(itemIds);
+        origins = origins == null ? Set.of() : Set.copyOf(origins);
+        typeIds = typeIds == null ? Set.of() : Set.copyOf(typeIds);
+        excludedTypeIds = excludedTypeIds == null ? Set.of() : Set.copyOf(excludedTypeIds);
+        detailIds = detailIds == null ? Set.of() : Set.copyOf(detailIds);
+    }
+
+    public boolean hasDistanceLimit() {
+        return maxDistance > 0;
+    }
+
+    public double maxDistanceSq() {
+        return maxDistance * maxDistance;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private Set<Integer> itemIds = Set.of();
+        private Set<Origin> origins = Set.of();
+        private Set<Integer> typeIds = Set.of();
+        private Set<Integer> excludedTypeIds = Set.of();
+        private Set<Integer> detailIds = Set.of();
+        private boolean unlootedOnly;
+        private boolean knownContentsOnly;
+        private UUID owner;
+        private boolean includeNested = true;
+        private long center;
+        private double maxDistance;
+        private int limit;
+
+        public Builder items(Set<Integer> ids) { this.itemIds = ids; return this; }
+        public Builder item(int id) { this.itemIds = Set.of(id); return this; }
+        public Builder origins(Set<Origin> o) { this.origins = o; return this; }
+        public Builder origin(Origin o) { this.origins = Set.of(o); return this; }
+        public Builder types(Set<Integer> ids) { this.typeIds = ids; return this; }
+        public Builder excludeTypes(Set<Integer> ids) { this.excludedTypeIds = ids; return this; }
+        public Builder details(Set<Integer> ids) { this.detailIds = ids; return this; }
+        public Builder unlootedOnly(boolean v) { this.unlootedOnly = v; return this; }
+        public Builder knownContentsOnly(boolean v) { this.knownContentsOnly = v; return this; }
+        public Builder owner(UUID id) { this.owner = id; return this; }
+        public Builder includeNested(boolean v) { this.includeNested = v; return this; }
+        public Builder center(long packedPos) { this.center = packedPos; return this; }
+        public Builder maxDistance(double blocks) { this.maxDistance = blocks; return this; }
+        public Builder limit(int n) { this.limit = n; return this; }
+
+        public IndexQuery build() {
+            return new IndexQuery(itemIds, origins, typeIds, excludedTypeIds, detailIds, unlootedOnly,
+                    knownContentsOnly, owner, includeNested, center, maxDistance, limit);
+        }
+    }
+}
