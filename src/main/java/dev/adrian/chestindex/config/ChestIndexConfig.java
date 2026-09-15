@@ -780,6 +780,115 @@ public final class ChestIndexConfig {
         };
     }
 
+    // --- How a marker is drawn ---------------------------------------------
+
+    /** What shape a world marker is drawn as. */
+    public enum Shape {
+        /** A wireframe box. Says which block, and hides none of it. */
+        OUTLINE,
+        /** A solid translucent box. Far easier to pick out across a base. */
+        CUBE,
+        /** Both: a solid box with its edges picked out. */
+        BOTH;
+
+        public static Shape parse(String value) {
+            if (value == null) return CUBE;
+            for (Shape shape : values()) {
+                if (shape.name().equalsIgnoreCase(value.trim())) return shape;
+            }
+            return CUBE;
+        }
+
+        public boolean drawsCube() {
+            return this == CUBE || this == BOTH;
+        }
+
+        public boolean drawsOutline() {
+            return this == OUTLINE || this == BOTH;
+        }
+
+        /** What the settings screen shows, in the game's own lower case. */
+        public String label() {
+            return switch (this) {
+                case OUTLINE -> "outline";
+                case CUBE -> "full cube";
+                case BOTH -> "cube and outline";
+            };
+        }
+    }
+
+    /**
+     * Which of those shapes the markers use.
+     *
+     * <p>A solid cube by default. The outline was the original and is the more
+     * precise of the two - it says which block and hides nothing - but precision
+     * is not the problem a marker has at forty blocks in a base full of wire.
+     * A filled box is found by looking rather than by scanning, which is the
+     * job, and the outline is one click away for anyone who wants the chest
+     * visible inside its own marker.
+     */
+    public String highlightShape = Shape.CUBE.name();
+
+    public Shape highlightShape() {
+        return Shape.parse(highlightShape);
+    }
+
+    /** How a marker arrives when a search lands. */
+    public enum Entry {
+        /** It is simply there. */
+        NONE,
+        /** It fades up from nothing. */
+        FADE,
+        /** It swells outwards into place, fading as it goes. */
+        GROW;
+
+        public static Entry parse(String value) {
+            if (value == null) return GROW;
+            for (Entry entry : values()) {
+                if (entry.name().equalsIgnoreCase(value.trim())) return entry;
+            }
+            return GROW;
+        }
+
+        public String label() {
+            return switch (this) {
+                case NONE -> "appear";
+                case FADE -> "fade in";
+                case GROW -> "grow in";
+            };
+        }
+    }
+
+    /**
+     * How the markers arrive.
+     *
+     * <p>Growing, by default. A search closes the screen and drops the player
+     * back into the world, and half a dozen boxes that are simply <em>there</em>
+     * the moment it closes read as part of the scenery - the eye has nothing to
+     * catch. Something that arrives is something the mod is saying. It is over
+     * in under half a second either way.
+     */
+    public String highlightEntry = Entry.GROW.name();
+
+    public Entry highlightEntry() {
+        return Entry.parse(highlightEntry);
+    }
+
+    /**
+     * How solid a filled marker is, as a percentage.
+     *
+     * <p>Low. It has to be obvious from across a base and still leave the chest
+     * inside it recognisable close up, and those pull in opposite directions -
+     * this is the number that settles the argument, so it is a setting rather
+     * than a constant.
+     */
+    public int highlightCubeOpacity = 35;
+
+    /** {@link #highlightCubeOpacity} as an alpha, 0-1. */
+    public float cubeAlpha() {
+        return Math.clamp(highlightCubeOpacity, 5, 100) / 100.0f;
+    }
+
     // --- Cheat-like features ----------------------------------------------
 
     /**

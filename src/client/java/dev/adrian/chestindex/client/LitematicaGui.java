@@ -53,8 +53,6 @@ public final class LitematicaGui {
 
     private static final String BUTTON_BASE = "fi.dy.masa.malilib.gui.button.ButtonBase";
 
-    /** Litematica's own keys, so the buttons are found in any language. */
-    private static final String IGNORE_KEY = "litematica.gui.button.material_list.ignore";
     private static final String EXPORT_KEY = "litematica.gui.button.material_list.export";
 
     /** Logged once per session; a rename should be findable without being fatal. */
@@ -107,10 +105,9 @@ public final class LitematicaGui {
             Object raw = read(listWidget, "listWidgets");
             if (!(raw instanceof List<?> widgets)) return List.of();
 
-            String ignoreLabel = I18n.get(IGNORE_KEY);
             List<Row> rows = new ArrayList<>(widgets.size());
             for (Object widget : widgets) {
-                Row row = rowOf(widget, ignoreLabel);
+                Row row = rowOf(widget);
                 if (row != null) rows.add(row);
             }
             return rows;
@@ -120,7 +117,7 @@ public final class LitematicaGui {
         }
     }
 
-    private static Row rowOf(Object widget, String ignoreLabel) {
+    private static Row rowOf(Object widget) {
         Object entry = invoke(widget, "getEntry");
         if (entry == null) return null;
 
@@ -129,7 +126,7 @@ public final class LitematicaGui {
         Identifier id = BuiltInRegistries.ITEM.getKey(item.getItem());
         if (id == null) return null;
 
-        Rect anchor = buttonIn(widget, ignoreLabel);
+        Rect anchor = buttonIn(widget);
         if (anchor == null) return null;
 
         Object total = invoke(entry, "getCountTotal");
@@ -141,15 +138,23 @@ public final class LitematicaGui {
     }
 
     /**
-     * A row's {@code Ignore} button.
+     * The leftmost button in a row - whatever it happens to be.
      *
-     * <p>Matched on the label Litematica itself would render, resolved through
-     * the game's own translation lookup - so this holds in every language
-     * rather than only in English. If that fails the leftmost button in the row
-     * is used, which is what {@code Ignore} is: the alternative, giving up,
-     * would cost the whole feature over a renamed translation key.
+     * <p>This used to look for {@code Ignore} by its translated label and
+     * anchor to that, on the reasoning that {@code Ignore} was the leftmost
+     * button a row had. It is not any more: Litematica grew a {@code Replace}
+     * button to its left, so a marker placed one gap left of {@code Ignore}
+     * landed on top of {@code Replace} and covered the right half of it. The
+     * label was still being matched correctly - the assumption behind it had
+     * simply stopped being true.
+     *
+     * <p>Asking which button is furthest left needs no assumption and no
+     * translation lookup, and it keeps holding when the next button appears.
+     * Every button in the row is considered, including ones other mods have
+     * added, because a button this mod cannot name is exactly the kind it must
+     * not draw over.
      */
-    private static Rect buttonIn(Object rowWidget, String ignoreLabel) {
+    private static Rect buttonIn(Object rowWidget) {
         Object raw = read(rowWidget, "subWidgets");
         if (!(raw instanceof List<?> subWidgets)) return null;
 
@@ -161,7 +166,6 @@ public final class LitematicaGui {
             Rect bounds = boundsOf(sub);
             if (bounds == null) continue;
 
-            if (ignoreLabel.equals(read(sub, "displayString"))) return bounds;
             if (leftmost == null || bounds.x() < leftmost.x()) leftmost = bounds;
         }
         return leftmost;

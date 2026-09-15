@@ -28,11 +28,12 @@ import net.minecraft.world.phys.Vec3;
  * {@code PoseStack.Pose} and {@code Camera}. So both branches below do nothing
  * but obtain a pose and a consumer, and hand them to the same drawing code.
  *
- * <p>Two passes, not one. The boxes are drawn against a see-through line type
- * and the trails against vanilla's ordinary one, and a vertex consumer belongs
- * to exactly one render type - so each pass asks for its own. The trail pass is
- * skipped outright when nothing is far enough away to have a trail, which in a
- * base is every frame.
+ * <p>Three passes, not one, because a vertex consumer belongs to exactly one
+ * render type and these want three: solid faces of {@code POSITION_COLOR},
+ * see-through lines that carry a normal and a width, and ordinary depth-tested
+ * lines for the trails. Each pass is skipped outright when the chosen shape or
+ * the distances in play mean it would emit nothing - which in a base is the
+ * trail pass on every frame, and one of the other two on most.
  */
 public final class WorldHighlightHook {
 
@@ -54,10 +55,19 @@ public final class WorldHighlightHook {
                     // from another, and the gap between them is the player's
                     // own movement: strafing slid every box sideways by exactly
                     // how far the camera had travelled in between.
-                    context.submitNodeCollector().submitCustomGeometry(
-                            context.poseStack(), HighlightRenderTypes.throughWalls(),
-                            (pose, lines) -> ContainerHighlight.get().drawBoxes(
-                                    pose, lines, camera()));
+                    if (ContainerHighlight.get().hasCubes()) {
+                        context.submitNodeCollector().submitCustomGeometry(
+                                context.poseStack(), HighlightRenderTypes.filledThroughWalls(),
+                                (pose, faces) -> ContainerHighlight.get().drawCubes(
+                                        pose, faces, camera()));
+                    }
+
+                    if (ContainerHighlight.get().hasOutlines()) {
+                        context.submitNodeCollector().submitCustomGeometry(
+                                context.poseStack(), HighlightRenderTypes.throughWalls(),
+                                (pose, lines) -> ContainerHighlight.get().drawBoxes(
+                                        pose, lines, camera()));
+                    }
 
                     if (!ContainerHighlight.get().hasTrails()) return;
                     context.submitNodeCollector().submitCustomGeometry(
@@ -71,10 +81,21 @@ public final class WorldHighlightHook {
                     ContainerHighlight.get().turnTowardsTarget();
                     if (!ContainerHighlight.get().hasBoxes()) return;
                     Camera camera = context.gameRenderer().getMainCamera();
-                    ContainerHighlight.get().drawBoxes(
-                            context.matrices().last(),
-                            context.consumers().getBuffer(HighlightRenderTypes.throughWalls()),
-                            camera.position());
+
+                    if (ContainerHighlight.get().hasCubes()) {
+                        ContainerHighlight.get().drawCubes(
+                                context.matrices().last(),
+                                context.consumers().getBuffer(
+                                        HighlightRenderTypes.filledThroughWalls()),
+                                camera.position());
+                    }
+
+                    if (ContainerHighlight.get().hasOutlines()) {
+                        ContainerHighlight.get().drawBoxes(
+                                context.matrices().last(),
+                                context.consumers().getBuffer(HighlightRenderTypes.throughWalls()),
+                                camera.position());
+                    }
 
                     if (!ContainerHighlight.get().hasTrails()) return;
                     ContainerHighlight.get().drawTrails(

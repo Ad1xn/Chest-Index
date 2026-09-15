@@ -23,4 +23,17 @@ public interface RenderPipelinesAccessor {
     static RenderPipeline.Snippet chestindex$linesSnippet() {
         throw new AssertionError();
     }
+
+    /**
+     * The same, for solid geometry.
+     *
+     * <p>{@code POSITION_COLOR}, quads, translucent blending and no culling -
+     * which is exactly a box the camera may be standing inside. Vanilla uses it
+     * for the debug renderer's filled boxes; a marker cube is the same shape
+     * drawn for a better reason.
+     */
+    @Accessor("DEBUG_FILLED_SNIPPET")
+    static RenderPipeline.Snippet chestindex$filledSnippet() {
+        throw new AssertionError();
+    }
 }

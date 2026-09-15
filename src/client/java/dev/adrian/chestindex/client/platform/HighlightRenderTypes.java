@@ -31,6 +31,7 @@ public final class HighlightRenderTypes {
     private HighlightRenderTypes() {}
 
     private static RenderType throughWalls;
+    private static RenderType filledThroughWalls;
 
     /**
      * Lines drawn wherever they are, whatever is in front of them.
@@ -55,11 +56,56 @@ public final class HighlightRenderTypes {
         return RenderTypes.lines();
     }
 
+    /**
+     * Solid faces, drawn through whatever is in front of them.
+     *
+     * <p>The cube half of a marker. The same trick as {@link #throughWalls()},
+     * on the pipeline vanilla fills its debug boxes with - already translucent,
+     * and already drawing both sides of every face, so a camera standing inside
+     * the box still sees it rather than looking through the back of it.
+     */
+    public static RenderType filledThroughWalls() {
+        if (!dev.adrian.chestindex.config.ChestIndexConfig.get().highlightThroughWalls) {
+            return filled();
+        }
+        if (filledThroughWalls == null) filledThroughWalls = buildFilled();
+        return filledThroughWalls;
+    }
+
+    /** Solid faces the world can stand in front of - vanilla's own. */
+    public static RenderType filled() {
+        return RenderTypes.debugFilledBox();
+    }
     private static RenderType build() {
+        return build(RenderPipelinesAccessor.chestindex$linesSnippet(),
+                "chestindex_lines_through_walls", "chestindex:lines_through_walls",
+                RenderTypes.lines());
+    }
+
+    private static RenderType buildFilled() {
+        return build(RenderPipelinesAccessor.chestindex$filledSnippet(),
+                "chestindex_filled_through_walls", "chestindex:filled_through_walls",
+                RenderTypes.debugFilledBox());
+    }
+
+    /**
+     * One see-through render type, built from a vanilla snippet.
+     *
+     * <p>Both markers want the same thing done to them - vanilla's own way of
+     * drawing a shape, with the depth test taken out and depth writes left off
+     * - so the two differ only in which snippet they start from.
+     *
+     * @param fallback what to use if the pipeline cannot be built. A marker
+     *                 that is merely occluded is worth far more than a crash on
+     *                 the render thread, and this is the one place this mod
+     *                 reaches past the API into how the game draws.
+     */
+    private static RenderType build(RenderPipeline.Snippet snippet, String location,
+                                    String name, RenderType fallback) {
         try {
             RenderPipeline pipeline = RenderPipeline
-                    .builder(RenderPipelinesAccessor.chestindex$linesSnippet())
-                    .withLocation("pipeline/chestindex_lines_through_walls")
+                    .builder(snippet)
+                    .withLocation("pipeline/" + location)
                     //? if >=26.1 {
                     /*.withDepthStencilState(new com.mojang.blaze3d.pipeline.DepthStencilState(
                             com.mojang.blaze3d.platform.CompareOp.ALWAYS_PASS, false))
@@ -69,13 +115,13 @@ public final class HighlightRenderTypes {
                     //?}
                     .build();
 
-            return RenderTypeInvoker.chestindex$create("chestindex:lines_through_walls",
+            return RenderTypeInvoker.chestindex$create(name,
                     RenderSetup.builder(pipeline).createRenderSetup());
         } catch (Throwable t) {
             dev.adrian.chestindex.ChestIndex.LOG.warn(
-                    "Could not build the see-through marker type, falling back to plain lines: {}",
-                    t.toString());
-            return RenderTypes.lines();
+                    "Could not build the see-through marker type {}, falling back: {}",
+                    name, t.toString());
+            return fallback;
         }
     }
 }

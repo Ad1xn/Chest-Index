@@ -89,6 +89,10 @@ public final class SlotHighlight {
         boolean outline = style.drawsOutline();
         boolean background = style.drawsBackground();
 
+        // Read once; a background wash puts the item back over itself, and the
+        // decorations need the font to draw the stack count.
+        net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
+
         java.util.List<Slot> slots = screen.getMenu().slots;
         for (int index = 0; index < slots.size() && index < marks.length; index++) {
             byte mark = marks[index];
@@ -96,18 +100,28 @@ public final class SlotHighlight {
 
             int colour = mark == MARK_DIRECT ? direct : inside;
             Slot slot = slots.get(index);
+            ItemStack stack = slot.getItem();
             int x = leftPos + slot.x;
             int y = topPos + slot.y;
 
-            // Over the item rather than behind it - this runs after the screen
-            // has finished drawing, which is the only point a mod can add to
-            // it. So the wash is held well under the pulse's own alpha: the
-            // slot still has to show its item and its stack count, and at full
-            // strength it would hide both. Vanilla tints its own hovered slot
-            // the same way, over the top and half transparent.
+            // Behind the item, which takes some doing: a mod can only add to a
+            // container screen after it has finished drawing, so anything
+            // painted here lands on top of the item by construction. The way
+            // under it is to paint the wash and then put the item back - the
+            // one drawn over is pixel-for-pixel the one vanilla already drew,
+            // so the only thing that changes is which side of the wash it is
+            // on. Cheaper than it sounds, and it works the same on both
+            // targets; the alternative was a mixin into the screen's own
+            // drawing, which is two different mixins because 26.2 replaced
+            // that method wholesale.
+            //
+            // The wash can now be a real tint rather than a whisper, because
+            // it is no longer competing with the item for the same pixels.
             // Drawn before the outline so it cannot paint over it.
             if (background) {
                 gfx.fill(x, y, x + 16, y + 16, dim(colour));
+                gfx.item(stack, x, y);
+                gfx.itemDecorations(font, stack, x, y);
             }
             if (outline) {
                 gfx.fill(x - 1, y - 1, x + 17, y, colour);
@@ -205,8 +219,15 @@ public final class SlotHighlight {
         return (colour & 0x00FFFFFF) | (opacity << 24);
     }
 
-    /** How much of the mark's opacity the background wash gets. */
-    private static final int BACKGROUND_OPACITY_PERCENT = 45;
+    /**
+     * How much of the mark's opacity the background wash gets.
+     *
+     * <p>Raised from forty-five once the wash moved behind the item. It was
+     * held that low because it was painted over the item and the stack count
+     * and had to let both read through; underneath, it is a background and can
+     * look like one.
+     */
+    private static final int BACKGROUND_OPACITY_PERCENT = 75;
 
     /**
      * Stops marking anything the player has evidently found.

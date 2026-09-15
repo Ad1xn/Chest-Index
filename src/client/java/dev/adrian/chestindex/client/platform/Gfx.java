@@ -86,6 +86,10 @@ public final class Gfx {
         raw.item(stack, x, y);
     }
 
+    public void itemDecorations(Font font, ItemStack stack, int x, int y) {
+        raw.itemDecorations(font, stack, x, y);
+    }
+
     public void enableScissor(int x1, int y1, int x2, int y2) {
         raw.enableScissor(x1, y1, x2, y2);
     }
@@ -156,6 +160,10 @@ public final class Gfx {
 
     public void item(ItemStack stack, int x, int y) {
         raw.renderItem(stack, x, y);
+    }
+
+    public void itemDecorations(Font font, ItemStack stack, int x, int y) {
+        raw.renderItemDecorations(font, stack, x, y);
     }
 
     public void enableScissor(int x1, int y1, int x2, int y2) {

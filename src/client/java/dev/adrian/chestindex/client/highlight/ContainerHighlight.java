@@ -228,6 +228,8 @@ public final class ContainerHighlight {
         LocalPlayer player = Minecraft.getInstance().player;
         double distance = player == null ? 0 : distanceTo(player);
         timer.start(distance, System.currentTimeMillis());
+        // The markers arrive from here, however many there are.
+        selectedAt = System.currentTimeMillis();
         turnSecondsLeft = ChestIndexConfig.get().turnsToTarget() ? TURN_MAX_SECONDS : 0.0f;
         turnLastFrameAt = System.nanoTime();
     }
@@ -592,7 +594,7 @@ public final class ContainerHighlight {
      * either one needs is worked out the same way, so the walk is shared and
      * only the emitting differs.
      */
-    private enum Pass { BOXES, TRAILS }
+    private enum Pass { CUBES, BOXES, TRAILS }
 
     /**
      * Draws a box around each highlighted container, through whatever is in
@@ -617,6 +619,60 @@ public final class ContainerHighlight {
      */
     public void drawTrails(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
         draw(pose, lines, eye, Pass.TRAILS);
+    }
+
+    /**
+     * Fills each marker in, for the shapes that have a solid body.
+     *
+     * <p>A third pass, because solid faces and lines are different render
+     * types: quads of {@code POSITION_COLOR} against lines that carry a normal
+     * and a width. One consumer cannot take both.
+     */
+    public void drawCubes(PoseStack.Pose pose, VertexConsumer faces, Vec3 eye) {
+        draw(pose, faces, eye, Pass.CUBES);
+    }
+
+    /** Whether the chosen shape has a solid body to fill. */
+    public boolean hasCubes() {
+        return hasBoxes() && ChestIndexConfig.get().highlightShape().drawsCube();
+    }
+
+    /** Whether the chosen shape has edges to draw. */
+    public boolean hasOutlines() {
+        return hasBoxes() && ChestIndexConfig.get().highlightShape().drawsOutline();
+    }
+
+    /**
+     * How long a marker takes to arrive.
+     *
+     * <p>Short enough that somebody who already knows where they are going is
+     * not waiting for it, long enough that the eye catches the movement.
+     */
+    private static final long ENTRY_MS = 420L;
+
+    /** The smallest a growing marker starts at, as a fraction of its size. */
+    private static final double ENTRY_MIN_SCALE = 0.2;
+
+    /** When the current selection landed, for the arrival animation. */
+    private long selectedAt;
+
+    /**
+     * How far through its arrival the markers are, 0 to 1.
+     *
+     * <p>Smoothstepped rather than linear: a marker that grows at a constant
+     * rate and then stops dead has a corner in it, which is the same thing that
+     * made the colour pulse read as a blink.
+     */
+    private float entryProgress() {
+        ChestIndexConfig.Entry entry = ChestIndexConfig.get().highlightEntry();
+        if (entry == ChestIndexConfig.Entry.NONE) return 1.0f;
+
+        long since = System.currentTimeMillis() - selectedAt;
+        if (since >= ENTRY_MS) return 1.0f;
+        if (since <= 0) return 0.0f;
+
+        float t = since / (float) ENTRY_MS;
+        return t * t * (3.0f - 2.0f * t);
     }
 
     /**
@@ -645,6 +701,17 @@ public final class ContainerHighlight {
 
         double trailFrom = pass == Pass.TRAILS ? config.guideBeamFromBlocks() : 0.0;
         int worldTop = worldTop();
+
+        // The arrival, worked out once for the frame. A growing marker also
+        // fades, because a box that swells at full strength reads as one that
+        // was always there and is now moving, rather than as one appearing.
+        ChestIndexConfig.Entry entry = config.highlightEntry();
+        float arrived = entryProgress();
+        double entryScale = entry == ChestIndexConfig.Entry.GROW
+                ? ENTRY_MIN_SCALE + (1.0 - ENTRY_MIN_SCALE) * arrived
+                : 1.0;
+        float entryAlpha = entry == ChestIndexConfig.Entry.NONE ? 1.0f : arrived;
+        float cubeAlpha = config.cubeAlpha();
 
         // Which positions are in play, so a double chest whose halves are both
         // hits can be recognised as one chest rather than drawn twice.
@@ -730,9 +797,29 @@ public final class ContainerHighlight {
             double drawY = dy * pull - sizeY / 2.0;
             double drawZ = dz * pull - sizeZ / 2.0;
 
-            if (pass == Pass.BOXES) {
-                HighlightBox.emit(pose, lines, drawX, drawY, drawZ, sizeX, sizeY, sizeZ,
-                        colour[0], colour[1], colour[2], 0.9f, grow, lineWidth);
+            if (pass == Pass.CUBES || pass == Pass.BOXES) {
+                // Grown about the marker's own centre, so a double chest swells
+                // from the middle of the pair rather than from one half's
+                // corner - and lands exactly on the two blocks it covers.
+                double scaledX = sizeX * entryScale;
+                double scaledY = sizeY * entryScale;
+                double scaledZ = sizeZ * entryScale;
+                double atX = drawX + (sizeX - scaledX) / 2.0;
+                double atY = drawY + (sizeY - scaledY) / 2.0;
+                double atZ = drawZ + (sizeZ - scaledZ) / 2.0;
+
+                if (pass == Pass.CUBES) {
+                    // The swell applies to the cube too, so the solid body and
+                    // the outline around it stay the same size as each other.
+                    double swell = grow;
+                    HighlightBox.cube(pose, lines,
+                            atX - swell, atY - swell, atZ - swell,
+                            scaledX + swell * 2, scaledY + swell * 2, scaledZ + swell * 2,
+                            colour[0], colour[1], colour[2], cubeAlpha * entryAlpha);
+                } else {
+                    HighlightBox.emit(pose, lines, atX, atY, atZ, scaledX, scaledY, scaledZ,
+                            colour[0], colour[1], colour[2], 0.9f * entryAlpha, grow, lineWidth);
+                }
                 continue;
             }
 
@@ -746,7 +833,7 @@ public final class ContainerHighlight {
             HighlightBox.beam(pose, lines,
                     drawX + sizeX / 2.0, drawY + sizeY, drawZ + sizeZ / 2.0,
                     height * pull,
-                    colour[0], colour[1], colour[2], 0.75f, lineWidth);
+                    colour[0], colour[1], colour[2], 0.75f * entryAlpha, lineWidth);
         }
     }
 

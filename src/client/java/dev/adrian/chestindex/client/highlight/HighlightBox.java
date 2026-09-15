@@ -106,6 +106,52 @@ public final class HighlightBox {
     }
 
     /**
+     * One solid box, as six faces.
+     *
+     * <p>Drawn on a render type with culling off, so the four vertices of a
+     * face may be wound either way and a camera standing inside the box still
+     * sees its far walls. That matters: a marker on the chest you are stood in
+     * front of is routinely closer than the near clip plane on one side.
+     *
+     * <p>No normals and no line width - the filled pipeline is
+     * {@code POSITION_COLOR} and would throw on either, the same way the line
+     * pipeline throws without a width.
+     *
+     * @param x the lower corner on each axis, not the centre
+     */
+    public static void cube(PoseStack.Pose pose, VertexConsumer faces,
+                            double x, double y, double z,
+                            double sizeX, double sizeY, double sizeZ,
+                            float red, float green, float blue, float alpha) {
+        float x0 = (float) x;
+        float y0 = (float) y;
+        float z0 = (float) z;
+        float x1 = (float) (x + sizeX);
+        float y1 = (float) (y + sizeY);
+        float z1 = (float) (z + sizeZ);
+
+        // Down and up.
+        quad(pose, faces, x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1, red, green, blue, alpha);
+        quad(pose, faces, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0, red, green, blue, alpha);
+        // North and south.
+        quad(pose, faces, x0, y0, z0, x0, y1, z0, x1, y1, z0, x1, y0, z0, red, green, blue, alpha);
+        quad(pose, faces, x1, y0, z1, x1, y1, z1, x0, y1, z1, x0, y0, z1, red, green, blue, alpha);
+        // West and east.
+        quad(pose, faces, x0, y0, z1, x0, y1, z1, x0, y1, z0, x0, y0, z0, red, green, blue, alpha);
+        quad(pose, faces, x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1, red, green, blue, alpha);
+    }
+
+    private static void quad(PoseStack.Pose pose, VertexConsumer faces,
+                             float ax, float ay, float az, float bx, float by, float bz,
+                             float cx, float cy, float cz, float dx, float dy, float dz,
+                             float red, float green, float blue, float alpha) {
+        faces.addVertex(pose, ax, ay, az).setColor(red, green, blue, alpha);
+        faces.addVertex(pose, bx, by, bz).setColor(red, green, blue, alpha);
+        faces.addVertex(pose, cx, cy, cz).setColor(red, green, blue, alpha);
+        faces.addVertex(pose, dx, dy, dz).setColor(red, green, blue, alpha);
+    }
+
+    /**
      * A column of marks standing on the container, up to the build limit.
      *
      * <p>The box alone is no use where it is most needed. Past render distance

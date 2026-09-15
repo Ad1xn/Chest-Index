@@ -69,7 +69,7 @@ import net.minecraft.client.gui.GuiGraphics;
  *
  * <h2>The filter</h2>
  *
- * <p>Thirty-three settings in five sections is few enough to browse and too
+ * <p>Thirty-six settings in five sections is few enough to browse and too
  * many to hunt through, and somebody who already knows the word they want
  * should not have to guess which section it landed in. Typing in the strip
  * under the title searches labels <em>and</em> explanations across every
@@ -447,6 +447,31 @@ public final class SettingsScreen extends Screen {
                                         () -> config.highlightRecedingGraceSeconds,
                                         value -> config.highlightRecedingGraceSeconds = value,
                                         1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"),
+                                new Choice("Marker shape",
+                                        "A full cube, just its outline, or both.",
+                                        "What a marker in the world is drawn as. The full cube is found by "
+                                                + "looking rather than by scanning, which is the job at any "
+                                                + "distance; the outline is the more precise of the two and "
+                                                + "leaves the container visible inside its own marker. A "
+                                                + "double chest is one marker across both halves either way.",
+                                        this::shapeValue, this::cycleShape),
+                                new Choice("Markers arrive by",
+                                        "How a marker appears when a search lands.",
+                                        "How the markers appear when a search lands. A search closes the "
+                                                + "screen and drops you back into the world, and markers that "
+                                                + "are simply there the moment it closes read as part of the "
+                                                + "scenery. Something that arrives is something the mod is "
+                                                + "saying. Over in under half a second whichever you pick.",
+                                        this::entryValue, this::cycleEntry),
+                                new Range("Cube solidity",
+                                        "How solid a filled marker is.",
+                                        "How solid the full-cube marker is drawn. It has to be obvious from "
+                                                + "across a base and still leave the container recognisable "
+                                                + "close up, and those pull against each other - this is "
+                                                + "where you settle it. No effect on the outline.",
+                                        () -> config.highlightCubeOpacity,
+                                        value -> config.highlightCubeOpacity = value,
+                                        5, 100, 5, value -> "Cube solidity: " + value + "%"),
                                 new Toggle("Boxes show through walls",
                                         "A marker you can only see in the open says little.",
                                         "Draws the boxes through whatever is in front of them, which is the "
@@ -567,6 +592,24 @@ public final class SettingsScreen extends Screen {
     }
 
     // --- the values the choice rows show -----------------------------------
+
+    private String shapeValue() {
+        return config.highlightShape().label();
+    }
+
+    private void cycleShape() {
+        ChestIndexConfig.Shape[] all = ChestIndexConfig.Shape.values();
+        config.highlightShape = all[(config.highlightShape().ordinal() + 1) % all.length].name();
+    }
+
+    private String entryValue() {
+        return config.highlightEntry().label();
+    }
+
+    private void cycleEntry() {
+        ChestIndexConfig.Entry[] all = ChestIndexConfig.Entry.values();
+        config.highlightEntry = all[(config.highlightEntry().ordinal() + 1) % all.length].name();
+    }
 
     private String accessValue() {
         return switch (config.permissionTier()) {
