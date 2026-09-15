@@ -40,6 +40,22 @@ public final class Migration {
     private static boolean done;
 
     /**
+     * Whether {@code a} was written strictly later than {@code b}.
+     *
+     * <p>Strictly, so an equal timestamp is not "newer" and the caller's tie
+     * rule applies. An unreadable time counts as not newer, which hands the tie
+     * to the old id - the safe end, because that is the file with somebody's
+     * settings in it.
+     */
+    private static boolean newer(Path a, Path b) {
+        try {
+            return Files.getLastModifiedTime(a).compareTo(Files.getLastModifiedTime(b)) > 0;
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
+
+    /**
      * Moves the settings file and the stored indexes beside it.
      *
      * <p>Called before anything reads the config, because a config read that
@@ -75,25 +91,43 @@ public final class Migration {
     /**
      * Moves {@code from} to {@code to}, if that is both needed and safe.
      *
-     * <p>Three cases, and only one of them moves anything:
+     * <p>Three cases:
      * <ul>
      *   <li>no source - the normal case on every launch after the first, and on
      *       a fresh install. Nothing to say.
-     *   <li>a destination already there - somebody has run a build under this id
-     *       before, so the newer files are the ones to keep and the old ones are
-     *       not this code's to delete. Says where they are, once, and leaves
-     *       them; guessing wrong here costs a world scan.
-     *   <li>source, no destination - move it.
+     *   <li>source, no destination - move it. The ordinary upgrade.
+     *   <li><b>both</b> - which is not the freak case it looks like. This mod
+     *       used the id {@code chestindex} once before, briefly, and abandoned
+     *       it; anybody who ran one of those builds has files under both names.
+     *       Standing down there was the wrong call and threw away the settings
+     *       it was written to save: the leftovers are years-stale and the file
+     *       under the old id is the one every recent version has been writing.
+     *       So the newer wins, and a tie goes to the old id - a tie means the
+     *       destination was written this very run, which is a file of defaults
+     *       the config layer just created, not somebody's settings.
      * </ul>
+     *
+     * <p>The loser is never deleted, only set aside under {@code .superseded}.
+     * Getting this wrong costs a world scan at best and somebody's settings at
+     * worst, and neither is this code's to spend on a guess.
      */
     private static void move(Path from, Path to, String what) {
         if (!Files.exists(from)) return;
 
         if (Files.exists(to)) {
-            ChestIndex.LOG.warn("Both {} and {} exist; keeping the newer one. "
-                    + "The old {} at {} is no longer read and can be deleted.",
-                    from.getFileName(), to.getFileName(), what, from);
-            return;
+            if (newer(to, from)) {
+                ChestIndex.LOG.info("Keeping the newer {} already at {}; the older one at {} "
+                        + "is no longer read.", what, to, from);
+                return;
+            }
+            Path aside = to.resolveSibling(to.getFileName() + ".superseded");
+            try {
+                Files.move(to, aside, StandardCopyOption.REPLACE_EXISTING);
+                ChestIndex.LOG.info("Set aside a stale {} at {}", what, aside);
+            } catch (IOException e) {
+                ChestIndex.LOG.warn("Could not set aside {}: {}", to, e.toString());
+                return;
+            }
         }
 
         try {
