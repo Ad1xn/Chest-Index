@@ -24,4 +24,4 @@ stonecutter {
     create(rootProject)
 }
 
-rootProject.name = "chesttracker"
+rootProject.name = "chestindex"
