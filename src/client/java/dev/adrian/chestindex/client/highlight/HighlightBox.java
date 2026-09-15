@@ -48,6 +48,35 @@ public final class HighlightBox {
         ring(pose, lines, x0, x1, y1, z0, z1, red, green, blue, alpha, lineWidth);
     }
 
+    public static void cube(PoseStack.Pose pose, VertexConsumer faces,
+                            double x, double y, double z,
+                            double sizeX, double sizeY, double sizeZ,
+                            float red, float green, float blue, float alpha) {
+        float x0 = (float) x;
+        float y0 = (float) y;
+        float z0 = (float) z;
+        float x1 = (float) (x + sizeX);
+        float y1 = (float) (y + sizeY);
+        float z1 = (float) (z + sizeZ);
+
+        quad(pose, faces, x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1, red, green, blue, alpha);
+        quad(pose, faces, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0, red, green, blue, alpha);
+        quad(pose, faces, x0, y0, z0, x0, y1, z0, x1, y1, z0, x1, y0, z0, red, green, blue, alpha);
+        quad(pose, faces, x1, y0, z1, x1, y1, z1, x0, y1, z1, x0, y0, z1, red, green, blue, alpha);
+        quad(pose, faces, x0, y0, z1, x0, y1, z1, x0, y1, z0, x0, y0, z0, red, green, blue, alpha);
+        quad(pose, faces, x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1, red, green, blue, alpha);
+    }
+
+    private static void quad(PoseStack.Pose pose, VertexConsumer faces,
+                             float ax, float ay, float az, float bx, float by, float bz,
+                             float cx, float cy, float cz, float dx, float dy, float dz,
+                             float red, float green, float blue, float alpha) {
+        faces.addVertex(pose, ax, ay, az).setColor(red, green, blue, alpha);
+        faces.addVertex(pose, bx, by, bz).setColor(red, green, blue, alpha);
+        faces.addVertex(pose, cx, cy, cz).setColor(red, green, blue, alpha);
+        faces.addVertex(pose, dx, dy, dz).setColor(red, green, blue, alpha);
+    }
+
     private static final int BEAM_MARKS = 14;
 
     private static final double BEAM_DUTY = 0.18;

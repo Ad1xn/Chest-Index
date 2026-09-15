@@ -12,4 +12,9 @@ public interface RenderPipelinesAccessor {
     static RenderPipeline.Snippet chestindex$linesSnippet() {
         throw new AssertionError();
     }
+
+    @Accessor("DEBUG_FILLED_SNIPPET")
+    static RenderPipeline.Snippet chestindex$filledSnippet() {
+        throw new AssertionError();
+    }
 }

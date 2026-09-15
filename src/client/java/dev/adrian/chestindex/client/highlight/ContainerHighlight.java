@@ -119,6 +119,7 @@ public final class ContainerHighlight {
         LocalPlayer player = Minecraft.getInstance().player;
         double distance = player == null ? 0 : distanceTo(player);
         timer.start(distance, System.currentTimeMillis());
+        selectedAt = System.currentTimeMillis();
         turnSecondsLeft = ChestIndexConfig.get().turnsToTarget() ? TURN_MAX_SECONDS : 0.0f;
         turnLastFrameAt = System.nanoTime();
     }
@@ -292,7 +293,7 @@ public final class ContainerHighlight {
     private List<Long> positionSetSource;
     private java.util.Set<Long> positionSet = java.util.Set.of();
 
-    private enum Pass { BOXES, TRAILS }
+    private enum Pass { CUBES, BOXES, TRAILS }
 
     public void drawBoxes(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
         draw(pose, lines, eye, Pass.BOXES);
@@ -300,6 +301,36 @@ public final class ContainerHighlight {
 
     public void drawTrails(PoseStack.Pose pose, VertexConsumer lines, Vec3 eye) {
         draw(pose, lines, eye, Pass.TRAILS);
+    }
+
+    public void drawCubes(PoseStack.Pose pose, VertexConsumer faces, Vec3 eye) {
+        draw(pose, faces, eye, Pass.CUBES);
+    }
+
+    public boolean hasCubes() {
+        return hasBoxes() && ChestIndexConfig.get().highlightShape().drawsCube();
+    }
+
+    public boolean hasOutlines() {
+        return hasBoxes() && ChestIndexConfig.get().highlightShape().drawsOutline();
+    }
+
+    private static final long ENTRY_MS = 420L;
+
+    private static final double ENTRY_MIN_SCALE = 0.2;
+
+    private long selectedAt;
+
+    private float entryProgress() {
+        ChestIndexConfig.Entry entry = ChestIndexConfig.get().highlightEntry();
+        if (entry == ChestIndexConfig.Entry.NONE) return 1.0f;
+
+        long since = System.currentTimeMillis() - selectedAt;
+        if (since >= ENTRY_MS) return 1.0f;
+        if (since <= 0) return 0.0f;
+
+        float t = since / (float) ENTRY_MS;
+        return t * t * (3.0f - 2.0f * t);
     }
 
     private final float[] pulsed = new float[3];
@@ -314,6 +345,14 @@ public final class ContainerHighlight {
 
         double trailFrom = pass == Pass.TRAILS ? config.guideBeamFromBlocks() : 0.0;
         int worldTop = worldTop();
+
+        ChestIndexConfig.Entry entry = config.highlightEntry();
+        float arrived = entryProgress();
+        double entryScale = entry == ChestIndexConfig.Entry.GROW
+                ? ENTRY_MIN_SCALE + (1.0 - ENTRY_MIN_SCALE) * arrived
+                : 1.0;
+        float entryAlpha = entry == ChestIndexConfig.Entry.NONE ? 1.0f : arrived;
+        float cubeAlpha = config.cubeAlpha();
 
         java.util.Set<Long> present = positionSet();
 
@@ -364,9 +403,24 @@ public final class ContainerHighlight {
             double drawY = dy * pull - sizeY / 2.0;
             double drawZ = dz * pull - sizeZ / 2.0;
 
-            if (pass == Pass.BOXES) {
-                HighlightBox.emit(pose, lines, drawX, drawY, drawZ, sizeX, sizeY, sizeZ,
-                        colour[0], colour[1], colour[2], 0.9f, grow, lineWidth);
+            if (pass == Pass.CUBES || pass == Pass.BOXES) {
+                double scaledX = sizeX * entryScale;
+                double scaledY = sizeY * entryScale;
+                double scaledZ = sizeZ * entryScale;
+                double atX = drawX + (sizeX - scaledX) / 2.0;
+                double atY = drawY + (sizeY - scaledY) / 2.0;
+                double atZ = drawZ + (sizeZ - scaledZ) / 2.0;
+
+                if (pass == Pass.CUBES) {
+                    double swell = grow;
+                    HighlightBox.cube(pose, lines,
+                            atX - swell, atY - swell, atZ - swell,
+                            scaledX + swell * 2, scaledY + swell * 2, scaledZ + swell * 2,
+                            colour[0], colour[1], colour[2], cubeAlpha * entryAlpha);
+                } else {
+                    HighlightBox.emit(pose, lines, atX, atY, atZ, scaledX, scaledY, scaledZ,
+                            colour[0], colour[1], colour[2], 0.9f * entryAlpha, grow, lineWidth);
+                }
                 continue;
             }
 
@@ -374,7 +428,7 @@ public final class ContainerHighlight {
             HighlightBox.beam(pose, lines,
                     drawX + sizeX / 2.0, drawY + sizeY, drawZ + sizeZ / 2.0,
                     height * pull,
-                    colour[0], colour[1], colour[2], 0.75f, lineWidth);
+                    colour[0], colour[1], colour[2], 0.75f * entryAlpha, lineWidth);
         }
     }
 

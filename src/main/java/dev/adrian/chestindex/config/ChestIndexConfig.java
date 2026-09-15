@@ -300,6 +300,76 @@ public final class ChestIndexConfig {
         };
     }
 
+    public enum Shape {
+        OUTLINE,
+        CUBE,
+        BOTH;
+
+        public static Shape parse(String value) {
+            if (value == null) return CUBE;
+            for (Shape shape : values()) {
+                if (shape.name().equalsIgnoreCase(value.trim())) return shape;
+            }
+            return CUBE;
+        }
+
+        public boolean drawsCube() {
+            return this == CUBE || this == BOTH;
+        }
+
+        public boolean drawsOutline() {
+            return this == OUTLINE || this == BOTH;
+        }
+
+        public String label() {
+            return switch (this) {
+                case OUTLINE -> "outline";
+                case CUBE -> "full cube";
+                case BOTH -> "cube and outline";
+            };
+        }
+    }
+
+    public String highlightShape = Shape.CUBE.name();
+
+    public Shape highlightShape() {
+        return Shape.parse(highlightShape);
+    }
+
+    public enum Entry {
+        NONE,
+        FADE,
+        GROW;
+
+        public static Entry parse(String value) {
+            if (value == null) return GROW;
+            for (Entry entry : values()) {
+                if (entry.name().equalsIgnoreCase(value.trim())) return entry;
+            }
+            return GROW;
+        }
+
+        public String label() {
+            return switch (this) {
+                case NONE -> "appear";
+                case FADE -> "fade in";
+                case GROW -> "grow in";
+            };
+        }
+    }
+
+    public String highlightEntry = Entry.GROW.name();
+
+    public Entry highlightEntry() {
+        return Entry.parse(highlightEntry);
+    }
+
+    public int highlightCubeOpacity = 35;
+
+    public float cubeAlpha() {
+        return Math.clamp(highlightCubeOpacity, 5, 100) / 100.0f;
+    }
+
     public boolean cheatFeatures = false;
 
     public boolean indexGeneratedChests = false;

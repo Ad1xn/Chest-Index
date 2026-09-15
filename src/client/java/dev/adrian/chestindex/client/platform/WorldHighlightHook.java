@@ -14,10 +14,19 @@ public final class WorldHighlightHook {
                 .register(context -> {
                     ContainerHighlight.get().turnTowardsTarget();
                     if (!ContainerHighlight.get().hasBoxes()) return;
-                    context.submitNodeCollector().submitCustomGeometry(
-                            context.poseStack(), HighlightRenderTypes.throughWalls(),
-                            (pose, lines) -> ContainerHighlight.get().drawBoxes(
-                                    pose, lines, camera()));
+                    if (ContainerHighlight.get().hasCubes()) {
+                        context.submitNodeCollector().submitCustomGeometry(
+                                context.poseStack(), HighlightRenderTypes.filledThroughWalls(),
+                                (pose, faces) -> ContainerHighlight.get().drawCubes(
+                                        pose, faces, camera()));
+                    }
+
+                    if (ContainerHighlight.get().hasOutlines()) {
+                        context.submitNodeCollector().submitCustomGeometry(
+                                context.poseStack(), HighlightRenderTypes.throughWalls(),
+                                (pose, lines) -> ContainerHighlight.get().drawBoxes(
+                                        pose, lines, camera()));
+                    }
 
                     if (!ContainerHighlight.get().hasTrails()) return;
                     context.submitNodeCollector().submitCustomGeometry(
@@ -31,10 +40,21 @@ public final class WorldHighlightHook {
                     ContainerHighlight.get().turnTowardsTarget();
                     if (!ContainerHighlight.get().hasBoxes()) return;
                     Camera camera = context.gameRenderer().getMainCamera();
-                    ContainerHighlight.get().drawBoxes(
-                            context.matrices().last(),
-                            context.consumers().getBuffer(HighlightRenderTypes.throughWalls()),
-                            camera.position());
+
+                    if (ContainerHighlight.get().hasCubes()) {
+                        ContainerHighlight.get().drawCubes(
+                                context.matrices().last(),
+                                context.consumers().getBuffer(
+                                        HighlightRenderTypes.filledThroughWalls()),
+                                camera.position());
+                    }
+
+                    if (ContainerHighlight.get().hasOutlines()) {
+                        ContainerHighlight.get().drawBoxes(
+                                context.matrices().last(),
+                                context.consumers().getBuffer(HighlightRenderTypes.throughWalls()),
+                                camera.position());
+                    }
 
                     if (!ContainerHighlight.get().hasTrails()) return;
                     ContainerHighlight.get().drawTrails(

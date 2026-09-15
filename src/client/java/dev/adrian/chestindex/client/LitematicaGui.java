@@ -17,7 +17,6 @@ public final class LitematicaGui {
 
     private static final String BUTTON_BASE = "fi.dy.masa.malilib.gui.button.ButtonBase";
 
-    private static final String IGNORE_KEY = "litematica.gui.button.material_list.ignore";
     private static final String EXPORT_KEY = "litematica.gui.button.material_list.export";
 
     private static boolean warned;
@@ -41,10 +40,9 @@ public final class LitematicaGui {
             Object raw = read(listWidget, "listWidgets");
             if (!(raw instanceof List<?> widgets)) return List.of();
 
-            String ignoreLabel = I18n.get(IGNORE_KEY);
             List<Row> rows = new ArrayList<>(widgets.size());
             for (Object widget : widgets) {
-                Row row = rowOf(widget, ignoreLabel);
+                Row row = rowOf(widget);
                 if (row != null) rows.add(row);
             }
             return rows;
@@ -54,7 +52,7 @@ public final class LitematicaGui {
         }
     }
 
-    private static Row rowOf(Object widget, String ignoreLabel) {
+    private static Row rowOf(Object widget) {
         Object entry = invoke(widget, "getEntry");
         if (entry == null) return null;
 
@@ -63,7 +61,7 @@ public final class LitematicaGui {
         Identifier id = BuiltInRegistries.ITEM.getKey(item.getItem());
         if (id == null) return null;
 
-        Rect anchor = buttonIn(widget, ignoreLabel);
+        Rect anchor = buttonIn(widget);
         if (anchor == null) return null;
 
         Object total = invoke(entry, "getCountTotal");
@@ -72,7 +70,7 @@ public final class LitematicaGui {
         return new Row(anchor, id.toString(), needed);
     }
 
-    private static Rect buttonIn(Object rowWidget, String ignoreLabel) {
+    private static Rect buttonIn(Object rowWidget) {
         Object raw = read(rowWidget, "subWidgets");
         if (!(raw instanceof List<?> subWidgets)) return null;
 
@@ -84,7 +82,6 @@ public final class LitematicaGui {
             Rect bounds = boundsOf(sub);
             if (bounds == null) continue;
 
-            if (ignoreLabel.equals(read(sub, "displayString"))) return bounds;
             if (leftmost == null || bounds.x() < leftmost.x()) leftmost = bounds;
         }
         return leftmost;

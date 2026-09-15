@@ -47,6 +47,8 @@ public final class SlotHighlight {
         boolean outline = style.drawsOutline();
         boolean background = style.drawsBackground();
 
+        net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
+
         java.util.List<Slot> slots = screen.getMenu().slots;
         for (int index = 0; index < slots.size() && index < marks.length; index++) {
             byte mark = marks[index];
@@ -54,11 +56,14 @@ public final class SlotHighlight {
 
             int colour = mark == MARK_DIRECT ? direct : inside;
             Slot slot = slots.get(index);
+            ItemStack stack = slot.getItem();
             int x = leftPos + slot.x;
             int y = topPos + slot.y;
 
             if (background) {
                 gfx.fill(x, y, x + 16, y + 16, dim(colour));
+                gfx.item(stack, x, y);
+                gfx.itemDecorations(font, stack, x, y);
             }
             if (outline) {
                 gfx.fill(x - 1, y - 1, x + 17, y, colour);
@@ -118,7 +123,7 @@ public final class SlotHighlight {
         return (colour & 0x00FFFFFF) | (opacity << 24);
     }
 
-    private static final int BACKGROUND_OPACITY_PERCENT = 45;
+    private static final int BACKGROUND_OPACITY_PERCENT = 75;
 
     private static void retireWhatIsFound(AbstractContainerScreen<?> screen, Set<String> wanted) {
         if (dev.adrian.chestindex.client.MaterialGoals.isTracking()) return;

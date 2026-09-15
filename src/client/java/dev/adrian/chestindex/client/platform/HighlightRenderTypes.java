@@ -12,6 +12,7 @@ public final class HighlightRenderTypes {
     private HighlightRenderTypes() {}
 
     private static RenderType throughWalls;
+    private static RenderType filledThroughWalls;
 
     public static RenderType throughWalls() {
         if (!dev.adrian.chestindex.config.ChestIndexConfig.get().highlightThroughWalls) {
@@ -27,11 +28,35 @@ public final class HighlightRenderTypes {
         return RenderTypes.lines();
     }
 
+    public static RenderType filledThroughWalls() {
+        if (!dev.adrian.chestindex.config.ChestIndexConfig.get().highlightThroughWalls) {
+            return filled();
+        }
+        if (filledThroughWalls == null) filledThroughWalls = buildFilled();
+        return filledThroughWalls;
+    }
+
+    public static RenderType filled() {
+        return RenderTypes.debugFilledBox();
+    }
     private static RenderType build() {
+        return build(RenderPipelinesAccessor.chestindex$linesSnippet(),
+                "chestindex_lines_through_walls", "chestindex:lines_through_walls",
+                RenderTypes.lines());
+    }
+
+    private static RenderType buildFilled() {
+        return build(RenderPipelinesAccessor.chestindex$filledSnippet(),
+                "chestindex_filled_through_walls", "chestindex:filled_through_walls",
+                RenderTypes.debugFilledBox());
+    }
+
+    private static RenderType build(RenderPipeline.Snippet snippet, String location,
+                                    String name, RenderType fallback) {
         try {
             RenderPipeline pipeline = RenderPipeline
-                    .builder(RenderPipelinesAccessor.chestindex$linesSnippet())
-                    .withLocation("pipeline/chestindex_lines_through_walls")
+                    .builder(snippet)
+                    .withLocation("pipeline/" + location)
                     //? if >=26.1 {
                     /*.withDepthStencilState(new com.mojang.blaze3d.pipeline.DepthStencilState(
                             com.mojang.blaze3d.platform.CompareOp.ALWAYS_PASS, false))
@@ -41,13 +66,13 @@ public final class HighlightRenderTypes {
                     //?}
                     .build();
 
-            return RenderTypeInvoker.chestindex$create("chestindex:lines_through_walls",
+            return RenderTypeInvoker.chestindex$create(name,
                     RenderSetup.builder(pipeline).createRenderSetup());
         } catch (Throwable t) {
             dev.adrian.chestindex.ChestIndex.LOG.warn(
-                    "Could not build the see-through marker type, falling back to plain lines: {}",
-                    t.toString());
-            return RenderTypes.lines();
+                    "Could not build the see-through marker type {}, falling back: {}",
+                    name, t.toString());
+            return fallback;
         }
     }
 }
