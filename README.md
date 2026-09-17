@@ -116,9 +116,11 @@ once the chest is open.
 any — the ender chest is checked first, then every other dimension the index knows about.
 
 Everything above is configurable through Mod Menu. The settings are grouped into General,
-Containers, Searching, Guidance and Cheats, and the box at the top filters every section at once —
-by the wording of the explanations as well as the labels, so you can find a setting by what it does
-rather than by what it's called.
+Containers, Searching, Guidance, Markers and Cheats, and the box at the top filters every section at
+once — by the wording of the explanations as well as the labels, so you can find a setting by what
+it does rather than by what it's called. **Markers** carries a live picture of what the settings in
+it do: the two marker colours side by side out in the world, and the slot marks as an open container
+shows them.
 
 ### Cheats
 
@@ -142,16 +144,19 @@ The last two are also gated per server — see below.
 
 If Litematica is installed, its material list grows two buttons of its own:
 
-- **Search items** highlights every container holding anything the schematic still needs. From
-  there the highlight narrows itself — each material drops out as you pick up enough of it, and it
-  clears and says so when the last one goes. A material that has once been satisfied stays that
-  way, so laying the blocks back down doesn't relight the chests you got them from.
-- **One item…** opens the material list as a list of searches, for when the question is *"where is
-  the rest of the stone brick stairs"* rather than *"where is all forty of these"*.
+- **Search all**, beside Litematica's own *Export*, highlights every container holding anything the
+  schematic still needs. From there the highlight narrows itself — each material drops out as you
+  pick up enough of it, and it clears and says so when the last one goes. A material that has once
+  been satisfied stays that way, so laying the blocks back down doesn't relight the chests you got
+  them from.
+- **A magnifier in each row**, next to that row's *Ignore*, for when the question is *"where is the
+  rest of the stone brick stairs"* rather than *"where is all forty of these"*.
 
-**Right-drag** moves both. That screen belongs to malilib rather than to vanilla, its buttons are
-laid out by code this mod can't measure, and every Litematica release is free to move them — so
-rather than guess again when the button lands on top of one of theirs, you can just move it.
+Neither is dragged into place. Both read their position off the Litematica buttons they sit beside,
+so a column width, a font or a translation can't leave one floating in the middle of the list — and
+the row's one anchors to whichever button in that row is furthest left, which is how it stopped
+covering the *Replace* button Litematica grew later. **Search all** also steps aside: if another mod
+has put something in that strip, it moves past it rather than onto it.
 
 ## Where it works
 
