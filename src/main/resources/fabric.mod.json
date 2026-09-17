@@ -6,6 +6,11 @@
   "description": "Indexes every container in the world within a configurable radius - including chunks that are not loaded - so you can search your storage without opening a single chest. Works in singleplayer, on modded servers, and degrades gracefully on vanilla servers.",
   "authors": [ "adrian" ],
   "license": "MIT",
+  "contact": {
+    "homepage": "https://modrinth.com/mod/chestindex",
+    "issues": "https://github.com/Ad1xn/Chest-Index/issues",
+    "sources": "https://github.com/Ad1xn/Chest-Index"
+  },
   "icon": "assets/chestindex/icon.png",
   "environment": "*",
   "entrypoints": {
