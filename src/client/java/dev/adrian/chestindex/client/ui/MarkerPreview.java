@@ -175,8 +175,12 @@ public final class MarkerPreview {
         Item item = identifier == null ? null : BuiltInRegistries.ITEM.getValue(identifier);
         if (item == null) return ItemStack.EMPTY;
 
-        ItemStack resolved = new ItemStack(item);
-        STACKS.put(itemId, resolved);
-        return resolved;
+        try {
+            ItemStack resolved = new ItemStack(item);
+            STACKS.put(itemId, resolved);
+            return resolved;
+        } catch (RuntimeException notBoundYet) {
+            return ItemStack.EMPTY;
+        }
     }
 }

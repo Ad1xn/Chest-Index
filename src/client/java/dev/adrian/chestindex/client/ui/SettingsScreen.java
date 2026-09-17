@@ -321,7 +321,7 @@ public final class SettingsScreen extends Screen {
                                         value -> config.highlightRecedingGraceSeconds = value,
                                         1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"))),
 
-                new Section("Markers", "minecraft:beacon",
+                new Section("Markers", "minecraft:spectral_arrow",
                         "What the markers look like. The picture changes as you do.",
                         List.of(
                                 new Choice("Marker shape",

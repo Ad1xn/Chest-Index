@@ -188,6 +188,9 @@ public final class Panel {
     private static final Identifier REDSTONE_TORCH =
             Identifier.parse("minecraft:textures/block/redstone_torch.png");
 
+    private static final Identifier SPECTRAL_ARROW =
+            Identifier.parse("minecraft:textures/item/spectral_arrow.png");
+
     private static final Identifier CHEST =
             Identifier.parse("minecraft:textures/entity/chest/normal.png");
 
@@ -201,6 +204,7 @@ public final class Panel {
             case 1 -> icon(gfx, HOPPER, x, y);
             case 2 -> icon(gfx, SPYGLASS, x, y);
             case 3 -> icon(gfx, COMPASS, x, y);
+            case 4 -> icon(gfx, SPECTRAL_ARROW, x, y);
             default -> icon(gfx, REDSTONE_TORCH, x, y);
         }
     }
