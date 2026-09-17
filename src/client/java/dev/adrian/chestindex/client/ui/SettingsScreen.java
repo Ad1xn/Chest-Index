@@ -637,6 +637,14 @@ public final class SettingsScreen extends Screen {
         return contentX() + contentW() - 1 - SCROLLBAR_W;
     }
 
+    private int scrollbarTop() {
+        return rowsTop();
+    }
+
+    private int scrollbarH() {
+        return rowsVisible() * ROW_H;
+    }
+
     private int maxScroll() {
         return Math.max(0, rows().size() - rowsVisible());
     }
@@ -688,8 +696,8 @@ public final class SettingsScreen extends Screen {
         drawRows(gfx, mouseX, mouseY);
 
         if (overflows()) {
-            Panel.scrollbar(gfx, scrollbarX(), contentTop() + 1, SCROLLBAR_W, contentH() - 2,
-                    scroll, maxScroll(), rows().size(), visibleRows);
+            Panel.scrollbar(gfx, scrollbarX(), scrollbarTop(), SCROLLBAR_W, scrollbarH(),
+                    scroll, maxScroll(), rows().size(), rowsVisible());
         }
 
         if (draggingRow >= 0 || draggingScrollbar) pendingTooltip = null;
@@ -973,7 +981,7 @@ public final class SettingsScreen extends Screen {
         if (clickRail(mouseX, mouseY)) return true;
 
         if (overflows() && mouseX >= scrollbarX() && mouseX < scrollbarX() + SCROLLBAR_W
-                && mouseY >= contentTop() && mouseY < contentTop() + contentH()) {
+                && mouseY >= scrollbarTop() && mouseY < scrollbarTop() + scrollbarH()) {
             draggingScrollbar = true;
             dragScrollbar(mouseY);
             return true;
@@ -1061,7 +1069,7 @@ public final class SettingsScreen extends Screen {
     private void dragScrollbar(int mouseY) {
         int max = maxScroll();
         if (max == 0) return;
-        double fraction = (mouseY - (contentTop() + 1)) / (double) (contentH() - 2);
+        double fraction = (mouseY - scrollbarTop()) / (double) Math.max(1, scrollbarH());
         scroll = Math.max(0, Math.min(max, (int) Math.round(fraction * max)));
     }
 
