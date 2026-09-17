@@ -17,45 +17,44 @@ import java.util.Map;
  * <p>Every setting under Markers changes something that is only ever seen out
  * in the world or inside an open container - a colour, how solid a box is, what
  * shape it takes, whether a slot is washed or outlined. Reading a sentence
- * about it and then closing the settings, walking somewhere, and searching for
+ * about it and then closing the settings, walking somewhere and searching for
  * something in order to find out is a slow way to answer "is this the colour I
  * meant". So the answer is on the same screen as the question, and it changes
  * as the rows under it are clicked.
  *
- * <p>Three things are drawn, because a marker is three things:
+ * <h2>Two boxes, because a marker means two things</h2>
  *
- * <ul>
- *   <li>the nearest match, boxed in the colour that picks it out;
- *   <li>a further match behind it in the resting colour, with the trail
- *       standing on it if trails are on - the pair is the point, since one
- *       colour alone says nothing about whether the two can be told apart;
- *   <li>the slots of a container you have walked to and opened: the item
- *       marked where it lies, and a shulker box marked in the other colour
- *       because it holds the answer rather than being it.
- * </ul>
+ * <p>Left is the view from outside: the nearest match in the colour that picks
+ * it out, and a further one in the resting colour, with the trail standing on
+ * it when trails are on. The pair is the point - one colour alone says nothing
+ * about whether the two can be told apart, which is the only question the
+ * colour settings are really asking.
  *
- * <h2>Why a block and not a picture of one</h2>
+ * <p>Right is the view from inside, once the walk is over and the container is
+ * open: the item marked where it lies, a shulker box marked in the other colour
+ * because it holds the answer rather than being it, and one unmarked slot so
+ * the first two have something to be unlike.
  *
- * <p>The three-dimensional chest is the game's own: the model it draws into an
- * item slot, scaled up through {@link Gfx#item(ItemStack, int, int, float)}.
- * That keeps the preview honest with the player's resource pack, and it is the
- * only route to a rendered block a screen has - the pose stack is
- * two-dimensional on both targets, so a real rotation is not available and is
- * not pretended at.
+ * <h2>Drawn flat, at the size the game draws these things</h2>
  *
- * <p>Clicking the scene walks through the container types, entity ones
+ * <p>Everything here is at the sixteen pixels an item icon is, inset into the
+ * panel the way vanilla insets a slot. Nothing is scaled up: a blown-up block
+ * model is a picture of a chest rather than a picture of the marker, and the
+ * marker is what is being chosen. Keeping to slot size also means the right-
+ * hand box <em>is</em> a row of container slots rather than a drawing of one.
+ *
+ * <p>Clicking either box walks through the container types, entity ones
  * included. A minecart with a chest is found and marked like anything else, and
  * it is the case somebody is most likely to doubt.
  */
 public final class MarkerPreview {
 
     /**
-     * What the scene can show, in the order clicking walks through them.
+     * What the boxes show, in the order clicking walks through them.
      *
      * <p>Chest first because it is what everyone pictures. Then a barrel and a
-     * shulker box, which are the other two that hold a base's worth of things;
-     * then the small ones, whose marker has to sit on a block that is not a
-     * cube; then the two that move, which are the ones worth proving.
+     * shulker box, the other two that hold a base's worth of things; then the
+     * small ones; then the two that move, which are the ones worth proving.
      */
     private static final String[] CONTAINERS = {
             "minecraft:chest",
@@ -67,89 +66,99 @@ public final class MarkerPreview {
             "minecraft:oak_chest_boat",
     };
 
-    /** What the marked slots hold. Any item would do; a recognisable one reads faster. */
+    /** What the marked slot holds. Any item would do; a recognisable one reads faster. */
     private static final String MARKED_ITEM = "minecraft:diamond";
 
     private static final String NESTED_CONTAINER = "minecraft:shulker_box";
 
+    /** The slot that is deliberately not marked. */
+    private static final String PLAIN_ITEM = "minecraft:redstone";
+
     /** Registry lookups are not free and this redraws every frame. */
     private static final Map<String, ItemStack> STACKS = new HashMap<>();
 
-    /** Four rows of the settings well, which is what the scene needs to read at all. */
-    public static final int HEIGHT = 80;
+    /** Three rows of the settings well: a caption, and a box deep enough for a trail. */
+    public static final int HEIGHT = 60;
 
-    private static final int SCENE_W = 78;
+    private static final int CAPTION_H = 10;
+    private static final int BOX_H = 44;
 
-    /** The big block, in slots: sixteen pixels times this. */
-    private static final float NEAR_SCALE = 2.75f;
-
-    /** And the one standing behind it, smaller because it is further away. */
-    private static final float FAR_SCALE = 1.5f;
-
+    private static final int WORLD_W = 118;
     private static final int SLOT = 18;
+    private static final int SLOT_GAP = 4;
+    private static final int INSIDE_W = SLOT * 3 + SLOT_GAP * 2 + 8;
+
+    private static final int GAP = 4;
 
     private final ChestIndexConfig config = ChestIndexConfig.get();
 
     private int container;
 
-    /** The scene's bounds, written while drawing and read when clicked. */
-    private int sceneX;
-    private int sceneY;
-    private int sceneW;
-    private int sceneH;
+    /** The two boxes, written while drawing and read when clicked. */
+    private int hitX;
+    private int hitY;
+    private int hitW;
+    private int hitH;
 
     /** Advances the container shown. */
     public boolean click(double mouseX, double mouseY) {
-        if (mouseX < sceneX || mouseX >= sceneX + sceneW) return false;
-        if (mouseY < sceneY || mouseY >= sceneY + sceneH) return false;
+        if (!contains(mouseX, mouseY)) return false;
         container = (container + 1) % CONTAINERS.length;
         return true;
     }
 
-    /** One line, shown while the scene is hovered. */
+    /** One line, shown while the preview is hovered. */
     public String hint() {
         return "Click to see another container";
     }
 
     public boolean contains(double mouseX, double mouseY) {
-        return mouseX >= sceneX && mouseX < sceneX + sceneW
-                && mouseY >= sceneY && mouseY < sceneY + sceneH;
+        return mouseX >= hitX && mouseX < hitX + hitW
+                && mouseY >= hitY && mouseY < hitY + hitH;
     }
 
     public void draw(Gfx gfx, Font font, int x, int y, int width, int height) {
-        sceneX = x;
-        sceneY = y;
-        sceneW = Math.min(SCENE_W, width);
-        sceneH = height;
+        int total = WORLD_W + GAP + INSIDE_W;
+        int left = x + Math.max(0, (width - total) / 2);
+        int top = y + Math.max(0, (height - CAPTION_H - BOX_H) / 2);
 
-        Panel.well(gfx, sceneX, sceneY, sceneW, sceneH);
-        drawScene(gfx, sceneX, sceneY, sceneW, sceneH);
+        hitX = left;
+        hitY = top;
+        hitW = Math.min(total, width);
+        hitH = CAPTION_H + BOX_H;
 
-        int slotsX = sceneX + sceneW + 4;
-        drawSlots(gfx, font, slotsX, y, x + width - slotsX, height);
+        int boxY = top + CAPTION_H;
+
+        gfx.text(font, "In the world", left + 1, top, Panel.TEXT_MUTED);
+        Panel.well(gfx, left, boxY, WORLD_W, BOX_H);
+        drawWorld(gfx, left, boxY, WORLD_W, BOX_H);
+
+        int insideX = left + WORLD_W + GAP;
+        gfx.text(font, "Once it is open", insideX + 1, top, Panel.TEXT_MUTED);
+        Panel.well(gfx, insideX, boxY, INSIDE_W, BOX_H);
+        drawInside(gfx, insideX, boxY, INSIDE_W, BOX_H);
     }
 
-    // --- the world, from outside --------------------------------------------
+    // --- the view from outside ----------------------------------------------
 
-    private void drawScene(Gfx gfx, int x, int y, int width, int height) {
+    private void drawWorld(Gfx gfx, int x, int y, int width, int height) {
         int near = 0xFF000000 | config.nearestColour;
         int far = 0xFF000000 | config.otherColour;
 
-        int block = Math.round(16 * NEAR_SCALE);
-        int small = Math.round(16 * FAR_SCALE);
+        ItemStack shown = stack(CONTAINERS[container]);
 
-        // The far one first, so the near one stands in front of it the way
-        // distance puts it there.
-        int farX = x + width - small - 6;
-        int farY = y + 8;
-        if (config.guideBeam) drawTrail(gfx, farX + small / 2, y + 2, farY, far);
-        gfx.item(stack(CONTAINERS[container]), farX, farY, FAR_SCALE);
-        marker(gfx, farX, farY, small, far);
+        // Both stand on the same line, so the only difference between them is
+        // the colour - which is the comparison the pair exists to make.
+        int standY = y + height - 16 - 8;
 
-        int nearX = x + 6;
-        int nearY = y + height - block - 6;
-        gfx.item(stack(CONTAINERS[container]), nearX, nearY, NEAR_SCALE);
-        marker(gfx, nearX, nearY, block, near);
+        int farX = x + width - 16 - 24;
+        if (config.guideBeam) drawTrail(gfx, farX + 8, y + 5, standY - 2, far);
+        gfx.item(shown, farX, standY);
+        marker(gfx, farX, standY, far);
+
+        int nearX = x + 24;
+        gfx.item(shown, nearX, standY);
+        marker(gfx, nearX, standY, near);
     }
 
     /**
@@ -159,18 +168,18 @@ public final class MarkerPreview {
      * order the world renderer uses: a translucent face over its own edges
      * dulls them, and the edges are what says which block it is.
      */
-    private void marker(Gfx gfx, int x, int y, int size, int colour) {
+    private void marker(Gfx gfx, int x, int y, int colour) {
         ChestIndexConfig.Shape shape = config.highlightShape();
 
         if (shape != ChestIndexConfig.Shape.OUTLINE) {
             int alpha = Math.round(config.cubeAlpha() * 255) << 24;
-            gfx.fill(x, y, x + size, y + size, alpha | (colour & 0xFFFFFF));
+            gfx.fill(x - 1, y - 1, x + 17, y + 17, alpha | (colour & 0xFFFFFF));
         }
         if (shape != ChestIndexConfig.Shape.CUBE) {
-            gfx.fill(x - 1, y - 1, x + size + 1, y, colour);
-            gfx.fill(x - 1, y + size, x + size + 1, y + size + 1, colour);
-            gfx.fill(x - 1, y, x, y + size, colour);
-            gfx.fill(x + size, y, x + size + 1, y + size, colour);
+            gfx.fill(x - 2, y - 2, x + 18, y - 1, colour);
+            gfx.fill(x - 2, y + 17, x + 18, y + 18, colour);
+            gfx.fill(x - 2, y - 1, x - 1, y + 17, colour);
+            gfx.fill(x + 17, y - 1, x + 18, y + 17, colour);
         }
     }
 
@@ -178,61 +187,51 @@ public final class MarkerPreview {
      * The column of marks that stands on a match too far off to box.
      *
      * <p>Drawn as the marks it is rather than a solid line, and thinning as it
-     * rises, because that is what it does in the world - this is the one
-     * setting whose effect nobody can see without walking far enough away that
-     * the container itself is gone.
+     * rises, the way it does in the world. This is the one setting whose effect
+     * nobody can see without walking far enough away that the container itself
+     * has stopped being drawn.
      */
     private void drawTrail(Gfx gfx, int centreX, int top, int bottom, int colour) {
-        for (int markY = bottom - 4; markY > top; markY -= 5) {
-            int half = markY > bottom - 14 ? 2 : 1;
+        for (int markY = bottom - 3; markY > top; markY -= 5) {
+            int half = markY > bottom - 12 ? 2 : 1;
             gfx.fill(centreX - half, markY, centreX + half, markY + 2, colour);
         }
     }
 
-    // --- the container, from inside -----------------------------------------
+    // --- the view from inside -----------------------------------------------
 
-    /**
-     * Two slots of an open container: the item where it lies, and a shulker box
-     * holding one.
-     *
-     * <p>Both are here because they mean different things and are marked in
-     * different colours - one is the answer, the other is the next thing to
-     * open - and a preview that showed only the first would leave the second
-     * to be discovered in a chest somewhere.
-     */
-    private void drawSlots(Gfx gfx, Font font, int x, int y, int width, int height) {
-        if (width < SLOT * 2 + 8) return;
-
+    private void drawInside(Gfx gfx, int x, int y, int width, int height) {
         ChestIndexConfig.SlotStyle style = config.slotHighlightStyle();
+
+        // The resting colours, as a container that has been open a moment
+        // shows them: the item itself settled on the second colour, whatever
+        // holds it steady on the first. See SlotHighlight, which this has to
+        // keep agreeing with.
         int direct = 0xFF000000 | config.otherColour;
         int inside = 0xFF000000 | config.nearestColour;
 
-        int rowY = y + (height - SLOT) / 2;
-        int firstX = x + 2;
+        int slotY = y + (height - SLOT) / 2;
+        int first = x + (width - (SLOT * 3 + SLOT_GAP * 2)) / 2;
 
-        slot(gfx, font, firstX, rowY, stack(MARKED_ITEM), style, direct);
-        slot(gfx, font, firstX + SLOT + 4, rowY, stack(NESTED_CONTAINER), style, inside);
-
-        // A third, unmarked, so the marked two have something to be unlike.
-        slot(gfx, font, firstX + (SLOT + 4) * 2, rowY, stack("minecraft:redstone"), style, 0);
+        slot(gfx, first, slotY, stack(MARKED_ITEM), style, direct);
+        slot(gfx, first + SLOT + SLOT_GAP, slotY, stack(NESTED_CONTAINER), style, inside);
+        slot(gfx, first + (SLOT + SLOT_GAP) * 2, slotY, stack(PLAIN_ITEM), style, 0);
     }
 
-    private void slot(Gfx gfx, Font font, int x, int y, ItemStack stack,
+    private void slot(Gfx gfx, int x, int y, ItemStack stack,
                       ChestIndexConfig.SlotStyle style, int colour) {
-        Panel.well(gfx, x, y, SLOT, SLOT);
+        Panel.groove(gfx, x, y, SLOT, SLOT);
 
         int itemX = x + 1;
         int itemY = y + 1;
 
-        // Unmarked: just the item, which is the whole point of drawing one.
         if (colour == 0) {
             gfx.item(stack, itemX, itemY);
             return;
         }
 
         // The wash goes under the item the same way it does in a real
-        // container - painted first, then the item put back over it. See
-        // SlotHighlight, which this has to keep agreeing with.
+        // container - painted first, then the item put back over it.
         if (style.drawsBackground()) {
             gfx.fill(itemX, itemY, itemX + 16, itemY + 16, (colour & 0xFFFFFF) | 0x60000000);
         }
