@@ -45,6 +45,22 @@ public final class Trackers {
     private static final int DIRTY_BUDGET_PER_TICK = 48;
 
     /**
+     * How long this drain may spend inside one tick, whatever the count says.
+     *
+     * <p>A count is a budget only on a machine where every item costs about
+     * what it cost when the number was chosen. Forty-eight containers is
+     * nothing on the machine this was written on and can be most of a tick on
+     * a machine that is already struggling - which is exactly the machine that
+     * must not be pushed over. So the count stays as the ceiling and the clock
+     * decides when it is reached early.
+     *
+     * <p>Two milliseconds, because this one is felt: it is what makes a chest
+     * you have just filled show up in a search. Falling behind here costs
+     * freshness for a tick, which is cheaper than a stutter.
+     */
+    private static final long DIRTY_SLICE_NANOS = 2_000_000L;
+
+    /**
      * Past this much of a tick already spent, the drain waits for a better one.
      *
      * <p>The budget above is a count, and a count is only "invisible" while a
@@ -201,6 +217,7 @@ public final class Trackers {
         if (tracker == null || DIRTY.isEmpty()) return 0;
 
         int done = 0;
+        long deadline = System.nanoTime() + DIRTY_SLICE_NANOS;
         // One scanner for the whole drain. It holds nothing but the tracker, so
         // building a fresh one per dimension per tick was allocating for no
         // reason on a path that runs twenty times a second.
@@ -220,6 +237,10 @@ public final class Trackers {
                 iterator.remove();
                 scanner.refreshIfLoaded(level, entry.getKey(), pos);
                 done++;
+                // Checked after the work rather than before it, so a tick
+                // always makes progress: a deadline that can refuse the first
+                // item is a queue that never empties on a slow enough machine.
+                if (System.nanoTime() >= deadline) return done;
             }
             if (done >= DIRTY_BUDGET_PER_TICK) break;
         }

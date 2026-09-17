@@ -53,6 +53,18 @@ public final class RegionScanner {
     /** Chunks applied to the index per server tick. Keeps the apply step off the frame budget. */
     private static final int APPLY_BUDGET_PER_TICK = 64;
 
+    /**
+     * How long applying may spend inside one tick, whatever the count says.
+     *
+     * <p>Same reasoning as the dirty drain's slice, with more room: nobody is
+     * waiting on a background scan of chunks they are not standing in, so this
+     * is the work that should yield first. Four milliseconds of a fifty
+     * millisecond tick, after which the rest waits for the next one - the queue
+     * is bounded and the scan resumes where it stopped, so being slow costs
+     * only time.
+     */
+    private static final long APPLY_SLICE_NANOS = 4_000_000L;
+
     /** Pause the reader when the server is struggling; nothing here is urgent. */
     private static final long TICK_TIME_BUDGET_NANOS = 45_000_000L; // 45ms of a 50ms tick
 
@@ -347,6 +359,7 @@ public final class RegionScanner {
         if (tickTimeNanos > TICK_TIME_BUDGET_NANOS) return 0;
 
         int applied = 0;
+        long deadline = System.nanoTime() + APPLY_SLICE_NANOS;
         Batch batch;
         while (applied < APPLY_BUDGET_PER_TICK && (batch = pending.poll()) != null) {
             applied++;
@@ -385,6 +398,11 @@ public final class RegionScanner {
             // For an unloaded chunk the file is the whole truth, so anything the
             // index still holds there and the file does not is gone.
             tracker.reconcileChunk(batch.dimensionId(), batch.chunkKey(), positions);
+
+            // After the work, for the reason the dirty drain gives: one chunk
+            // per tick is slow, and slow finishes. Nothing finishes if the
+            // deadline can turn the first one away.
+            if (System.nanoTime() >= deadline) break;
         }
         return applied;
     }
