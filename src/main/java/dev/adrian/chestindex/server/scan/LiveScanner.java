@@ -11,6 +11,7 @@ import dev.adrian.chestindex.server.TrackerService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
@@ -87,7 +88,7 @@ public final class LiveScanner {
             long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
             actual.add(key);
             tracker.record(dimensionId, toRecord(blockEntity, key, typeId, dimensionId, tick,
-                    naturalityOf(level, pos, key, dimensionId)));
+                    naturalityOf(level, chunk, pos, key, dimensionId)));
             found++;
         }
 
@@ -99,7 +100,8 @@ public final class LiveScanner {
         int x = BlockKey.x(pos);
         int y = BlockKey.y(pos);
         int z = BlockKey.z(pos);
-        if (!level.getChunkSource().hasChunk(x >> 4, z >> 4)) {
+        LevelChunk chunk = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
+        if (chunk == null) {
             return true;
         }
 
@@ -113,16 +115,33 @@ public final class LiveScanner {
         String typeId = ContainerTypes.idOf(blockEntity);
         if (typeId == null) return true;
         tracker.record(dimensionId, toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime(),
-                naturalityOf(level, blockPos, pos, dimensionId)));
+                naturalityOf(level, chunk, blockPos, pos, dimensionId)));
         return true;
     }
 
-    private Origin naturalityOf(ServerLevel level, BlockPos blockPos, long pos, String dimensionId) {
+    private Origin naturalityOf(ServerLevel level, LevelChunk chunk, BlockPos blockPos,
+                                long pos, String dimensionId) {
         if (tracker.index(dimensionId).get(pos) != null) return Origin.UNKNOWN;
+        if (chunk == null) return Origin.UNKNOWN;
+        return structurePieceAt(level, chunk, blockPos) ? Origin.NATURAL : Origin.UNKNOWN;
+    }
 
-        StructureStart start = level.structureManager()
-                .getStructureWithPieceAt(blockPos, holder -> true);
-        return start != null && start.isValid() ? Origin.NATURAL : Origin.UNKNOWN;
+    private boolean structurePieceAt(ServerLevel level, LevelChunk chunk, BlockPos blockPos) {
+        var chunkSource = level.getChunkSource();
+
+        for (var entry : chunk.getAllReferences().entrySet()) {
+            for (long reference : entry.getValue()) {
+                LevelChunk startChunk = chunkSource
+                        .getChunkNow(ChunkPos.getX(reference), ChunkPos.getZ(reference));
+                if (startChunk == null) continue;
+
+                StructureStart start = startChunk.getStartForStructure(entry.getKey());
+                if (start == null || !start.isValid()) continue;
+
+                if (level.structureManager().structureHasPieceAt(blockPos, start)) return true;
+            }
+        }
+        return false;
     }
 
     private ContainerRecord toRecord(BlockEntity blockEntity, long pos, String typeId,
