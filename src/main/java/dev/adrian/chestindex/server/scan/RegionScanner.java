@@ -29,6 +29,8 @@ public final class RegionScanner {
 
     private static final int APPLY_BUDGET_PER_TICK = 64;
 
+    private static final long APPLY_SLICE_NANOS = 4_000_000L;
+
     private static final long TICK_TIME_BUDGET_NANOS = 45_000_000L;
 
     private final TrackerService tracker;
@@ -259,6 +261,7 @@ public final class RegionScanner {
         if (tickTimeNanos > TICK_TIME_BUDGET_NANOS) return 0;
 
         int applied = 0;
+        long deadline = System.nanoTime() + APPLY_SLICE_NANOS;
         Batch batch;
         while (applied < APPLY_BUDGET_PER_TICK && (batch = pending.poll()) != null) {
             applied++;
@@ -284,6 +287,8 @@ public final class RegionScanner {
                 positions.add(remapped.pos());
             }
             tracker.reconcileChunk(batch.dimensionId(), batch.chunkKey(), positions);
+
+            if (System.nanoTime() >= deadline) break;
         }
         return applied;
     }

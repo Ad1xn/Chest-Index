@@ -27,6 +27,8 @@ public final class Trackers {
 
     private static final int DIRTY_BUDGET_PER_TICK = 48;
 
+    private static final long DIRTY_SLICE_NANOS = 2_000_000L;
+
     private static final long TICK_TIME_BUDGET_NANOS = 45_000_000L;
 
     private Trackers() {}
@@ -126,6 +128,7 @@ public final class Trackers {
         if (tracker == null || DIRTY.isEmpty()) return 0;
 
         int done = 0;
+        long deadline = System.nanoTime() + DIRTY_SLICE_NANOS;
         var scanner = new dev.adrian.chestindex.server.scan.LiveScanner(tracker);
 
         for (Map.Entry<String, java.util.Set<Long>> entry : DIRTY.entrySet()) {
@@ -142,6 +145,7 @@ public final class Trackers {
                 iterator.remove();
                 scanner.refreshIfLoaded(level, entry.getKey(), pos);
                 done++;
+                if (System.nanoTime() >= deadline) return done;
             }
             if (done >= DIRTY_BUDGET_PER_TICK) break;
         }
