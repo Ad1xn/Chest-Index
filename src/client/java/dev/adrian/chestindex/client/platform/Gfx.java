@@ -86,6 +86,22 @@ public final class Gfx {
         raw.item(stack, x, y);
     }
 
+    // An item drawn larger than the sixteen pixels vanilla gives it, about its
+    // own top-left corner. The block models the game renders into an item slot
+    // are the only three-dimensional pictures of a chest a screen can get
+    // hold of, and at sixteen pixels a chest is too small to show a marker
+    // drawn around it. The pose stack is two-dimensional on both targets, so
+    // this scales the finished picture rather than the model - which is all
+    // that is wanted here: bigger, not turned.
+    public void item(ItemStack stack, int x, int y, float scale) {
+        var pose = raw.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        pose.scale(scale, scale);
+        raw.item(stack, 0, 0);
+        pose.popMatrix();
+    }
+
     public void itemDecorations(Font font, ItemStack stack, int x, int y) {
         raw.itemDecorations(font, stack, x, y);
     }
@@ -160,6 +176,22 @@ public final class Gfx {
 
     public void item(ItemStack stack, int x, int y) {
         raw.renderItem(stack, x, y);
+    }
+
+    // An item drawn larger than the sixteen pixels vanilla gives it, about its
+    // own top-left corner. The block models the game renders into an item slot
+    // are the only three-dimensional pictures of a chest a screen can get
+    // hold of, and at sixteen pixels a chest is too small to show a marker
+    // drawn around it. The pose stack is two-dimensional on both targets, so
+    // this scales the finished picture rather than the model - which is all
+    // that is wanted here: bigger, not turned.
+    public void item(ItemStack stack, int x, int y, float scale) {
+        var pose = raw.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        pose.scale(scale, scale);
+        raw.renderItem(stack, 0, 0);
+        pose.popMatrix();
     }
 
     public void itemDecorations(Font font, ItemStack stack, int x, int y) {

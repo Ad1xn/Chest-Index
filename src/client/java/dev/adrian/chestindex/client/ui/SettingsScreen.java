@@ -199,6 +199,15 @@ public final class SettingsScreen extends Screen {
     /** Set while drawing, drawn last so nothing covers it. */
     private Hover pendingTooltip;
 
+    /**
+     * The picture the Markers section is built around.
+     *
+     * <p>Held by the screen rather than rebuilt per frame so that the container
+     * somebody clicked through to stays the one they are looking at while they
+     * work down the rows.
+     */
+    private final MarkerPreview preview = new MarkerPreview();
+
     /** Which row's track the mouse is holding, or -1. */
     private int draggingRow = -1;
 
@@ -256,7 +265,13 @@ public final class SettingsScreen extends Screen {
      * @param icon the item the game itself uses for this idea, drawn in the rail
      * @param summary one line, shown under the window while the section is open
      */
-    private record Section(String name, String icon, String summary, List<Row> rows) {}
+    private record Section(String name, String icon, String summary, List<Row> rows,
+                           boolean preview) {
+        /** A section that is only rows, which is all of them but one. */
+        Section(String name, String icon, String summary, List<Row> rows) {
+            this(name, icon, summary, rows, false);
+        }
+    }
 
     /**
      * Builds every section.
@@ -446,7 +461,15 @@ public final class SettingsScreen extends Screen {
                                                 + "starts growing.",
                                         () -> config.highlightRecedingGraceSeconds,
                                         value -> config.highlightRecedingGraceSeconds = value,
-                                        1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"),
+                                        1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"))),
+
+                // What a marker looks like, as against when it exists and how
+                // long for, which is Guidance. Split out because these are the
+                // settings nobody can judge from a sentence - they are colours
+                // and shapes - so this is the section that shows them instead.
+                new Section("Markers", "minecraft:beacon",
+                        "What the markers look like. The picture changes as you do.",
+                        List.of(
                                 new Choice("Marker shape",
                                         "A full cube, just its outline, or both.",
                                         "What a marker in the world is drawn as. The full cube is found by "
@@ -517,7 +540,7 @@ public final class SettingsScreen extends Screen {
                                                 + "count fully visible; the background is easier to pick out "
                                                 + "against a busy container texture, and is drawn as a tint so "
                                                 + "the item still reads through it.",
-                                        this::slotStyleValue, this::cycleSlotStyle))),
+                                        this::slotStyleValue, this::cycleSlotStyle)), true),
 
                 // The game's own word for this, and the game's own symbol for
                 // it. Everything in here is off until it is deliberately
@@ -753,7 +776,7 @@ public final class SettingsScreen extends Screen {
 
     /** Whether there are more rows than the well can show at once. */
     private boolean overflows() {
-        return rows().size() > visibleRows;
+        return rows().size() > rowsVisible();
     }
 
     private int rowsX() {
@@ -764,8 +787,49 @@ public final class SettingsScreen extends Screen {
         return contentW() - 2 - (overflows() ? SCROLLBAR_W + 1 : 0);
     }
 
+    /**
+     * Whether the open section shows the preview.
+     *
+     * <p>Not while the filter has something in it: the filter crosses every
+     * section at once, so the rows on screen are then not one section's and a
+     * preview standing over them would be answering for settings that are not
+     * there.
+     */
+    private boolean showsPreview() {
+        return filter.isEmpty() && section >= 0 && section < sections.size()
+                && sections.get(section).preview();
+    }
+
+    private int previewH() {
+        return showsPreview() ? MarkerPreview.HEIGHT : 0;
+    }
+
+    /**
+     * Where the rows start, which is under the preview when there is one.
+     *
+     * <p>The preview is pinned rather than scrolled with the rows. It is the
+     * thing every row below it is talking about; scrolling it away at the first
+     * turn of the wheel would leave the settings describing something no longer
+     * on screen.
+     */
+    private int rowsTop() {
+        return contentTop() + 1 + previewH();
+    }
+
+    /**
+     * How many rows fit beside it.
+     *
+     * <p>The well's height is fixed for the life of the screen - see
+     * {@link #visibleRows} for why it must not change under a hand clicking
+     * down the rail - so the preview is paid for in rows rather than in window
+     * height, and the section scrolls a little sooner than the others.
+     */
+    private int rowsVisible() {
+        return Math.max(1, visibleRows - previewH() / ROW_H);
+    }
+
     private int rowY(int index) {
-        return contentTop() + 1 + index * ROW_H;
+        return rowsTop() + index * ROW_H;
     }
 
     private int scrollbarX() {
@@ -773,7 +837,7 @@ public final class SettingsScreen extends Screen {
     }
 
     private int maxScroll() {
-        return Math.max(0, rows().size() - visibleRows);
+        return Math.max(0, rows().size() - rowsVisible());
     }
 
     private int closeX() {
@@ -960,6 +1024,8 @@ public final class SettingsScreen extends Screen {
     }
 
     private void drawRows(Gfx gfx, int mouseX, int mouseY) {
+        if (showsPreview()) drawPreview(gfx, mouseX, mouseY);
+
         List<Row> visible = rows();
         if (visible.isEmpty()) {
             drawEmpty(gfx);
@@ -970,7 +1036,7 @@ public final class SettingsScreen extends Screen {
         int right = left + rowsW();
         int hovered = rowAt(mouseX, mouseY);
 
-        for (int i = 0; i < visibleRows; i++) {
+        for (int i = 0; i < rowsVisible(); i++) {
             int index = scroll + i;
             if (index >= visible.size()) break;
 
@@ -988,6 +1054,23 @@ public final class SettingsScreen extends Screen {
             }
 
             drawRow(gfx, row, left, right, y, index == hovered);
+        }
+    }
+
+    private void drawPreview(Gfx gfx, int mouseX, int mouseY) {
+        int top = contentTop() + 1;
+        preview.draw(gfx, font, rowsX(), top, rowsW(), MarkerPreview.HEIGHT);
+
+        // A line under it, the same one the rows put between themselves, so the
+        // preview reads as sitting above the list rather than being its first
+        // entry.
+        gfx.fill(rowsX() + 2, top + MarkerPreview.HEIGHT - 1,
+                rowsX() + rowsW() - 2, top + MarkerPreview.HEIGHT, 0x18000000);
+
+        if (preview.contains(mouseX, mouseY)) {
+            hoverTitle = preview.hint();
+            pendingTooltip = new Hover(List.of(preview.hint()), top,
+                    top + MarkerPreview.HEIGHT);
         }
     }
 
@@ -1202,8 +1285,8 @@ public final class SettingsScreen extends Screen {
     /** Which row the cursor is over, in the shown list's own numbering, or -1. */
     private int rowAt(int mouseX, int mouseY) {
         if (mouseX < rowsX() || mouseX >= rowsX() + rowsW()) return -1;
-        int top = contentTop() + 1;
-        if (mouseY < top || mouseY >= top + visibleRows * ROW_H) return -1;
+        int top = rowsTop();
+        if (mouseY < top || mouseY >= top + rowsVisible() * ROW_H) return -1;
         int index = scroll + (mouseY - top) / ROW_H;
         return index < rows().size() ? index : -1;
     }
@@ -1275,6 +1358,11 @@ public final class SettingsScreen extends Screen {
      * of which would be a guess.
      */
     private boolean clickRow(int mouseX, int mouseY) {
+        if (showsPreview() && preview.click(mouseX, mouseY)) {
+            VanillaButton.playClick();
+            return true;
+        }
+
         int index = rowAt(mouseX, mouseY);
         if (index < 0) return false;
 
