@@ -51,6 +51,15 @@ public final class Gfx {
         raw.item(stack, x, y);
     }
 
+    public void item(ItemStack stack, int x, int y, float scale) {
+        var pose = raw.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        pose.scale(scale, scale);
+        raw.item(stack, 0, 0);
+        pose.popMatrix();
+    }
+
     public void itemDecorations(Font font, ItemStack stack, int x, int y) {
         raw.itemDecorations(font, stack, x, y);
     }
@@ -109,6 +118,15 @@ public final class Gfx {
 
     public void item(ItemStack stack, int x, int y) {
         raw.renderItem(stack, x, y);
+    }
+
+    public void item(ItemStack stack, int x, int y, float scale) {
+        var pose = raw.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        pose.scale(scale, scale);
+        raw.renderItem(stack, 0, 0);
+        pose.popMatrix();
     }
 
     public void itemDecorations(Font font, ItemStack stack, int x, int y) {

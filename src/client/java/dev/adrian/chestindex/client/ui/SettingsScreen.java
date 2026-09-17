@@ -99,6 +99,8 @@ public final class SettingsScreen extends Screen {
 
     private Hover pendingTooltip;
 
+    private final MarkerPreview preview = new MarkerPreview();
+
     private int draggingRow = -1;
 
     private boolean draggingScrollbar;
@@ -129,7 +131,12 @@ public final class SettingsScreen extends Screen {
     private record Link(String label, String hint, String help,
                         Supplier<Screen> open) implements Row {}
 
-    private record Section(String name, String icon, String summary, List<Row> rows) {}
+    private record Section(String name, String icon, String summary, List<Row> rows,
+                           boolean preview) {
+        Section(String name, String icon, String summary, List<Row> rows) {
+            this(name, icon, summary, rows, false);
+        }
+    }
 
     private List<Section> buildSections() {
         return List.of(
@@ -312,7 +319,11 @@ public final class SettingsScreen extends Screen {
                                                 + "starts growing.",
                                         () -> config.highlightRecedingGraceSeconds,
                                         value -> config.highlightRecedingGraceSeconds = value,
-                                        1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"),
+                                        1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"))),
+
+                new Section("Markers", "minecraft:beacon",
+                        "What the markers look like. The picture changes as you do.",
+                        List.of(
                                 new Choice("Marker shape",
                                         "A full cube, just its outline, or both.",
                                         "What a marker in the world is drawn as. The full cube is found by "
@@ -383,7 +394,7 @@ public final class SettingsScreen extends Screen {
                                                 + "count fully visible; the background is easier to pick out "
                                                 + "against a busy container texture, and is drawn as a tint so "
                                                 + "the item still reads through it.",
-                                        this::slotStyleValue, this::cycleSlotStyle))),
+                                        this::slotStyleValue, this::cycleSlotStyle)), true),
 
                 new Section("Cheats", "minecraft:command_block",
                         "Things that cross the line. All off until you turn them on.",
@@ -590,7 +601,7 @@ public final class SettingsScreen extends Screen {
     }
 
     private boolean overflows() {
-        return rows().size() > visibleRows;
+        return rows().size() > rowsVisible();
     }
 
     private int rowsX() {
@@ -601,8 +612,25 @@ public final class SettingsScreen extends Screen {
         return contentW() - 2 - (overflows() ? SCROLLBAR_W + 1 : 0);
     }
 
+    private boolean showsPreview() {
+        return filter.isEmpty() && section >= 0 && section < sections.size()
+                && sections.get(section).preview();
+    }
+
+    private int previewH() {
+        return showsPreview() ? MarkerPreview.HEIGHT : 0;
+    }
+
+    private int rowsTop() {
+        return contentTop() + 1 + previewH();
+    }
+
+    private int rowsVisible() {
+        return Math.max(1, visibleRows - previewH() / ROW_H);
+    }
+
     private int rowY(int index) {
-        return contentTop() + 1 + index * ROW_H;
+        return rowsTop() + index * ROW_H;
     }
 
     private int scrollbarX() {
@@ -610,7 +638,7 @@ public final class SettingsScreen extends Screen {
     }
 
     private int maxScroll() {
-        return Math.max(0, rows().size() - visibleRows);
+        return Math.max(0, rows().size() - rowsVisible());
     }
 
     private int closeX() {
@@ -739,6 +767,8 @@ public final class SettingsScreen extends Screen {
     }
 
     private void drawRows(Gfx gfx, int mouseX, int mouseY) {
+        if (showsPreview()) drawPreview(gfx, mouseX, mouseY);
+
         List<Row> visible = rows();
         if (visible.isEmpty()) {
             drawEmpty(gfx);
@@ -749,7 +779,7 @@ public final class SettingsScreen extends Screen {
         int right = left + rowsW();
         int hovered = rowAt(mouseX, mouseY);
 
-        for (int i = 0; i < visibleRows; i++) {
+        for (int i = 0; i < rowsVisible(); i++) {
             int index = scroll + i;
             if (index >= visible.size()) break;
 
@@ -765,6 +795,20 @@ public final class SettingsScreen extends Screen {
             }
 
             drawRow(gfx, row, left, right, y, index == hovered);
+        }
+    }
+
+    private void drawPreview(Gfx gfx, int mouseX, int mouseY) {
+        int top = contentTop() + 1;
+        preview.draw(gfx, font, rowsX(), top, rowsW(), MarkerPreview.HEIGHT);
+
+        gfx.fill(rowsX() + 2, top + MarkerPreview.HEIGHT - 1,
+                rowsX() + rowsW() - 2, top + MarkerPreview.HEIGHT, 0x18000000);
+
+        if (preview.contains(mouseX, mouseY)) {
+            hoverTitle = preview.hint();
+            pendingTooltip = new Hover(List.of(preview.hint()), top,
+                    top + MarkerPreview.HEIGHT);
         }
     }
 
@@ -914,8 +958,8 @@ public final class SettingsScreen extends Screen {
 
     private int rowAt(int mouseX, int mouseY) {
         if (mouseX < rowsX() || mouseX >= rowsX() + rowsW()) return -1;
-        int top = contentTop() + 1;
-        if (mouseY < top || mouseY >= top + visibleRows * ROW_H) return -1;
+        int top = rowsTop();
+        if (mouseY < top || mouseY >= top + rowsVisible() * ROW_H) return -1;
         int index = scroll + (mouseY - top) / ROW_H;
         return index < rows().size() ? index : -1;
     }
@@ -971,6 +1015,11 @@ public final class SettingsScreen extends Screen {
     }
 
     private boolean clickRow(int mouseX, int mouseY) {
+        if (showsPreview() && preview.click(mouseX, mouseY)) {
+            VanillaButton.playClick();
+            return true;
+        }
+
         int index = rowAt(mouseX, mouseY);
         if (index < 0) return false;
 
