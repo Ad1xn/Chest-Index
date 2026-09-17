@@ -103,13 +103,30 @@ public final class Session {
 
     private static final String REPLACED_MOD = "chesttracker";
 
+    private static final String OWN_OLD_ID = "chest-tracker";
+
     private static boolean warnedAboutConflict;
 
     public static void warnAboutConflict() {
         if (warnedAboutConflict) return;
         if (Minecraft.getInstance().level == null) return;
         warnedAboutConflict = true;
-        if (!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded(REPLACED_MOD)) return;
+
+        net.fabricmc.loader.api.FabricLoader loader = net.fabricmc.loader.api.FabricLoader.getInstance();
+
+        if (loader.isModLoaded(OWN_OLD_ID)) {
+            dev.adrian.chestindex.ChestIndex.LOG.warn(
+                    "An older build of this mod ({}) is loaded alongside it. Up to 1.1 it was "
+                            + "called ChestTracker and carried that id, so Fabric loads both and "
+                            + "you get two search screens on the same keys. Delete the old jar "
+                            + "from your mods folder; your settings and indexes have already been "
+                            + "moved across.", OWN_OLD_ID);
+            ClientCompat.toast(Component.literal("An older ChestIndex is still installed"),
+                    Component.literal("Delete the old chest-tracker jar from mods"));
+            return;
+        }
+
+        if (!loader.isModLoaded(REPLACED_MOD)) return;
 
         dev.adrian.chestindex.ChestIndex.LOG.warn(
                 "'Chest Tracker (Unofficial port)' ({}) is installed alongside this mod. "
