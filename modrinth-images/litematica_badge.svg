@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="56" fill="none" viewBox="0 0 180 56">
+<rect width="180" height="56" fill="url(#bg)" rx="8"/>
+<rect width="177.9" height="53.9" x="1.05" y="1.05" stroke="#fff" stroke-opacity=".15" stroke-width="2.1" rx="6.95"/>
+<g filter="url(#sh)"><image x="10.7" y="6.7" width="42.6" height="42.6" clip-path="url(#round)" style="image-rendering:pixelated" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgBAMAAACBVGfHAAAAAXNSR0IArs4c6QAAACFQTFRF////m623ar4whH6HW27hjVp+aWpqQl2ZrDIyIiA0AAAAisq4oAAAALBJREFUeJy10jEKwyAUBmClUBz1DiVzSS/gEBAP8MCxQ+gJBPcGIe4Omhu0pyzGxGr2vEk+fsH3nuh7KPSJTS3ngZfpHNwOXmgZY7DKZfDCGC2DBVBuBWGMMdoCAKgVhpTgJCXmnNBCc0yJVVZtVzTHjFFioQBmjDFaAUoJVMHljun1WcOj714FvNhhe1j0Q4bZleYyuH/7U4KxmkeY+m6U9YDC+ybbiQV5+hoaOH6HH1d7CCmuWaQ2AAAAAElFTkSuQmCC"/></g>
+<g filter="url(#sh)">
+<text x="60" y="24" font-family="Inter,'Helvetica Neue',Arial,sans-serif" font-size="14.5" font-weight="500" fill="#e8e8e8">Integrates with</text>
+<text x="60" y="44" font-family="Inter,'Helvetica Neue',Arial,sans-serif" font-size="20.5" font-weight="800" fill="#7f8fe8">Litematica</text>
+</g>
+<defs>
+<clipPath id="round"><rect x="12" y="8" width="40" height="40" rx="5"/></clipPath>
+<linearGradient id="bg" x1="0" x2="0" y1="0" y2="53.2" gradientUnits="userSpaceOnUse"><stop stop-color="#2b2843"/><stop offset="1" stop-color="#222034"/></linearGradient>
+<filter id="sh" x="-20%" y="-40%" width="140%" height="180%" color-interpolation-filters="sRGB">
+<feDropShadow dx="0" dy="0" stdDeviation="2.8" flood-color="#000" flood-opacity=".25"/></filter>
+</defs></svg>
