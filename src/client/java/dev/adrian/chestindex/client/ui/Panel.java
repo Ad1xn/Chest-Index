@@ -330,6 +330,17 @@ public final class Panel {
             Identifier.parse("minecraft:textures/block/redstone_torch.png");
 
     /**
+     * The spectral arrow, for the markers.
+     *
+     * <p>The game's own answer to "point that out to me": a spectral arrow
+     * draws a glowing outline around whatever it hits, through whatever is in
+     * the way. That is what the markers do to a container, so it is the icon
+     * rather than a lamp or a torch, which only say "bright".
+     */
+    private static final Identifier SPECTRAL_ARROW =
+            Identifier.parse("minecraft:textures/item/spectral_arrow.png");
+
+    /**
      * The chest, which has no flat texture of its own.
      *
      * <p>A chest is a block entity: its art is an unwrapped 64x64 model sheet,
@@ -356,6 +367,7 @@ public final class Panel {
             case 1 -> icon(gfx, HOPPER, x, y);
             case 2 -> icon(gfx, SPYGLASS, x, y);
             case 3 -> icon(gfx, COMPASS, x, y);
+            case 4 -> icon(gfx, SPECTRAL_ARROW, x, y);
             default -> icon(gfx, REDSTONE_TORCH, x, y);
         }
     }

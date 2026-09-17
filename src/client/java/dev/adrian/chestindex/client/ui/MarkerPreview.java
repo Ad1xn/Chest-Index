@@ -244,6 +244,21 @@ public final class MarkerPreview {
         }
     }
 
+    /**
+     * The stack to draw, or empty if there is not one to draw yet.
+     *
+     * <p>Building an {@code ItemStack} throws on 26.x until a world's registries
+     * have bound the item components, and this screen opens from Mod Menu on the
+     * title screen, where nothing is loaded. It crashed there exactly once, which
+     * is once more than it should have: {@code SettingsScreen.iconFor} had the
+     * same hazard and the same guard already written out, and this was a second
+     * place doing the same thing without it.
+     *
+     * <p>So the failure is caught and <em>not</em> cached - it is a "not yet"
+     * rather than a "no" - and the preview simply draws its boxes and slots
+     * empty until there is a world. The colours, the shape and the trail are
+     * all still in them, which is most of what the preview is for.
+     */
     private static ItemStack stack(String itemId) {
         ItemStack cached = STACKS.get(itemId);
         if (cached != null) return cached;
@@ -254,8 +269,12 @@ public final class MarkerPreview {
         // that failed once during a reload would otherwise stay failed.
         if (item == null) return ItemStack.EMPTY;
 
-        ItemStack resolved = new ItemStack(item);
-        STACKS.put(itemId, resolved);
-        return resolved;
+        try {
+            ItemStack resolved = new ItemStack(item);
+            STACKS.put(itemId, resolved);
+            return resolved;
+        } catch (RuntimeException notBoundYet) {
+            return ItemStack.EMPTY;
+        }
     }
 }

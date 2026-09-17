@@ -467,7 +467,7 @@ public final class SettingsScreen extends Screen {
                 // long for, which is Guidance. Split out because these are the
                 // settings nobody can judge from a sentence - they are colours
                 // and shapes - so this is the section that shows them instead.
-                new Section("Markers", "minecraft:beacon",
+                new Section("Markers", "minecraft:spectral_arrow",
                         "What the markers look like. The picture changes as you do.",
                         List.of(
                                 new Choice("Marker shape",
