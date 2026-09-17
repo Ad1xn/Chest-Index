@@ -11,6 +11,7 @@ import dev.adrian.chestindex.server.TrackerService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
@@ -112,7 +113,7 @@ public final class LiveScanner {
             long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
             actual.add(key);
             tracker.record(dimensionId, toRecord(blockEntity, key, typeId, dimensionId, tick,
-                    naturalityOf(level, pos, key, dimensionId)));
+                    naturalityOf(level, chunk, pos, key, dimensionId)));
             found++;
         }
 
@@ -136,7 +137,8 @@ public final class LiveScanner {
         int x = BlockKey.x(pos);
         int y = BlockKey.y(pos);
         int z = BlockKey.z(pos);
-        if (!level.getChunkSource().hasChunk(x >> 4, z >> 4)) {
+        LevelChunk chunk = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
+        if (chunk == null) {
             return true; // Unloaded: frozen, so what we have is still true.
         }
 
@@ -150,7 +152,7 @@ public final class LiveScanner {
         String typeId = ContainerTypes.idOf(blockEntity);
         if (typeId == null) return true;
         tracker.record(dimensionId, toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime(),
-                naturalityOf(level, blockPos, pos, dimensionId)));
+                naturalityOf(level, chunk, blockPos, pos, dimensionId)));
         return true;
     }
 
@@ -167,16 +169,57 @@ public final class LiveScanner {
      * <p>Only asked for containers not already indexed. The answer cannot
      * change for a position, the lookup is not free, and re-reads happen
      * constantly - so paying for it once is the whole budget.
+     *
+     * @param chunk the chunk the container sits in, already in hand, or null if
+     *              it is not resident - in which case there is nothing to ask
      */
-    private Origin naturalityOf(ServerLevel level, BlockPos blockPos, long pos, String dimensionId) {
+    private Origin naturalityOf(ServerLevel level, LevelChunk chunk, BlockPos blockPos,
+                                long pos, String dimensionId) {
         if (tracker.index(dimensionId).get(pos) != null) return Origin.UNKNOWN;
+        if (chunk == null) return Origin.UNKNOWN;
+        return structurePieceAt(level, chunk, blockPos) ? Origin.NATURAL : Origin.UNKNOWN;
+    }
 
-        // A piece test rather than the structure's bounding box: a village's box
-        // covers a lot of ground that is not the village, and a chest a player
-        // built next door is not a village chest.
-        StructureStart start = level.structureManager()
-                .getStructureWithPieceAt(blockPos, holder -> true);
-        return start != null && start.isValid() ? Origin.NATURAL : Origin.UNKNOWN;
+    /**
+     * Asks the same question as {@code StructureManager#getStructureWithPieceAt}
+     * without ever waiting for a chunk.
+     *
+     * <p>The vanilla call cannot be used here. It reaches the structure through
+     * two blocking {@code getChunk} calls - the container's own chunk at
+     * STRUCTURE_REFERENCES, then the chunk each reference starts in at
+     * STRUCTURE_STARTS - and we ask it from inside the chunk-unload hook. That
+     * makes the server thread request a chunk that only the server thread can
+     * deliver, and it parks there forever: 0 TPS, no crash, no timeout, frames
+     * still fine because the render thread is untouched. Elytra flight found it
+     * within seconds, since flying unloads chunks continuously and it only
+     * takes one container in an unloading chunk.
+     *
+     * <p>So the same walk is done here over resident chunks only. The chunk in
+     * hand supplies the references; a start chunk that is not in memory is
+     * skipped and the container stays UNKNOWN, which is what it would have been
+     * anyway before this classification existed. A structure start sits in the
+     * same chunk as its chest often enough that this still answers most of the
+     * time, and the offline region scan classifies the rest from disk.
+     */
+    private boolean structurePieceAt(ServerLevel level, LevelChunk chunk, BlockPos blockPos) {
+        var chunkSource = level.getChunkSource();
+
+        for (var entry : chunk.getAllReferences().entrySet()) {
+            for (long reference : entry.getValue()) {
+                LevelChunk startChunk = chunkSource
+                        .getChunkNow(ChunkPos.getX(reference), ChunkPos.getZ(reference));
+                if (startChunk == null) continue;
+
+                StructureStart start = startChunk.getStartForStructure(entry.getKey());
+                if (start == null || !start.isValid()) continue;
+
+                // A piece test rather than the structure's bounding box: a
+                // village's box covers a lot of ground that is not the village,
+                // and a chest a player built next door is not a village chest.
+                if (level.structureManager().structureHasPieceAt(blockPos, start)) return true;
+            }
+        }
+        return false;
     }
 
     private ContainerRecord toRecord(BlockEntity blockEntity, long pos, String typeId,
