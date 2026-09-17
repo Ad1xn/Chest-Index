@@ -208,6 +208,22 @@ public final class Session {
      */
     private static final String REPLACED_MOD = "chesttracker";
 
+    /**
+     * This mod's own id, up to 1.1, when it was still called ChestTracker.
+     *
+     * <p>Watched for the same reason and with more cause: the data moves itself
+     * across the rename, so somebody upgrading has every reason to think they
+     * are done - and if they dropped the new jar in beside the old one rather
+     * than over it, Fabric loads both and they get two of everything on the same
+     * keys, with nothing anywhere saying why.
+     *
+     * <p>The jar cannot be removed from here, and should not be: a mod that
+     * deletes files out of somebody's mods folder is a mod nobody should run,
+     * and Fabric holds the file open besides. Saying the true thing plainly is
+     * the whole of what can be done, so it is done properly.
+     */
+    private static final String OWN_OLD_ID = "chest-tracker";
+
     private static boolean warnedAboutConflict;
 
     /**
@@ -227,7 +243,25 @@ public final class Session {
         // is the normal case - this must stop asking rather than run a loader
         // lookup on every tick for the rest of the session.
         warnedAboutConflict = true;
-        if (!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded(REPLACED_MOD)) return;
+
+        net.fabricmc.loader.api.FabricLoader loader = net.fabricmc.loader.api.FabricLoader.getInstance();
+
+        // This mod's own past first: it is the likelier of the two and the one
+        // whose cause is least obvious, since nothing about upgrading a mod
+        // suggests that the old copy is still there.
+        if (loader.isModLoaded(OWN_OLD_ID)) {
+            dev.adrian.chestindex.ChestIndex.LOG.warn(
+                    "An older build of this mod ({}) is loaded alongside it. Up to 1.1 it was "
+                            + "called ChestTracker and carried that id, so Fabric loads both and "
+                            + "you get two search screens on the same keys. Delete the old jar "
+                            + "from your mods folder; your settings and indexes have already been "
+                            + "moved across.", OWN_OLD_ID);
+            ClientCompat.toast(Component.literal("An older ChestIndex is still installed"),
+                    Component.literal("Delete the old chest-tracker jar from mods"));
+            return;
+        }
+
+        if (!loader.isModLoaded(REPLACED_MOD)) return;
 
         dev.adrian.chestindex.ChestIndex.LOG.warn(
                 "'Chest Tracker (Unofficial port)' ({}) is installed alongside this mod. "
