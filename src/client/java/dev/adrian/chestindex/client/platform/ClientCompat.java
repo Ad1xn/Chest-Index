@@ -87,4 +87,12 @@ public final class ClientCompat {
         net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen).add(widget);
         //?}
     }
+
+    public static java.util.List<AbstractWidget> widgets(Screen screen) {
+        //? if >=26.1 {
+        /*return net.fabricmc.fabric.api.client.screen.v1.Screens.getWidgets(screen);
+        *///?} else {
+        return net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen);
+        //?}
+    }
 }

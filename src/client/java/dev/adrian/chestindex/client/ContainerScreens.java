@@ -59,9 +59,11 @@ public final class ContainerScreens {
                         container.getClass().getName());
             }
 
-            ClientCompat.afterScreenRender(screen, (gfx, mouseX, mouseY) ->
-                    SlotHighlight.draw(gfx, container,
-                            access.chestindex$leftPos(), access.chestindex$topPos()));
+            ClientCompat.afterScreenRender(screen, (gfx, mouseX, mouseY) -> {
+                if (SlotHighlight.alreadyDrawn()) return;
+                SlotHighlight.draw(gfx, container,
+                        access.chestindex$leftPos(), access.chestindex$topPos());
+            });
 
             ScreenKeyboardEvents.allowKeyPress(screen).register((ignored, keyEvent) -> {
                 if (!searchHovered.matches(keyEvent)) return true;

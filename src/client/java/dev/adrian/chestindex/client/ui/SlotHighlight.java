@@ -4,6 +4,7 @@ import dev.adrian.chestindex.client.highlight.ContainerHighlight;
 import dev.adrian.chestindex.client.platform.Gfx;
 import dev.adrian.chestindex.config.ChestIndexConfig;
 import dev.adrian.chestindex.core.highlight.HighlightPulse;
+import dev.adrian.chestindex.mixin.client.ContainerScreenAccessor;
 import dev.adrian.chestindex.platform.ItemContentsCompat;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.component.DataComponents;
@@ -22,6 +23,20 @@ public final class SlotHighlight {
     private SlotHighlight() {}
 
     private static final int MAX_DEPTH = 3;
+
+    private static boolean drawnBeforeTooltips;
+
+    public static void drawBeforeTooltips(Gfx gfx, AbstractContainerScreen<?> screen) {
+        drawnBeforeTooltips = true;
+        ContainerScreenAccessor access = (ContainerScreenAccessor) screen;
+        draw(gfx, screen, access.chestindex$leftPos(), access.chestindex$topPos());
+    }
+
+    public static boolean alreadyDrawn() {
+        if (!drawnBeforeTooltips) return false;
+        drawnBeforeTooltips = false;
+        return true;
+    }
 
     public static void draw(Gfx gfx, AbstractContainerScreen<?> screen, int leftPos, int topPos) {
         if (!ChestIndexConfig.get().highlightFoundSlots) return;

@@ -28,6 +28,15 @@ public final class LitematicaGui {
         public boolean contains(double mouseX, double mouseY) {
             return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
         }
+
+        public int right() {
+            return x + width;
+        }
+
+        public boolean overlaps(Rect other) {
+            return x < other.right() && other.x() < right()
+                    && y < other.y() + other.height() && other.y() < y + height;
+        }
     }
 
     public record Row(Rect anchor, String itemId, int needed) {}
@@ -102,6 +111,25 @@ public final class LitematicaGui {
         } catch (RuntimeException e) {
             warn(e);
             return null;
+        }
+    }
+
+    public static List<Rect> buttons(Object screen) {
+        try {
+            Object raw = read(screen, "buttons");
+            if (!(raw instanceof List<?> buttons)) return List.of();
+
+            List<Rect> found = new ArrayList<>(buttons.size());
+            for (Object button : buttons) {
+                if (!isButton(button)) continue;
+                if (Boolean.FALSE.equals(read(button, "visible"))) continue;
+                Rect bounds = boundsOf(button);
+                if (bounds != null) found.add(bounds);
+            }
+            return found;
+        } catch (RuntimeException e) {
+            warn(e);
+            return List.of();
         }
     }
 

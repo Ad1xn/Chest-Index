@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -104,8 +105,50 @@ public final class LitematicaSearch {
         if (export == null) return null;
 
         int width = VanillaButton.widthFor(ALL_LABEL);
-        int x = Math.min(export.x() + export.width() + BUTTON_GAP, screen.width - width - 1);
-        return new LitematicaGui.Rect(x, export.y(), width, export.height());
+        List<LitematicaGui.Rect> taken = obstacles(screen, export);
+
+        LitematicaGui.Rect spot = new LitematicaGui.Rect(
+                export.right() + BUTTON_GAP, export.y(), width, export.height());
+
+        for (int pass = 0; pass <= taken.size(); pass++) {
+            LitematicaGui.Rect blocker = firstOverlap(taken, spot);
+            if (blocker == null) break;
+            spot = new LitematicaGui.Rect(
+                    blocker.right() + BUTTON_GAP, spot.y(), spot.width(), spot.height());
+        }
+
+        if (spot.right() > screen.width - 1) {
+            LitematicaGui.Rect above = new LitematicaGui.Rect(
+                    export.x(), export.y() - export.height() - BUTTON_GAP, width, export.height());
+            return firstOverlap(taken, above) == null ? above
+                    : new LitematicaGui.Rect(
+                            screen.width - width - 1, spot.y(), width, spot.height());
+        }
+        return spot;
+    }
+
+    private static List<LitematicaGui.Rect> obstacles(Screen screen, LitematicaGui.Rect export) {
+        List<LitematicaGui.Rect> taken = new ArrayList<>();
+        for (LitematicaGui.Rect button : LitematicaGui.buttons(screen)) {
+            if (!button.equals(export)) taken.add(button);
+        }
+        for (AbstractWidget widget : ClientCompat.widgets(screen)) {
+            if (!widget.visible) continue;
+            taken.add(new LitematicaGui.Rect(
+                    widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight()));
+        }
+        return taken;
+    }
+
+    private static LitematicaGui.Rect firstOverlap(
+            List<LitematicaGui.Rect> taken, LitematicaGui.Rect spot) {
+        LitematicaGui.Rect worst = null;
+        for (LitematicaGui.Rect other : taken) {
+            if (other.overlaps(spot) && (worst == null || other.right() > worst.right())) {
+                worst = other;
+            }
+        }
+        return worst;
     }
 
     private static void drawButtons(Gfx gfx, Screen screen, int mouseX, int mouseY) {
