@@ -4,6 +4,7 @@ import dev.adrian.chestindex.client.highlight.ContainerHighlight;
 import dev.adrian.chestindex.client.platform.Gfx;
 import dev.adrian.chestindex.config.ChestIndexConfig;
 import dev.adrian.chestindex.core.highlight.HighlightPulse;
+import dev.adrian.chestindex.mixin.client.ContainerScreenAccessor;
 import dev.adrian.chestindex.platform.ItemContentsCompat;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.component.DataComponents;
@@ -51,6 +52,33 @@ public final class SlotHighlight {
      * reads as the mod having lost the thread at the last step.
      */
     private static final int MAX_DEPTH = 3;
+
+    /**
+     * Whether the marks were already drawn this frame, from inside the
+     * container window's own render.
+     *
+     * <p>Read and cleared by the after-render fallback in
+     * {@code ContainerScreens}: the mixin that draws at the right moment is
+     * allowed not to apply, and the marks must still appear when it does not.
+     */
+    private static boolean drawnBeforeTooltips;
+
+    /**
+     * Draws the marks from inside the window's own pass, before the tooltip.
+     * Called by {@code ContainerContentsMixin}; see the note there.
+     */
+    public static void drawBeforeTooltips(Gfx gfx, AbstractContainerScreen<?> screen) {
+        drawnBeforeTooltips = true;
+        ContainerScreenAccessor access = (ContainerScreenAccessor) screen;
+        draw(gfx, screen, access.chestindex$leftPos(), access.chestindex$topPos());
+    }
+
+    /** True once per frame in which the mixin above did the drawing. */
+    public static boolean alreadyDrawn() {
+        if (!drawnBeforeTooltips) return false;
+        drawnBeforeTooltips = false;
+        return true;
+    }
 
     public static void draw(Gfx gfx, AbstractContainerScreen<?> screen, int leftPos, int topPos) {
         if (!ChestIndexConfig.get().highlightFoundSlots) return;
@@ -104,16 +132,17 @@ public final class SlotHighlight {
             int x = leftPos + slot.x;
             int y = topPos + slot.y;
 
-            // Behind the item, which takes some doing: a mod can only add to a
-            // container screen after it has finished drawing, so anything
-            // painted here lands on top of the item by construction. The way
-            // under it is to paint the wash and then put the item back - the
-            // one drawn over is pixel-for-pixel the one vanilla already drew,
-            // so the only thing that changes is which side of the wash it is
-            // on. Cheaper than it sounds, and it works the same on both
-            // targets; the alternative was a mixin into the screen's own
-            // drawing, which is two different mixins because 26.2 replaced
-            // that method wholesale.
+            // Behind the item, which takes some doing: this runs after the
+            // slots have been drawn, so anything painted here lands on top of
+            // the item by construction. The way under it is to paint the wash
+            // and then put the item back - the one drawn over is
+            // pixel-for-pixel the one vanilla already drew, so the only thing
+            // that changes is which side of the wash it is on.
+            //
+            // Redrawing the item is also why this has to happen before the
+            // tooltip rather than after the screen: on the deferred renderer a
+            // late item is a later stratum, and these copies were turning up
+            // on top of the tooltip box. See ContainerContentsMixin.
             //
             // The wash can now be a real tint rather than a whisper, because
             // it is no longer competing with the item for the same pixels.

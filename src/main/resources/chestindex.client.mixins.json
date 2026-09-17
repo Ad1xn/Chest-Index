@@ -4,6 +4,7 @@
   "package": "dev.adrian.chestindex.mixin.client",
   "compatibilityLevel": "${mixin_compat}",
   "client": [
+    "ContainerContentsMixin",
     "ContainerScreenAccessor",
     "KeyMappingAccessor",
     "MalilibScreenMixin",

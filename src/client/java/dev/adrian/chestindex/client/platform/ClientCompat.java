@@ -159,4 +159,20 @@ public final class ClientCompat {
         net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen).add(widget);
         //?}
     }
+
+    /**
+     * The widgets already on a screen this mod did not write - including the
+     * ones other mods put there.
+     *
+     * <p>The same live list {@link #addWidget} appends to, read rather than
+     * written. It is how this mod can tell that somebody else has claimed a
+     * piece of a screen before drawing into it.
+     */
+    public static java.util.List<AbstractWidget> widgets(Screen screen) {
+        //? if >=26.1 {
+        /*return net.fabricmc.fabric.api.client.screen.v1.Screens.getWidgets(screen);
+        *///?} else {
+        return net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen);
+        //?}
+    }
 }

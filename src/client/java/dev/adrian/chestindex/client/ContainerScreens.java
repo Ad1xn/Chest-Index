@@ -100,9 +100,16 @@ public final class ContainerScreens {
                         container.getClass().getName());
             }
 
-            ClientCompat.afterScreenRender(screen, (gfx, mouseX, mouseY) ->
-                    SlotHighlight.draw(gfx, container,
-                            access.chestindex$leftPos(), access.chestindex$topPos()));
+            // The fallback route, and only that: this fires after the whole
+            // screen is drawn, which on the deferred renderer is after the
+            // tooltip - so the marks would sit on top of it. ContainerContentsMixin
+            // draws them inside the window's own pass instead, and this runs
+            // only for a frame in which that injection did not.
+            ClientCompat.afterScreenRender(screen, (gfx, mouseX, mouseY) -> {
+                if (SlotHighlight.alreadyDrawn()) return;
+                SlotHighlight.draw(gfx, container,
+                        access.chestindex$leftPos(), access.chestindex$topPos());
+            });
 
             // "allow" rather than "before", so a match is also swallowed. The
             // key reaches nothing else in the screen after this, which is what

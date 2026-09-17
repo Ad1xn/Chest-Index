@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -193,17 +194,88 @@ public final class LitematicaSearch {
     /**
      * Where the whole-list button goes: right of {@code Export}, matching its
      * height - or nowhere, if that button is not on this screen.
+     *
+     * <p>Right of {@code Export} is where it wants to be, not where it always
+     * fits. That strip is the one piece of the material list other mods also
+     * reach for, and on a loaded profile something is often already sitting
+     * there. So the spot is a starting point: anything found in it pushes the
+     * button further right, past that thing, and the search starts again from
+     * the new position. Only what a mod registers as a widget can be seen this
+     * way - {@link #obstacles} says what that covers.
+     *
+     * <p>If the row runs out before a gap is found, the button goes one row up
+     * instead of off the edge or on top of somebody else's. That is worse than
+     * beside {@code Export} and better than unreachable.
      */
     private static LitematicaGui.Rect allButton(Screen screen) {
         LitematicaGui.Rect export = LitematicaGui.exportButton(screen);
         if (export == null) return null;
 
         int width = VanillaButton.widthFor(ALL_LABEL);
-        // Clamped, because Litematica's own row of buttons can already reach
-        // the edge on a narrow window, and a button off the screen is a button
-        // nobody can press.
-        int x = Math.min(export.x() + export.width() + BUTTON_GAP, screen.width - width - 1);
-        return new LitematicaGui.Rect(x, export.y(), width, export.height());
+        List<LitematicaGui.Rect> taken = obstacles(screen, export);
+
+        LitematicaGui.Rect spot = new LitematicaGui.Rect(
+                export.right() + BUTTON_GAP, export.y(), width, export.height());
+
+        // Bounded rather than "until it fits": each pass moves strictly right,
+        // past one more obstacle, so it ends either way - but a screen whose
+        // widgets overlap each other should not be able to spin here.
+        for (int pass = 0; pass <= taken.size(); pass++) {
+            LitematicaGui.Rect blocker = firstOverlap(taken, spot);
+            if (blocker == null) break;
+            spot = new LitematicaGui.Rect(
+                    blocker.right() + BUTTON_GAP, spot.y(), spot.width(), spot.height());
+        }
+
+        // The row has ended: put it above Export rather than off the edge.
+        if (spot.right() > screen.width - 1) {
+            LitematicaGui.Rect above = new LitematicaGui.Rect(
+                    export.x(), export.y() - export.height() - BUTTON_GAP, width, export.height());
+            return firstOverlap(taken, above) == null ? above
+                    : new LitematicaGui.Rect(
+                            screen.width - width - 1, spot.y(), width, spot.height());
+        }
+        return spot;
+    }
+
+    /**
+     * What the whole-list button must not be drawn on top of.
+     *
+     * <p>Two lists, because the material list is two frameworks at once.
+     * Litematica's own buttons are malilib widgets, read through
+     * {@link LitematicaGui}. Everything else a mod adds to a screen it did not
+     * write goes through Fabric's screen API, whose list is vanilla's - and
+     * malilib's {@code GuiBase} is a vanilla {@code Screen}, so that route is
+     * open on this screen too and mods take it.
+     *
+     * <p>A mod that only paints pixels, with no widget behind them, is invisible
+     * here and always will be: there is nothing to ask. {@code Export} itself is
+     * left out, since the button is placed from it deliberately.
+     */
+    private static List<LitematicaGui.Rect> obstacles(Screen screen, LitematicaGui.Rect export) {
+        List<LitematicaGui.Rect> taken = new ArrayList<>();
+        for (LitematicaGui.Rect button : LitematicaGui.buttons(screen)) {
+            if (!button.equals(export)) taken.add(button);
+        }
+        for (AbstractWidget widget : ClientCompat.widgets(screen)) {
+            if (!widget.visible) continue;
+            taken.add(new LitematicaGui.Rect(
+                    widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight()));
+        }
+        return taken;
+    }
+
+    private static LitematicaGui.Rect firstOverlap(
+            List<LitematicaGui.Rect> taken, LitematicaGui.Rect spot) {
+        LitematicaGui.Rect worst = null;
+        for (LitematicaGui.Rect other : taken) {
+            // The furthest right of the overlapping ones, so one pass clears a
+            // cluster instead of landing in the middle of it.
+            if (other.overlaps(spot) && (worst == null || other.right() > worst.right())) {
+                worst = other;
+            }
+        }
+        return worst;
     }
 
     /**
