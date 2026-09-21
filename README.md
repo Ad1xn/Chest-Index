@@ -7,13 +7,17 @@ chunks that aren't loaded — and lets you search it. It's a proactive replaceme
 [Chest Tracker](https://modrinth.com/mod/chest-tracker), which only remembers containers after
 you've physically opened them.
 
-Fabric · Minecraft **1.21.11** and **26.2**
+Fabric · Minecraft **1.21.11**, **26.2** and **26.3**
 
 ### Supported versions
 
-**1.21.11 and newer.** Both current targets sit in Minecraft's unobfuscated era, so adding another
-release from it (26.1, a future 26.3) is a one-line entry in `settings.gradle.kts` plus a
-`versions/<mc>/gradle.properties` file.
+**1.21.11 and newer.** Every current target sits in Minecraft's unobfuscated era, so adding another
+release from it starts as a one-line entry in `settings.gradle.kts` plus a
+`versions/<mc>/gradle.properties` file. How much more it takes depends on the release: 26.3 also
+needed the platform shims taught three new things, because it renamed the container components'
+stream to `itemCopies()`, moved the render pipeline out of Blaze3D into `com.mojang.renderpearl`, and
+swapped GLFW for SDL — which removes `org.lwjgl.glfw` from the classpath entirely and renumbers every
+key code.
 
 **Below 1.21.11 is not supported and is not a small change.** Fabric Loom 1.17 reports even 1.21.8 as
 a non-obfuscated environment and refuses both `officialMojangMappings()` and
@@ -78,14 +82,19 @@ typing a prefix and it completes:
 |---|---|
 | `@` | items from one mod — `@create` |
 | `#` | items sharing an item tag — `#logs` |
-| `>` | only containers of one kind — `>barrel` |
+| `/` | only containers of one kind — `/barrel` |
+| `>` | more of it than this — `>200` |
+| `<` | fewer of it than this — `<100` |
+| `=` | exactly this many — `=421` |
 | `tab:` | the game's own creative tab — `tab:redstone` |
 | `ench:` | enchanted with this — `ench:mending` |
 | `potion:` | this potion, however bottled — `potion:swiftness` |
 | `text:` | words anywhere in the tooltip — `text:mining` |
 
 Prefixes combine with each other and with plain words, so `@create ench:efficiency drill` is a
-single question.
+single question. The three comparisons count every one of an item across the dimension being
+searched, so `>100 <500` is a band rather than two questions — a way to find what you have too
+much of, or nearly none of.
 
 **In any container window**, a small magnifier sits at the top right. Left-click opens the search
 screen; **right-drag** moves it. Each kind of window remembers its own position, so the button can
@@ -98,7 +107,8 @@ nearest one holds the purple outright, which is what picks it out without labell
 chest gets one box across both halves. Containers past render distance are drawn at the horizon
 rather than not at all.
 
-**Further out than twenty chunks** — editable, and past most render distances — each match also gets
+**Once a match is past what your game is drawing** — two chunks beyond your render distance, or
+twenty chunks, whichever comes first, and the twenty is editable — it also gets
 a trail of marks standing on it, running up to the build limit. That one is drawn *behind* the
 world rather than through it, so it reads as standing somewhere in the landscape instead of floating
 in front of it. Closer in it stays out of the way: the box already says which container it is.
@@ -243,7 +253,7 @@ Operator-only, since a full index is loot x-ray.
 
 | Command | What it does |
 |---|---|
-| `/chestindex scan [chunkRadius]` | Reads the chunks around you, out to a radius |
+| `/chestindex scan [chunkRadius]` | Reads every chunk in memory, or only those within a radius |
 | `/chestindex scanworld` | Reads region files that changed since the last scan |
 | `/chestindex scanworld override` | Throws the index away and reads the whole world again |
 | `/chestindex scanworld cancel` | Stops a running scan; what it read is kept |
@@ -251,8 +261,14 @@ Operator-only, since a full index is loot x-ray.
 | `/chestindex find <item>` | Where an item is, in chat |
 | `/chestindex access [tier]` | Show or set who may search |
 
+A world scan runs in the background and tells every operator online when it lands, so it isn't
+something to sit and watch. Progress also shows as a bar under the search field while the screen is
+open.
+
 Use `override` when the index looks *wrong* rather than merely incomplete: an ordinary scan corrects
 and adds, but never removes something it doesn't encounter. Searches are empty until it finishes.
+Updating from an older build clears the read-record on its own, so a world indexed by one starts
+correcting itself the first time it's opened.
 
 The index lives in the world folder, at `<world>/data/chestindex/`, beside a plain-text record of
 which region files have been read. Deleting that record makes the next scan read everything again;
@@ -283,30 +299,31 @@ moved with the id, so client and server must both be on 1.2.
 
 ## Building
 
-Two Minecraft versions are built from one source tree via
+Three Minecraft versions are built from one source tree via
 [Stonecutter](https://stonecutter.kikugie.dev/).
 
 ```bash
 ./gradlew ":1.21.11:build"   # -> versions/1.21.11/build/libs/
 ./gradlew ":26.2:build"      # -> versions/26.2/build/libs/
-./gradlew build              # both
+./gradlew ":26.3:build"      # -> versions/26.3/build/libs/
+./gradlew build              # all three
 ```
 
 **Gradle itself must run on JDK 25 or newer.** Loom validates the Gradle JVM, not just the compile
-toolchain, so building the 26.2 target on an older JVM fails with
-`Minecraft 26.2 requires Java 25 but Gradle is using <n>`. Point `JAVA_HOME` at a JDK 25+ before
+toolchain, so building a 26.x target on an older JVM fails with
+`Minecraft 26.x requires Java 25 but Gradle is using <n>`. Point `JAVA_HOME` at a JDK 25+ before
 building:
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 26)   # macOS; any JDK >= 25 works
 ```
 
-The per-target compile toolchain (21 for 1.21.11, 25 for 26.2) is provisioned by Gradle
+The per-target compile toolchain (21 for 1.21.11, 25 for 26.x) is provisioned by Gradle
 automatically, and each target emits bytecode at its own level. Compiling everything at 21 was
 tidier, but it leaves a target unable to consume a dependency built for 25 — Gradle's variant
 matching rejects it outright.
 
-Tagging a commit `v*` builds both targets and publishes them to GitHub Releases.
+Tagging a commit `v*` builds every target and publishes them to GitHub Releases.
 
 ## Licence
 
