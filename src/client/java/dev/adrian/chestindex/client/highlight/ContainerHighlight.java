@@ -19,7 +19,6 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 public final class ContainerHighlight {
-
     private static final ContainerHighlight INSTANCE = new ContainerHighlight();
 
     private static final double ARRIVAL_DISTANCE = 3.0;
@@ -263,13 +262,25 @@ public final class ContainerHighlight {
                 && ChestIndexConfig.get().highlightDisplay().drawsBoxes();
     }
 
+    private static final int BEYOND_VIEW_CHUNKS = 2;
+
+    private static double trailFromBlocks() {
+        double configured = ChestIndexConfig.get().guideBeamFromBlocks();
+
+        Minecraft client = Minecraft.getInstance();
+        if (client.options == null) return configured;
+
+        double beyondView = (client.options.getEffectiveRenderDistance() + BEYOND_VIEW_CHUNKS) * 16.0;
+        return Math.min(configured, beyondView);
+    }
+
     public boolean hasTrails() {
         if (!hasBoxes() || !ChestIndexConfig.get().guideBeam) return false;
 
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) return false;
 
-        double from = ChestIndexConfig.get().guideBeamFromBlocks();
+        double from = trailFromBlocks();
         double fromSq = from * from;
         Vec3 eye = client.player.position();
         for (Long position : positions) {
@@ -343,7 +354,7 @@ public final class ContainerHighlight {
         float pulse = HighlightPulse.at(System.currentTimeMillis());
         HighlightPulse.mix(otherColour, nearestColour, pulse, pulsed);
 
-        double trailFrom = pass == Pass.TRAILS ? config.guideBeamFromBlocks() : 0.0;
+        double trailFrom = pass == Pass.TRAILS ? trailFromBlocks() : 0.0;
         int worldTop = worldTop();
 
         ChestIndexConfig.Entry entry = config.highlightEntry();

@@ -8,8 +8,10 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,7 +19,6 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class ChestIndexConfig {
-
     private static ChestIndexConfig instance;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -439,13 +440,24 @@ public final class ChestIndexConfig {
     public void save() {
         Path path = file();
         if (path == null) return;
+        Path temp = path.resolveSibling(path.getFileName() + ".tmp");
         try {
             Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path)) {
+            try (Writer writer = Files.newBufferedWriter(temp)) {
                 GSON.toJson(this, writer);
+            }
+            try {
+                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException notAtomic) {
+                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
             ChestIndex.LOG.warn("Could not write {}: {}", path, e.toString());
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException ignored) {
+            }
         }
     }
 
