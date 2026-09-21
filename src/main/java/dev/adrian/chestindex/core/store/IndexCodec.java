@@ -23,10 +23,9 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 public final class IndexCodec {
-
     private static final int MAGIC = 0x43544958;
 
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
 
     public static final int OLDEST_READABLE_VERSION = 1;
 
@@ -40,10 +39,9 @@ public final class IndexCodec {
 
     private IndexCodec() {}
 
-    public record Snapshot(StringPalette palette, WorldIndex index) {}
+    public record Snapshot(StringPalette palette, WorldIndex index, int version) {}
 
     public record Frozen(List<String> paletteEntries, int dimensionId, List<ContainerRecord> records) {
-
         public Frozen {
             paletteEntries = List.copyOf(paletteEntries);
             records = List.copyOf(records);
@@ -113,7 +111,6 @@ public final class IndexCodec {
     public static Snapshot read(InputStream rawIn) throws IOException {
         try (DataInputStream in = new DataInputStream(
                 new BufferedInputStream(new GZIPInputStream(rawIn, BUFFER), BUFFER))) {
-
             int magic = in.readInt();
             if (magic != MAGIC) {
                 throw new IOException("Not a ChestIndex index (magic 0x" + Integer.toHexString(magic) + ")");
@@ -135,7 +132,7 @@ public final class IndexCodec {
             int count = readVarInt(in);
             for (int i = 0; i < count; i++) index.put(readRecord(in, version));
 
-            return new Snapshot(palette, index);
+            return new Snapshot(palette, index, version);
         } catch (EOFException truncated) {
             throw new IOException("Index file is truncated", truncated);
         }

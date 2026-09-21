@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class TrackerService {
-
     private final StringPalette palette = new StringPalette();
     private final Map<String, WorldIndex> byDimension = new HashMap<>();
     private final ContainerTypes containerTypes = new ContainerTypes();
@@ -102,6 +101,8 @@ public final class TrackerService {
 
     public void load() {
         if (!Files.isDirectory(storageRoot)) return;
+
+        boolean anyOlderThanCurrent = false;
         try (var files = Files.list(storageRoot)) {
             for (Path file : files.filter(p -> p.toString().endsWith(".idx")).toList()) {
                 try {
@@ -111,6 +112,7 @@ public final class TrackerService {
                         ChestIndex.LOG.warn("Skipping {}: its dimension id is missing from the palette", file);
                         continue;
                     }
+                    if (snapshot.version() < IndexCodec.FORMAT_VERSION) anyOlderThanCurrent = true;
                     byDimension.put(dimensionId, reindex(snapshot, dimensionId));
                 } catch (IOException e) {
                     ChestIndex.LOG.warn("Could not read index {}: {}", file, e.toString());
@@ -118,6 +120,19 @@ public final class TrackerService {
             }
         } catch (IOException e) {
             ChestIndex.LOG.warn("Could not list index directory {}: {}", storageRoot, e.toString());
+        }
+
+        if (anyOlderThanCurrent) forgetWhatWasScanned();
+    }
+
+    private void forgetWhatWasScanned() {
+        Path log = scanLogFile();
+        try {
+            if (!Files.deleteIfExists(log)) return;
+            ChestIndex.LOG.info(
+                    "Index was written by an older build: reading the world again to correct it.");
+        } catch (IOException e) {
+            ChestIndex.LOG.warn("Could not clear the scan log {}: {}", log, e.toString());
         }
     }
 

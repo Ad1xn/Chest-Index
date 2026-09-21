@@ -11,12 +11,12 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Trackers {
-
     private static volatile TrackerService current;
     private static volatile net.minecraft.server.MinecraftServer server;
     private static volatile dev.adrian.chestindex.server.scan.RegionScanner regionScanner;
@@ -105,17 +105,17 @@ public final class Trackers {
         }
     }
 
-    public static void onContainerChanged(BlockEntity blockEntity) {
+    public static void onContainerChanged(Level level, BlockPos pos) {
         TrackerService tracker = current;
         if (tracker == null) return;
 
-        if (!ContainerTypes.isContainer(blockEntity)) return;
-
-        Level level = blockEntity.getLevel();
-        if (!(level instanceof ServerLevel)) return;
-
-        BlockPos pos = blockEntity.getBlockPos();
+        if (!(level instanceof ServerLevel serverLevel)) return;
         if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) return;
+
+        LevelChunk chunk = serverLevel.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        if (chunk == null) return;
+
+        if (!ContainerTypes.isContainer(chunk.getBlockEntity(pos))) return;
 
         DIRTY.computeIfAbsent(dimensionId(level), id -> java.util.concurrent.ConcurrentHashMap.newKeySet())
                 .add(BlockKey.pack(pos.getX(), pos.getY(), pos.getZ()));
