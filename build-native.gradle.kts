@@ -5,9 +5,9 @@ plugins {
 val mcVersion = stonecutter.current.version
 val toolchainJava = (property("mod.java") as String).toInt()
 
-version = "${property("mod.version")}+$mcVersion"
+version = "${property("mod.version")}-$mcVersion"
 group = property("mod.group")!!
-base { archivesName = "${property("mod.id")}-$mcVersion" }
+base { archivesName = property("mod.id").toString() }
 
 loom {
     noIntermediateMappings()
