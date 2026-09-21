@@ -5,14 +5,12 @@ import java.util.List;
 import java.util.Locale;
 
 public record SearchQuery(String text, List<Term> terms) {
-
     public SearchQuery {
         text = text == null ? "" : text;
         terms = terms == null ? List.of() : List.copyOf(terms);
     }
 
     public record Term(Category category, String value) {
-
         public Term {
             value = value == null ? "" : value.toLowerCase(Locale.ROOT);
         }
@@ -24,12 +22,30 @@ public record SearchQuery(String text, List<Term> terms) {
         public String written() {
             return category.prefix() + value;
         }
+
+        public long amount() {
+            if (!category.isAmount() || value.isEmpty()) return -1;
+
+            long parsed = 0;
+            for (int i = 0; i < value.length(); i++) {
+                char digit = value.charAt(i);
+                if (digit < '0' || digit > '9') return -1;
+                parsed = parsed * 10 + (digit - '0');
+                if (parsed > TOO_MANY) return TOO_MANY;
+            }
+            return parsed;
+        }
     }
+
+    private static final long TOO_MANY = 1_000_000_000_000L;
 
     public enum Category {
         MOD("@", "mod", "items from one mod", false),
         TAG("#", "tag", "items sharing an item tag", false),
-        TYPE(">", "in", "only containers of this kind", false),
+        TYPE("/", "in", "only containers of this kind", false),
+        MORE_THAN(">", "more than", "more of it than this", false),
+        FEWER_THAN("<", "fewer than", "fewer of it than this", false),
+        EXACTLY("=", "exactly", "exactly this many", false),
         TAB("tab:", "tab", "the game's own creative tab", false),
         ENCHANTMENT("ench:", "enchantment", "enchanted with this", true),
         POTION("potion:", "potion", "this potion, however bottled", true),
@@ -61,6 +77,10 @@ public record SearchQuery(String text, List<Term> terms) {
 
         public boolean isIndexed() {
             return indexed;
+        }
+
+        public boolean isAmount() {
+            return this == MORE_THAN || this == FEWER_THAN || this == EXACTLY;
         }
     }
 
@@ -102,6 +122,22 @@ public record SearchQuery(String text, List<Term> terms) {
             if (term.category() == category && !term.isIncomplete()) values.add(term.value());
         }
         return values;
+    }
+
+    public boolean allowsAmount(long total) {
+        for (Term term : terms) {
+            long wanted = term.amount();
+            if (wanted < 0) continue;
+
+            boolean passes = switch (term.category()) {
+                case MORE_THAN -> total > wanted;
+                case FEWER_THAN -> total < wanted;
+                case EXACTLY -> total == wanted;
+                default -> true;
+            };
+            if (!passes) return false;
+        }
+        return true;
     }
 
     public boolean isEmpty() {

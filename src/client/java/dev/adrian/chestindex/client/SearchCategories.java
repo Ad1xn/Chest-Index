@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public final class SearchCategories {
-
     private SearchCategories() {}
 
     public static List<SearchQuery.Category> available() {
@@ -63,6 +62,7 @@ public final class SearchCategories {
             case ENCHANTMENT -> enchantments();
             case POTION -> potions();
             case TOOLTIP -> List.of();
+            case MORE_THAN, FEWER_THAN, EXACTLY -> List.of();
         };
     }
 
@@ -143,7 +143,6 @@ public final class SearchCategories {
 
         for (Map.Entry<net.minecraft.resources.ResourceKey<CreativeModeTab>, CreativeModeTab> entry
                 : BuiltInRegistries.CREATIVE_MODE_TAB.entrySet()) {
-
             Identifier id = entry.getKey().identifier();
             if (!SearchText.matches(id.getPath(), tokens) && !SearchText.matches(id.toString(), tokens)) {
                 continue;

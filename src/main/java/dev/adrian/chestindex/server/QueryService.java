@@ -31,7 +31,6 @@ import java.util.Locale;
 import java.util.Set;
 
 public final class QueryService {
-
     private static final int MAX_ITEMS = 2000;
     private static final int MAX_CONTAINERS = 128;
 
@@ -122,7 +121,6 @@ public final class QueryService {
     public static QueryDto.SummaryResponse summarise(
             TrackerService tracker, ServerPlayer player,
             QueryDto.SummaryRequest request, ChestIndexConfig.Access access) {
-
         if (!mayQuery(player, access)) return QueryDto.SummaryResponse.refused(request.requestId());
 
         return summarise(tracker, request, centreOf(player),
@@ -140,7 +138,6 @@ public final class QueryService {
             TrackerService tracker, QueryDto.SummaryRequest request,
             long centre, String hereDimension, java.util.UUID ownerLimit, Container enderChest,
             Level entitySource) {
-
         if (QueryDto.ENDER_CHEST.equals(request.dimensionId()) && enderChest != null) {
             return enderChestSummary(enderChest, request);
         }
@@ -196,6 +193,7 @@ public final class QueryService {
         List<QueryDto.ItemSummary> items = new java.util.ArrayList<>(Math.min(summaries.size(), limit));
         for (WorldIndex.ItemSummary summary : summaries) {
             if (items.size() >= limit) break;
+            if (!search.allowsAmount(summary.totalCount())) continue;
             String itemId = tracker.palette().value(summary.itemId());
             if (itemId == null) continue;
             items.add(new QueryDto.ItemSummary(itemId, summary.totalCount(),
@@ -207,7 +205,6 @@ public final class QueryService {
     public static QueryDto.ContainerResponse containers(
             TrackerService tracker, ServerPlayer player,
             QueryDto.ContainerRequest request, ChestIndexConfig.Access access) {
-
         if (!mayQuery(player, access)) return QueryDto.ContainerResponse.refused(request.requestId());
 
         ServerLevel level = player.level();
@@ -228,7 +225,6 @@ public final class QueryService {
             TrackerService tracker, QueryDto.ContainerRequest request,
             long centre, String hereDimension, java.util.UUID ownerLimit, Refresher refresher,
             Level entitySource) {
-
         int id = request.requestId();
 
         if (QueryDto.ENDER_CHEST.equals(request.dimensionId())) {
@@ -328,17 +324,19 @@ public final class QueryService {
 
     private static QueryDto.SummaryResponse enderChestSummary(
             Container ender, QueryDto.SummaryRequest request) {
-
         Map<String, int[]> totals = new java.util.LinkedHashMap<>();
         boolean nested = request.filters().includeNested();
         for (int slot = 0; slot < ender.getContainerSize(); slot++) {
             collectEnderStack(totals, ender.getItem(slot), nested, false);
         }
 
-        String[] tokens = dev.adrian.chestindex.core.util.SearchText.tokens(request.text());
+        dev.adrian.chestindex.core.util.SearchQuery search =
+                dev.adrian.chestindex.core.util.SearchQuery.parse(request.text());
+        String[] tokens = dev.adrian.chestindex.core.util.SearchText.tokens(search.text());
         List<QueryDto.ItemSummary> items = new java.util.ArrayList<>(totals.size());
         totals.forEach((itemId, counts) -> {
             if (!dev.adrian.chestindex.core.util.SearchText.matches(itemId, tokens)) return;
+            if (!search.allowsAmount(counts[0])) return;
             items.add(new QueryDto.ItemSummary(itemId, counts[0], 1, counts[1], 0.0));
         });
         items.sort((a, b) -> Integer.compare(b.totalCount(), a.totalCount()));
@@ -364,7 +362,7 @@ public final class QueryService {
         }
         BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         if (bundle != null) {
-            bundle.itemCopyStream().forEach(inner -> collectEnderStack(totals, inner, true, true));
+            ItemContentsCompat.stacks(bundle).forEach(inner -> collectEnderStack(totals, inner, true, true));
         }
     }
 
@@ -384,14 +382,12 @@ public final class QueryService {
     public static QueryDto.StatusResponse status(
             TrackerService tracker, ServerPlayer player,
             QueryDto.StatusRequest request, ChestIndexConfig.Access access) {
-
         if (!mayQuery(player, access)) return QueryDto.StatusResponse.empty(request.requestId());
         return status(tracker, request, hasEnderChestContents(player.getEnderChestInventory()));
     }
 
     public static QueryDto.StatusResponse status(
             TrackerService tracker, QueryDto.StatusRequest request, boolean offerEnderChest) {
-
         List<QueryDto.DimensionSummary> dimensions = new java.util.ArrayList<>();
         for (String dimensionId : tracker.dimensions()) {
             if (QueryDto.ENDER_CHEST.equals(dimensionId)) continue;
@@ -418,7 +414,6 @@ public final class QueryService {
 
     private static List<WorldIndex.ItemSummary> mergeSummaries(
             List<WorldIndex.ItemSummary> stored, List<WorldIndex.ItemSummary> live) {
-
         if (live.isEmpty()) return stored;
 
         java.util.Map<Integer, WorldIndex.ItemSummary> byItem = new java.util.LinkedHashMap<>();
@@ -472,7 +467,6 @@ public final class QueryService {
 
     private static Set<Integer> itemIdsForTerms(
             TrackerService tracker, dev.adrian.chestindex.core.util.SearchQuery search) {
-
         Set<Integer> allowed = null;
 
         List<String> mods = search.valuesOf(
@@ -534,7 +528,6 @@ public final class QueryService {
 
     private static Set<Integer> typeIdsForTerms(
             TrackerService tracker, dev.adrian.chestindex.core.util.SearchQuery search) {
-
         List<String> wanted = search.valuesOf(
                 dev.adrian.chestindex.core.util.SearchQuery.Category.TYPE);
         if (wanted.isEmpty()) return null;
@@ -554,7 +547,6 @@ public final class QueryService {
 
     private static Set<Integer> detailIdsForTerms(
             TrackerService tracker, dev.adrian.chestindex.core.util.SearchQuery search) {
-
         List<String> enchantments = search.valuesOf(
                 dev.adrian.chestindex.core.util.SearchQuery.Category.ENCHANTMENT);
         List<String> potions = search.valuesOf(

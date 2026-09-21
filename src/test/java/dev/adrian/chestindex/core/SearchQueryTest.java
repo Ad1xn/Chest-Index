@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SearchQueryTest {
-
     @Test
     void plainWordsStayPlain() {
         SearchQuery query = SearchQuery.parse("light blue wool");
@@ -16,7 +15,7 @@ class SearchQueryTest {
 
     @Test
     void prefixedWordsBecomeTerms() {
-        SearchQuery query = SearchQuery.parse("pickaxe @create #logs >barrel");
+        SearchQuery query = SearchQuery.parse("pickaxe @create #logs /barrel");
 
         assertEquals("pickaxe", query.text());
         assertEquals(java.util.List.of("create"), query.valuesOf(SearchQuery.Category.MOD));
@@ -58,11 +57,45 @@ class SearchQueryTest {
 
     @Test
     void onlyTheCategoriesNeedingStackDetailSaySo() {
-        assertFalse(SearchQuery.parse("@create #logs >barrel tab:redstone").needsStackDetail());
+        assertFalse(SearchQuery.parse("@create #logs /barrel tab:redstone").needsStackDetail());
         assertTrue(SearchQuery.parse("ench:mending").needsStackDetail());
         assertTrue(SearchQuery.parse("potion:healing").needsStackDetail());
         assertTrue(SearchQuery.parse("text:silk").needsStackDetail());
         assertFalse(SearchQuery.parse("ench:").needsStackDetail());
+    }
+
+    @Test
+    void comparisonsNarrowByTotal() {
+        assertTrue(SearchQuery.parse(">200").allowsAmount(201));
+        assertFalse(SearchQuery.parse(">200").allowsAmount(200));
+        assertTrue(SearchQuery.parse("<100").allowsAmount(99));
+        assertFalse(SearchQuery.parse("<100").allowsAmount(100));
+        assertTrue(SearchQuery.parse("=421").allowsAmount(421));
+        assertFalse(SearchQuery.parse("=421").allowsAmount(422));
+    }
+
+    @Test
+    void comparisonsCombineIntoABand() {
+        SearchQuery band = SearchQuery.parse("diamond >100 <500");
+
+        assertEquals("diamond", band.text());
+        assertTrue(band.allowsAmount(300));
+        assertFalse(band.allowsAmount(100));
+        assertFalse(band.allowsAmount(500));
+    }
+
+    @Test
+    void anUnfinishedOrUnnumberedComparisonConstrainsNothing() {
+        assertTrue(SearchQuery.parse(">").allowsAmount(1));
+        assertTrue(SearchQuery.parse(">barrel").allowsAmount(1));
+        assertFalse(SearchQuery.parse(">99999999999999999999").allowsAmount(Integer.MAX_VALUE));
+        assertTrue(SearchQuery.parse("<99999999999999999999").allowsAmount(Integer.MAX_VALUE));
+    }
+
+    @Test
+    void aQueryWithNoComparisonAllowsEveryTotal() {
+        assertTrue(SearchQuery.parse("diamond @create").allowsAmount(0));
+        assertTrue(SearchQuery.parse("@create").allowsAmount(Integer.MAX_VALUE));
     }
 
     @Test
