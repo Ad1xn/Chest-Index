@@ -7,13 +7,16 @@ import dev.adrian.chestindex.config.ChestIndexConfig;
 import dev.adrian.chestindex.core.index.IndexQuery;
 import dev.adrian.chestindex.core.index.SearchResult;
 import dev.adrian.chestindex.core.index.WorldIndex;
+import dev.adrian.chestindex.core.model.Origin;
 import dev.adrian.chestindex.core.util.BlockKey;
 import dev.adrian.chestindex.net.ChestIndexNetwork;
 import dev.adrian.chestindex.server.scan.LiveScanner;
 import dev.adrian.chestindex.server.scan.RegionScanner;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
@@ -25,8 +28,6 @@ import java.util.List;
 import java.util.Set;
 
 public final class ChestIndexCommands {
-
-    private static final int DEFAULT_RADIUS_CHUNKS = 8;
     private static final int MAX_RESULTS = 20;
 
     private ChestIndexCommands() {}
@@ -35,8 +36,8 @@ public final class ChestIndexCommands {
         dispatcher.register(Commands.literal("chestindex")
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(Commands.literal("scan")
-                        .executes(ctx -> scan(ctx.getSource(), DEFAULT_RADIUS_CHUNKS))
-                        .then(Commands.argument("chunkRadius", IntegerArgumentType.integer(0, 64))
+                        .executes(ctx -> scan(ctx.getSource(), LiveScanner.EVERYWHERE))
+                        .then(Commands.argument("chunkRadius", IntegerArgumentType.integer(0))
                                 .executes(ctx -> scan(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "chunkRadius")))))
                 .then(Commands.literal("scanworld")
@@ -107,15 +108,16 @@ public final class ChestIndexCommands {
         LiveScanner.ScanResult result =
                 new LiveScanner(tracker).scanAround(level, player.blockPosition(), chunkRadius);
 
+        String where = chunkRadius == LiveScanner.EVERYWHERE
+                ? "loaded chunks"
+                : "loaded chunks within " + chunkRadius;
         source.sendSuccess(() -> Component.literal(String.format(
-                "Scanned %d chunks (%d not loaded): %d containers indexed, %d stale entries removed.",
-                result.chunksScanned(), result.chunksSkipped(),
+                "Scanned %d %s: %d containers indexed, %d stale entries removed.",
+                result.chunksScanned(), where,
                 result.containersFound(), result.staleRemoved())), false);
 
-        if (result.chunksSkipped() > 0) {
-            source.sendSuccess(() -> Component.literal(
-                    "Unloaded chunks are skipped here; the offline region scanner covers those."), false);
-        }
+        source.sendSuccess(() -> Component.literal(
+                "Only chunks in memory are read here; scanworld covers the rest."), false);
         return result.containersFound();
     }
 
@@ -169,37 +171,99 @@ public final class ChestIndexCommands {
     private static int stats(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         TrackerService tracker = requireTracker(source);
 
-        source.sendSuccess(() -> Component.literal(
-                "ChestIndex: " + tracker.totalContainers() + " containers across "
-                        + tracker.dimensions().size() + " dimension(s)"), false);
+        source.sendSuccess(() -> Component.literal("ChestIndex")
+                .withStyle(ChatFormatting.WHITE)
+                .append(bullet())
+                .append(count(tracker.totalContainers()))
+                .append(unit(tracker.totalContainers(), "container"))
+                .append(bullet())
+                .append(count(tracker.dimensions().size()))
+                .append(unit(tracker.dimensions().size(), "dimension")), false);
 
         RegionScanner scanner = Trackers.regionScanner();
         if (scanner != null) {
             RegionScanner.Progress progress = scanner.progress();
             if (progress.running() || progress.regionsRead() > 0) {
-                source.sendSuccess(() -> Component.literal(String.format(
-                        "  %s region scan: %d/%d regions, %d chunks read, %d containers, "
-                        + "%d skipped (loaded), %d unreadable, %d queued",
-                        progress.running() ? "Running" : "Finished",
-                        progress.regionsRead(), progress.regionsTotal(), progress.chunksRead(),
-                        progress.containersFound(), progress.chunksSkippedLoaded(),
-                        progress.chunksFailed(), scanner.queuedBatches())), false);
+                source.sendSuccess(() -> scanLine(progress, scanner.queuedBatches()), false);
             }
         }
 
         for (String dimensionId : tracker.dimensions()) {
             WorldIndex.Stats stats = tracker.index(dimensionId).stats();
-            source.sendSuccess(() -> Component.literal(String.format(
-                    "  %s: %d containers, %d with known contents, %d unlooted, %d chunks, %d distinct items",
-                    dimensionId, stats.containers(), stats.withKnownContents(),
-                    stats.unlooted(), stats.chunks(), stats.distinctItems())), false);
-            source.sendSuccess(() -> Component.literal(String.format(
-                    "    origins: %d player-placed, %d natural, %d unknown",
-                    stats.byOrigin().getOrDefault(dev.adrian.chestindex.core.model.Origin.PLAYER_PLACED, 0),
-                    stats.byOrigin().getOrDefault(dev.adrian.chestindex.core.model.Origin.NATURAL, 0),
-                    stats.byOrigin().getOrDefault(dev.adrian.chestindex.core.model.Origin.UNKNOWN, 0))), false);
+
+            source.sendSuccess(() -> Component.literal("")
+                    .append(label("  "))
+                    .append(Component.literal(shortDimension(dimensionId))
+                            .withStyle(ChatFormatting.WHITE)), false);
+
+            source.sendSuccess(() -> Component.literal("    ")
+                    .append(count(stats.containers())).append(unit(stats.containers(), "container"))
+                    .append(bullet())
+                    .append(count(stats.withKnownContents())).append(label(" read"))
+                    .append(bullet())
+                    .append(count(stats.distinctItems())).append(unit(stats.distinctItems(), "item"))
+                    .append(bullet())
+                    .append(count(stats.chunks())).append(unit(stats.chunks(), "chunk")), false);
+
+            source.sendSuccess(() -> Component.literal("    ")
+                    .append(count(origin(stats, Origin.PLAYER_PLACED))).append(label(" placed"))
+                    .append(bullet())
+                    .append(count(origin(stats, Origin.NATURAL))).append(label(" natural"))
+                    .append(bullet())
+                    .append(count(origin(stats, Origin.UNKNOWN))).append(label(" unknown"))
+                    .append(bullet())
+                    .append(count(stats.unlooted())).append(label(" unlooted"))
+                    .append(stats.unlooted() > 0 && !ChestIndexConfig.get().indexesGeneratedChests()
+                            ? label(", withheld")
+                            : Component.empty()), false);
         }
         return tracker.totalContainers();
+    }
+
+    private static Component scanLine(RegionScanner.Progress progress, int queued) {
+        MutableComponent line = Component.literal("  ")
+                .append(Component.literal(progress.running() ? "scanning" : "scanned")
+                        .withStyle(ChatFormatting.WHITE))
+                .append(bullet())
+                .append(count(progress.regionsRead()))
+                .append(label(" of "))
+                .append(count(progress.regionsTotal()))
+                .append(unit(progress.regionsTotal(), "region"))
+                .append(bullet())
+                .append(count(progress.chunksRead()))
+                .append(unit(progress.chunksRead(), "chunk"));
+
+        if (progress.chunksFailed() > 0) {
+            line.append(bullet()).append(count(progress.chunksFailed())).append(label(" unreadable"));
+        }
+        if (queued > 0) {
+            line.append(bullet()).append(count(queued)).append(label(" queued"));
+        }
+        return line;
+    }
+
+    private static MutableComponent count(int value) {
+        return Component.literal(String.format("%,d", value)).withStyle(ChatFormatting.WHITE);
+    }
+
+    private static MutableComponent label(String text) {
+        return Component.literal(text).withStyle(ChatFormatting.GRAY);
+    }
+
+    private static MutableComponent unit(int value, String singular) {
+        return label(" " + singular + (value == 1 ? "" : "s"));
+    }
+
+    private static MutableComponent bullet() {
+        return Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY);
+    }
+
+    private static String shortDimension(String dimensionId) {
+        return dimensionId.startsWith("minecraft:") ? dimensionId.substring(10) : dimensionId;
+    }
+
+    private static int origin(WorldIndex.Stats stats, Origin origin) {
+        return stats.byOrigin().getOrDefault(origin, 0);
     }
 
     private static int find(CommandSourceStack source, String itemQuery) throws com.mojang.brigadier.exceptions.CommandSyntaxException {

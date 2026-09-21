@@ -23,14 +23,15 @@ import java.util.Map;
 import java.util.Set;
 
 public final class LiveScanner {
-
     private final TrackerService tracker;
 
     public LiveScanner(TrackerService tracker) {
         this.tracker = tracker;
     }
 
-    public record ScanResult(int chunksScanned, int chunksSkipped, int containersFound, int staleRemoved) {}
+    public record ScanResult(int chunksScanned, int containersFound, int staleRemoved) {}
+
+    public static final int EVERYWHERE = -1;
 
     public ScanResult scanAround(ServerLevel level, BlockPos center, int chunkRadius) {
         String dimensionId = level.dimension().identifier().toString();
@@ -38,24 +39,32 @@ public final class LiveScanner {
         int centerChunkZ = center.getZ() >> 4;
 
         int scanned = 0;
-        int skipped = 0;
         int found = 0;
         int removed = 0;
 
-        for (int cx = centerChunkX - chunkRadius; cx <= centerChunkX + chunkRadius; cx++) {
-            for (int cz = centerChunkZ - chunkRadius; cz <= centerChunkZ + chunkRadius; cz++) {
-                LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
-                if (chunk == null) {
-                    skipped++;
-                    continue;
-                }
-                ChunkScan result = scanChunk(level, chunk, dimensionId);
-                scanned++;
-                found += result.found();
-                removed += result.removed();
+        for (long key : loadedChunkKeys(level)) {
+            int cx = ChunkPos.getX(key);
+            int cz = ChunkPos.getZ(key);
+            if (chunkRadius != EVERYWHERE
+                    && (Math.abs(cx - centerChunkX) > chunkRadius
+                        || Math.abs(cz - centerChunkZ) > chunkRadius)) {
+                continue;
             }
+
+            LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
+            if (chunk == null) continue;
+
+            ChunkScan result = scanChunk(level, chunk, dimensionId);
+            scanned++;
+            found += result.found();
+            removed += result.removed();
         }
-        return new ScanResult(scanned, skipped, found, removed);
+        return new ScanResult(scanned, found, removed);
+    }
+
+    private long[] loadedChunkKeys(ServerLevel level) {
+        return ((dev.adrian.chestindex.mixin.ChunkMapAccessor) level.getChunkSource().chunkMap)
+                .chestindex$visibleChunks().keySet().toLongArray();
     }
 
     public record ChunkScan(int found, int removed) {}

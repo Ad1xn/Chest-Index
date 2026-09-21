@@ -1,6 +1,11 @@
 package dev.adrian.chestindex.server.scan;
 
 import dev.adrian.chestindex.ChestIndex;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import dev.adrian.chestindex.core.store.ScanLog;
 import dev.adrian.chestindex.core.anvil.ChunkExtractor;
 import dev.adrian.chestindex.core.anvil.NbtCompound;
@@ -26,7 +31,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class RegionScanner {
-
     private static final int APPLY_BUDGET_PER_TICK = 64;
 
     private static final long APPLY_SLICE_NANOS = 4_000_000L;
@@ -196,6 +200,46 @@ public final class RegionScanner {
                 cancelled.get() ? "cancelled" : "complete",
                 chunksRead.get(), containersFound.get(), chunksFailed.get(),
                 allRegions.size() - pending.size());
+
+        announceFinished();
+    }
+
+    private void announceFinished() {
+        MinecraftServer server = dev.adrian.chestindex.server.Trackers.server();
+        if (server == null) return;
+
+        boolean wasCancelled = cancelled.get();
+        int chunks = chunksRead.get();
+        int containers = containersFound.get();
+        int failed = chunksFailed.get();
+
+        server.execute(() -> {
+            Component message = Component.literal("ChestIndex  ")
+                    .withStyle(ChatFormatting.GRAY)
+                    .append(Component.literal(wasCancelled ? "scan cancelled" : "scan finished")
+                            .withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.format("%,d", containers))
+                            .withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal(" containers in ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(String.format("%,d", chunks))
+                            .withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal(" chunks").withStyle(ChatFormatting.GRAY));
+
+            if (failed > 0) {
+                message = message.copy()
+                        .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
+                        .append(Component.literal(String.format("%,d unreadable", failed))
+                                .withStyle(ChatFormatting.GRAY));
+            }
+
+            Component line = message;
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (Commands.LEVEL_GAMEMASTERS.check(player.permissions())) {
+                    player.sendSystemMessage(line);
+                }
+            }
+        });
     }
 
     private void scanRegion(Path file, String dimensionId, Set<String> trackedIds, long tick) {
