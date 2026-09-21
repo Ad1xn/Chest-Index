@@ -12,7 +12,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public final class MarkerPreview {
-
     private static final String[] CONTAINERS = {
             "minecraft:chest",
             "minecraft:barrel",

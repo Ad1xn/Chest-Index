@@ -4,7 +4,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
 public final class ClientBlockChanges {
-
     public interface Listener {
         void onBlockChanged(Level level, BlockPos pos);
     }

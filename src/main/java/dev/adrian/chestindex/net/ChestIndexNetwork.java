@@ -17,7 +17,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class ChestIndexNetwork {
-
     private static final int SIGNAL_INTERVAL_TICKS = 10;
 
     private static final Map<UUID, Watcher> WATCHERS = new ConcurrentHashMap<>();

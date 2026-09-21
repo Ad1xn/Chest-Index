@@ -9,7 +9,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QueryDtoTest {
-
     @Test
     void originFilterMapsToTheMatchingOrigin() {
         assertEquals(Set.of(Origin.PLAYER_PLACED, Origin.UNKNOWN),

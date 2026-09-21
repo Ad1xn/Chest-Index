@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.Set;
 
 public final class NbtReader {
-
     private static final int MAX_DEPTH = 512;
 
     private static final int MAX_ARRAY_LENGTH = 1 << 26;

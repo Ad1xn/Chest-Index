@@ -8,7 +8,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class StringPaletteTest {
-
     @Test
     void internIsStableAndSequential() {
         StringPalette palette = new StringPalette();

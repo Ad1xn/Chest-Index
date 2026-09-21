@@ -13,7 +13,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class Gfx {
-
     //? if >=26.1 {
     /*private final GuiGraphicsExtractor raw;
 

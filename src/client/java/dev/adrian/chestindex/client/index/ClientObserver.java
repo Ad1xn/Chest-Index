@@ -39,7 +39,6 @@ import java.util.Map;
 import java.util.Set;
 
 public final class ClientObserver {
-
     private ClientObserver() {}
 
     private static final long ATTRIBUTION_WINDOW_MS = 2000;

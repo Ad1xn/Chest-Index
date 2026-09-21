@@ -15,7 +15,6 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CorePurityTest {
-
     private static final List<String> FORBIDDEN = List.of("net/minecraft", "org/bukkit", "net/fabricmc");
 
     @Test

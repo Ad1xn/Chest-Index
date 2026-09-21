@@ -5,7 +5,6 @@ import dev.adrian.chestindex.core.util.BlockKey;
 import java.util.List;
 
 public final class HighlightTargets {
-
     private HighlightTargets() {}
 
     public static long nearest(List<Long> targets, int x, int y, int z) {

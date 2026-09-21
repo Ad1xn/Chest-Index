@@ -3,7 +3,6 @@ package dev.adrian.chestindex.platform;
 import net.minecraft.world.level.ChunkPos;
 
 public final class ChunkPosCompat {
-
     private ChunkPosCompat() {}
 
     public static int x(ChunkPos pos) {

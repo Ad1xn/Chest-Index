@@ -17,7 +17,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class IndexScreen extends Screen {
-
     private static final int ROW_H = 24;
     private static final int CONTENT_W = 258;
     private static final int SIDE_PAD = 8;

@@ -4,7 +4,6 @@ import dev.adrian.chestindex.client.platform.ClientCompat;
 import net.minecraft.network.chat.Component;
 
 public final class ActionBar {
-
     private ActionBar() {}
 
     private static final long HOLD_MS = 2000;

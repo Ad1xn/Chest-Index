@@ -1,7 +1,6 @@
 package dev.adrian.chestindex.core.util;
 
 public final class Hsv {
-
     private Hsv() {}
 
     public static int toRgb(float h, float s, float v) {

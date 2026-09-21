@@ -12,7 +12,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContainerRecordTest {
-
     private static final long POS = BlockKey.pack(10, 64, -20);
 
     private static ContainerRecord chest(long tick, StackEntry... contents) {

@@ -6,12 +6,10 @@ import java.util.List;
 import java.util.Set;
 
 public final class QueryDto {
-
     private QueryDto() {}
 
     public record Filters(boolean includeNested, boolean includeMachines,
                           boolean includeUtility, boolean includeEntities, int originFilter) {
-
         public static final int ORIGIN_ANY = 0;
         public static final int ORIGIN_PLAYER_PLACED = 1;
         public static final int ORIGIN_NATURAL = 2;
@@ -35,7 +33,6 @@ public final class QueryDto {
 
     public record SummaryRequest(int requestId, String text, Filters filters, int limit,
                                  String dimensionId) {
-
         public SummaryRequest {
             if (dimensionId == null) dimensionId = "";
         }
@@ -64,7 +61,6 @@ public final class QueryDto {
 
     public record ContainerRequest(int requestId, List<String> itemIds, Filters filters, int limit,
                                    String dimensionId, String text) {
-
         public static final int MAX_ITEMS = 256;
 
         public ContainerRequest {
@@ -95,7 +91,6 @@ public final class QueryDto {
     public record ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
                                boolean nested, boolean natural, boolean contentsKnown,
                                int entityId) {
-
         public static final int NOT_AN_ENTITY = 0;
 
         public ContainerHit(String typeId, long pos, int matchedCount, double distanceSq,
@@ -131,7 +126,6 @@ public final class QueryDto {
     public record StatusResponse(int requestId, boolean scanning,
                                  int regionsRead, int regionsTotal, int chunksRead,
                                  List<DimensionSummary> dimensions) {
-
         public StatusResponse {
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
         }
@@ -146,7 +140,6 @@ public final class QueryDto {
     }
 
     public record Hello(int protocolVersion, boolean canQuery) {
-
         public static final int PROTOCOL_VERSION = 7;
     }
 }

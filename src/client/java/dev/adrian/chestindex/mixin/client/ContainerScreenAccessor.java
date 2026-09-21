@@ -7,7 +7,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(AbstractContainerScreen.class)
 public interface ContainerScreenAccessor {
-
     @Accessor("hoveredSlot")
     Slot chestindex$hoveredSlot();
 

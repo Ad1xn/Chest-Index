@@ -10,7 +10,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NbtReaderTest {
-
     private static NbtCompound parse(NbtTestWriter.Compound root, Set<String> keep) throws IOException {
         byte[] bytes = NbtTestWriter.toBytes(root);
         return NbtReader.readNamedRoot(

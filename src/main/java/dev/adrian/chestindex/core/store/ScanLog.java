@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public final class ScanLog {
-
     public record Mark(long size, long modifiedAt) {}
 
     private final Map<String, Mark> marks = new HashMap<>();

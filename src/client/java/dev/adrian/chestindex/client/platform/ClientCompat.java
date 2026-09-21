@@ -7,7 +7,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 public final class ClientCompat {
-
     private ClientCompat() {}
 
     public static void actionBar(Component message) {

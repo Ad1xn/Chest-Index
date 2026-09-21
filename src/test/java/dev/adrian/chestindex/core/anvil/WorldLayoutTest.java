@@ -11,7 +11,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WorldLayoutTest {
-
     private static Path dirs(Path root, String... segments) throws IOException {
         Path path = root;
         for (String segment : segments) path = path.resolve(segment);

@@ -25,7 +25,6 @@ import java.util.Set;
 
 @EnabledIfEnvironmentVariable(named = "CT_BENCH", matches = "1")
 class IndexBench {
-
     private static final int CONTAINERS = 60_000;
     private static final int STACKS_PER_CONTAINER = 8;
     private static final int DISTINCT_ITEMS = 2_000;

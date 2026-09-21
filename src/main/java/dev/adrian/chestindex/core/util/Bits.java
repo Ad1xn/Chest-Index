@@ -3,7 +3,6 @@ package dev.adrian.chestindex.core.util;
 import java.util.Set;
 
 public final class Bits {
-
     private Bits() {}
 
     public static long[] of(Set<Integer> ids) {

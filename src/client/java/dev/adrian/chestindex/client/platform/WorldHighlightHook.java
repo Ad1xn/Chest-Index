@@ -5,7 +5,6 @@ import net.minecraft.client.Camera;
 import net.minecraft.world.phys.Vec3;
 
 public final class WorldHighlightHook {
-
     private WorldHighlightHook() {}
 
     public static void register() {
@@ -66,8 +65,7 @@ public final class WorldHighlightHook {
     }
 
     //? if >=26.1 {
-    /*
-    private static Vec3 camera() {
+    /*    private static Vec3 camera() {
         return net.minecraft.client.Minecraft.getInstance().gameRenderer.mainCamera().position();
     }
     *///?}

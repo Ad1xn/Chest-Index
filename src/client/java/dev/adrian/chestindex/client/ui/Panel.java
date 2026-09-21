@@ -8,7 +8,6 @@ import net.minecraft.resources.Identifier;
 import java.util.List;
 
 public final class Panel {
-
     private Panel() {}
 
     public static final Identifier TEXTURE =

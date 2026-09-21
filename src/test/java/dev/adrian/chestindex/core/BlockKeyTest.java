@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BlockKeyTest {
-
     @Test
     void roundTripsPositiveCoordinates() {
         long key = BlockKey.pack(100, 64, 200);

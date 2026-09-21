@@ -3,7 +3,6 @@ package dev.adrian.chestindex.core.util;
 import java.util.Locale;
 
 public final class SearchText {
-
     private SearchText() {}
 
     private static final String[] NONE = new String[0];

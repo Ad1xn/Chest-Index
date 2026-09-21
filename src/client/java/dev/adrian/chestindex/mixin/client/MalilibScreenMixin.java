@@ -18,7 +18,6 @@ import net.minecraft.client.gui.GuiGraphics;
 @Pseudo
 @Mixin(targets = "fi.dy.masa.malilib.gui.GuiBase", remap = false)
 public abstract class MalilibScreenMixin {
-
     //? if >=26.1 {
     /*@Inject(
             method = "extractRenderState",

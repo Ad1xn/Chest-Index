@@ -18,7 +18,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class ClientIndex {
-
     private ClientIndex() {}
 
     private static TrackerService tracker;

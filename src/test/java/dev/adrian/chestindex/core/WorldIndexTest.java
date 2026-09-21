@@ -20,7 +20,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WorldIndexTest {
-
     private static final int DIAMOND = 1;
     private static final int EMERALD = 2;
     private static final int STONE = 3;
@@ -380,7 +379,6 @@ class WorldIndexTest {
                 IndexQuery.builder().items(Set.of(DIAMOND, STONE, EMERALD)).build(),
                 IndexQuery.builder().includeNested(false).build(),
                 IndexQuery.builder().maxDistance(40).center(BlockKey.pack(0, 64, 0)).build())) {
-
             Map<Integer, int[]> expected = new HashMap<>();
             Map<Integer, Double> nearest = new HashMap<>();
             for (SearchResult result : index.query(query)) {

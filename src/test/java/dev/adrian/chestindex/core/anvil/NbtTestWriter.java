@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 
 final class NbtTestWriter {
-
     private NbtTestWriter() {}
 
     static final class Compound {

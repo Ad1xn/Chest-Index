@@ -19,7 +19,6 @@ public record IndexQuery(
         double maxDistance,
         int limit
 ) {
-
     public IndexQuery {
         itemIds = itemIds == null ? Set.of() : Set.copyOf(itemIds);
         origins = origins == null ? Set.of() : Set.copyOf(origins);

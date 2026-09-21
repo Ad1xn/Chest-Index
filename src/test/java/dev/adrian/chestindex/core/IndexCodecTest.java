@@ -21,7 +21,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class IndexCodecTest {
-
     private static StringPalette palette() {
         StringPalette palette = new StringPalette();
         palette.intern("minecraft:overworld");

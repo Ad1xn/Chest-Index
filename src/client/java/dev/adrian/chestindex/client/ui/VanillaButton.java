@@ -6,7 +6,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 public final class VanillaButton {
-
     private VanillaButton() {}
 
     private static final Identifier BUTTON =

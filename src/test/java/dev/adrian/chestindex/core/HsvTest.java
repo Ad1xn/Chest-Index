@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HsvTest {
-
     private static void assertRoundTrips(int rgb) {
         float[] hsv = Hsv.toHsv(rgb);
         assertEquals(rgb, Hsv.toRgb(hsv[0], hsv[1], hsv[2]),

@@ -15,7 +15,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TrackerServiceTest {
-
     private static final String DIM = "minecraft:overworld";
     private static final long POS = BlockKey.pack(4, 64, 8);
 

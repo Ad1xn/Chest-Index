@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ChestIndexPayloads {
-
     private static final int MAX_ID = 256;
     private static final int MAX_TEXT = 128;
     private static final int MAX_ENTRIES = 2048;
@@ -47,7 +46,6 @@ public final class ChestIndexPayloads {
     }
 
     public record SummaryRequestPayload(QueryDto.SummaryRequest request) implements CustomPacketPayload {
-
         public static final Type<SummaryRequestPayload> TYPE = new Type<>(id("summary_request"));
 
         public static final StreamCodec<FriendlyByteBuf, SummaryRequestPayload> CODEC =
@@ -71,7 +69,6 @@ public final class ChestIndexPayloads {
     }
 
     public record SummaryResponsePayload(QueryDto.SummaryResponse response) implements CustomPacketPayload {
-
         public static final Type<SummaryResponsePayload> TYPE = new Type<>(id("summary_response"));
 
         public static final StreamCodec<FriendlyByteBuf, SummaryResponsePayload> CODEC =
@@ -105,7 +102,6 @@ public final class ChestIndexPayloads {
     }
 
     public record StatusRequestPayload(QueryDto.StatusRequest request) implements CustomPacketPayload {
-
         public static final Type<StatusRequestPayload> TYPE = new Type<>(id("status_request"));
 
         public static final StreamCodec<FriendlyByteBuf, StatusRequestPayload> CODEC =
@@ -120,7 +116,6 @@ public final class ChestIndexPayloads {
     }
 
     public record StatusResponsePayload(QueryDto.StatusResponse response) implements CustomPacketPayload {
-
         public static final Type<StatusResponsePayload> TYPE = new Type<>(id("status_response"));
 
         public static final StreamCodec<FriendlyByteBuf, StatusResponsePayload> CODEC =
@@ -151,7 +146,6 @@ public final class ChestIndexPayloads {
     }
 
     public record ContainerRequestPayload(QueryDto.ContainerRequest request) implements CustomPacketPayload {
-
         public static final Type<ContainerRequestPayload> TYPE = new Type<>(id("container_request"));
 
         public static final StreamCodec<FriendlyByteBuf, ContainerRequestPayload> CODEC =
@@ -184,7 +178,6 @@ public final class ChestIndexPayloads {
     }
 
     public record ContainerResponsePayload(QueryDto.ContainerResponse response) implements CustomPacketPayload {
-
         public static final Type<ContainerResponsePayload> TYPE = new Type<>(id("container_response"));
 
         public static final StreamCodec<FriendlyByteBuf, ContainerResponsePayload> CODEC =
@@ -221,7 +214,6 @@ public final class ChestIndexPayloads {
     }
 
     public record SubscribePayload(boolean watching) implements CustomPacketPayload {
-
         public static final Type<SubscribePayload> TYPE = new Type<>(id("subscribe"));
 
         public static final StreamCodec<FriendlyByteBuf, SubscribePayload> CODEC =
@@ -236,7 +228,6 @@ public final class ChestIndexPayloads {
     }
 
     public record IndexChangedPayload() implements CustomPacketPayload {
-
         public static final Type<IndexChangedPayload> TYPE = new Type<>(id("index_changed"));
 
         public static final IndexChangedPayload INSTANCE = new IndexChangedPayload();
@@ -251,7 +242,6 @@ public final class ChestIndexPayloads {
     }
 
     public record HelloPayload(QueryDto.Hello hello) implements CustomPacketPayload {
-
         public static final Type<HelloPayload> TYPE = new Type<>(id("hello"));
 
         public static final StreamCodec<FriendlyByteBuf, HelloPayload> CODEC =

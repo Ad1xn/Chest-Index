@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MachineFilterTest {
-
     private static final String DIM = "minecraft:overworld";
     private static final String ITEM = "minecraft:gunpowder";
 

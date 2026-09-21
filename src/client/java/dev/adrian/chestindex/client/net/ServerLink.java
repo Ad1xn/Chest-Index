@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class ServerLink {
-
     public enum State {
         WAITING,
         PRESENT,

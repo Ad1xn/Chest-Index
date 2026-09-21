@@ -16,7 +16,6 @@ import net.minecraft.client.gui.GuiGraphics;
 
 @Mixin(AbstractContainerScreen.class)
 public abstract class ContainerContentsMixin {
-
     //? if >=26.1 {
     /*@Inject(method = "extractContents", at = @At("TAIL"), require = 0)
     private void chestindex$markSlots(GuiGraphicsExtractor graphics, int mouseX, int mouseY,

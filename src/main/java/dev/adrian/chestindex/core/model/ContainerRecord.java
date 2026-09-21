@@ -18,7 +18,6 @@ public record ContainerRecord(
         long lastSeenTick,
         List<StackEntry> contents
 ) {
-
     public ContainerRecord {
         Objects.requireNonNull(origin, "origin");
         contents = contents == null ? List.of() : List.copyOf(contents);

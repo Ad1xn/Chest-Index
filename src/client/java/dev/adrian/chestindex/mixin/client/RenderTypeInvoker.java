@@ -7,7 +7,6 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin(RenderType.class)
 public interface RenderTypeInvoker {
-
     @Invoker("create")
     static RenderType chestindex$create(String name, RenderSetup setup) {
         throw new AssertionError();

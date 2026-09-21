@@ -8,7 +8,6 @@ import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
 
 public final class Session {
-
     private Session() {}
 
     public static String serverAddress() {

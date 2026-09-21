@@ -18,7 +18,6 @@ import java.util.PriorityQueue;
 import java.util.Set;
 
 public final class WorldIndex {
-
     private final Map<Long, ContainerRecord> byPos = new HashMap<>();
     private final Map<Long, Set<Long>> byChunk = new HashMap<>();
     private final Map<Integer, Set<Long>> byItem = new HashMap<>();

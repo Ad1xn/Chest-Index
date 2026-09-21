@@ -6,7 +6,6 @@ import dev.adrian.chestindex.core.model.StackEntry;
 import java.util.List;
 
 public record SearchResult(ContainerRecord container, double distanceSq, List<StackEntry> matches) {
-
     public SearchResult {
         matches = matches == null ? List.of() : List.copyOf(matches);
     }

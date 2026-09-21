@@ -3,7 +3,6 @@ package dev.adrian.chestindex.core.model;
 import java.util.List;
 
 public record StackEntry(int itemId, int count, int depth, String customName, List<Integer> details) {
-
     public StackEntry {
         if (count < 0) throw new IllegalArgumentException("count must not be negative: " + count);
         if (depth < 0) throw new IllegalArgumentException("depth must not be negative: " + depth);

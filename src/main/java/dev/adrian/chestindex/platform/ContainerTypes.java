@@ -10,7 +10,6 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 public final class ContainerTypes {
-
     private static final Set<String> VANILLA = Set.of(
             "minecraft:chest",
             "minecraft:trapped_chest",

@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScanLogTest {
-
     @Test
     void aMarkedFileIsCurrentOnlyWhileItIsUnchanged() {
         ScanLog log = new ScanLog();

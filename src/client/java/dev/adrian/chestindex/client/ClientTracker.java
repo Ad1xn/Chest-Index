@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public final class ClientTracker {
-
     private ClientTracker() {}
 
     public enum Availability {
@@ -83,7 +82,6 @@ public final class ClientTracker {
 
     public static CompletableFuture<QueryDto.SummaryResponse> summarise(
             String text, QueryDto.Filters filters, int limit, String dimensionId) {
-
         int requestId = ServerLink.nextRequestId();
         QueryDto.SummaryRequest request =
                 new QueryDto.SummaryRequest(requestId, text, filters, limit, dimensionId);
@@ -120,7 +118,6 @@ public final class ClientTracker {
 
     public static CompletableFuture<QueryDto.ContainerResponse> containers(
             List<String> itemIds, QueryDto.Filters filters, int limit, String dimensionId, String text) {
-
         int requestId = ServerLink.nextRequestId();
         QueryDto.ContainerRequest request =
                 new QueryDto.ContainerRequest(requestId, itemIds, filters, limit, dimensionId, text);

@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HighlightTimerTest {
-
     private static HighlightTimer timer() {
         return new HighlightTimer(10_000L, 2_000L, 1_000L);
     }

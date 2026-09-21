@@ -10,7 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
 public final class Migration {
-
     private Migration() {}
 
     private static final String OLD_ID = "chest-tracker";

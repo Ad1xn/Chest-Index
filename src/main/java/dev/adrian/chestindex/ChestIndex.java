@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class ChestIndex implements ModInitializer {
-
     public static final String MOD_ID = "chestindex";
     public static final Logger LOG = LoggerFactory.getLogger("ChestIndex");
 

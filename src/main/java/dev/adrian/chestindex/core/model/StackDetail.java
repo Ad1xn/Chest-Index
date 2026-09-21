@@ -3,7 +3,6 @@ package dev.adrian.chestindex.core.model;
 import java.util.Locale;
 
 public final class StackDetail {
-
     private StackDetail() {}
 
     public static final String ENCHANTMENT = "ench:";

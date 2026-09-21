@@ -1,7 +1,6 @@
 package dev.adrian.chestindex.core.highlight;
 
 public final class HighlightTimer {
-
     private static final double MOVEMENT_EPSILON = 0.75;
 
     private final long baseDurationMs;

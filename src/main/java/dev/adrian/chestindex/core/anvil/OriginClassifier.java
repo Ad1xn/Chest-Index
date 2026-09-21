@@ -9,7 +9,6 @@ import java.util.Collection;
 import java.util.List;
 
 public final class OriginClassifier {
-
     private OriginClassifier() {}
 
     public static List<ContainerRecord> classify(ChunkExtractor.ChunkContents contents) {

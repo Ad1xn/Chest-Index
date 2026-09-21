@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SearchTextTest {
-
     @Test
     void blankMatchesEverything() {
         assertTrue(SearchText.matches("minecraft:stone", SearchText.tokens("")));

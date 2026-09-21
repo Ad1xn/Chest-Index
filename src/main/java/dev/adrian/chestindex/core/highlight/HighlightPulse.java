@@ -1,7 +1,6 @@
 package dev.adrian.chestindex.core.highlight;
 
 public final class HighlightPulse {
-
     private HighlightPulse() {}
 
     public static final long PERIOD_MS = 2600L;

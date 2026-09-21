@@ -13,7 +13,6 @@ import java.util.Comparator;
 import java.util.List;
 
 public final class EnderChests {
-
     private EnderChests() {}
 
     private static final int RADIUS_CHUNKS = 8;

@@ -4,7 +4,6 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 
 public final class NetworkCompat {
-
     private NetworkCompat() {}
 
     public static PayloadTypeRegistry<RegistryFriendlyByteBuf> playC2S() {

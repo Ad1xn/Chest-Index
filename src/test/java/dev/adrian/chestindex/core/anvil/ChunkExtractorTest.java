@@ -16,7 +16,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChunkExtractorTest {
-
     private final StringPalette palette = new StringPalette();
 
     private NbtCompound parse(NbtTestWriter.Compound root) throws IOException {

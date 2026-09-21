@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Set;
 
 public final class ChunkExtractor {
-
     public static final Set<String> CHUNK_KEYS =
             Set.of("xPos", "zPos", "Status", "DataVersion", "block_entities", "structures");
 

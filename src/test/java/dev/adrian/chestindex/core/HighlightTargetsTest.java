@@ -9,7 +9,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HighlightTargetsTest {
-
     private static long at(int x, int y, int z) {
         return BlockKey.pack(x, y, z);
     }

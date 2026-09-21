@@ -10,7 +10,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PayloadCodecTest {
-
     private static FriendlyByteBuf buffer() {
         return new FriendlyByteBuf(Unpooled.buffer());
     }

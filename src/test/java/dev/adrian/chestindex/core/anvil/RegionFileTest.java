@@ -15,7 +15,6 @@ import java.util.zip.GZIPOutputStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RegionFileTest {
-
     private record Chunk(int localX, int localZ, int compression, byte[] nbt) {}
 
     private static Path writeRegion(Path dir, String name, List<Chunk> chunks) throws IOException {

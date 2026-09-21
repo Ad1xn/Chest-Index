@@ -17,7 +17,6 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
 public final class RegionFile implements Closeable {
-
     public static final int SECTOR_BYTES = 4096;
     private static final int CHUNKS_PER_AXIS = 32;
     private static final int HEADER_SECTORS = 2;

@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Set;
 
 public final class EntityContainers {
-
     private EntityContainers() {}
 
     public static final double RADIUS = 256.0;

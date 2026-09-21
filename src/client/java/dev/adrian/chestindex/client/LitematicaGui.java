@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class LitematicaGui {
-
     private LitematicaGui() {}
 
     private static final String BUTTON_BASE = "fi.dy.masa.malilib.gui.button.ButtonBase";

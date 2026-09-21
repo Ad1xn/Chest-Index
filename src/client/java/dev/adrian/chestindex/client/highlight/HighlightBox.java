@@ -4,7 +4,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
 public final class HighlightBox {
-
     private static final double SWELL = 0.002;
 
     private static final float LINE_WIDTH = 2.0f;
@@ -30,7 +29,6 @@ public final class HighlightBox {
                             double sizeX, double sizeY, double sizeZ,
                             float red, float green, float blue, float alpha,
                             double grow, float lineWidth) {
-
         double swell = SWELL + grow;
         float x0 = (float) (x - swell);
         float y0 = (float) (y - swell);

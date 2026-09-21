@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 public final class IndexStore {
-
     private IndexStore() {}
 
     public enum Kind {
@@ -24,7 +23,6 @@ public final class IndexStore {
 
     public record Location(String name, Path directory, Kind kind,
                            long bytes, int dimensions, boolean active) {
-
         public String size() {
             if (bytes < 1024) return bytes + " B";
             if (bytes < 1024 * 1024) return String.format("%.0f kB", bytes / 1024.0);
