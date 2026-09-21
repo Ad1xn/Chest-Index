@@ -1,11 +1,11 @@
 package dev.adrian.chestindex.client.ui;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chestindex.client.ClientTracker;
 import dev.adrian.chestindex.client.SearchCategories;
 import dev.adrian.chestindex.client.highlight.ContainerHighlight;
 import dev.adrian.chestindex.client.ActionBar;
 import dev.adrian.chestindex.client.platform.Gfx;
+import dev.adrian.chestindex.client.platform.Keys;
 import dev.adrian.chestindex.config.ChestIndexConfig;
 import dev.adrian.chestindex.core.net.QueryDto;
 import dev.adrian.chestindex.core.util.BlockKey;
@@ -18,7 +18,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,7 +32,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class ChestIndexScreen extends Screen {
-
     private static final Identifier CONTAINER_TEXTURE =
             Identifier.parse("minecraft:textures/gui/container/generic_54.png");
 
@@ -587,9 +585,15 @@ public final class ChestIndexScreen extends Screen {
             gfx.fill(x, y, x + (int) (width * fraction), y + SCAN_BAR_H, SCAN_BAR_FILL);
         }
         if (hoverLabel == null) {
-            setHoverLabel("Indexing the world...", fraction > 0
-                    ? String.format("%d%%", Math.round(fraction * 100))
-                    : String.format("%,d chunks", status.chunksRead()));
+            String whose = availability == ClientTracker.Availability.SERVER
+                    ? "The server is indexing the world..."
+                    : "Indexing the world...";
+            String detail = status.regionsTotal() > 0
+                    ? String.format("%d%%  ·  %,d of %,d regions  ·  %,d chunks",
+                            Math.round(fraction * 100), status.regionsRead(),
+                            status.regionsTotal(), status.chunksRead())
+                    : String.format("%,d chunks", status.chunksRead());
+            setHoverLabel(whose, detail);
         }
     }
 
@@ -914,9 +918,7 @@ public final class ChestIndexScreen extends Screen {
     }
 
     private boolean shiftHeld() {
-        if (minecraft == null || minecraft.getWindow() == null) return false;
-        return InputConstants.isKeyDown(minecraft.getWindow(), GLFW.GLFW_KEY_LEFT_SHIFT)
-                || InputConstants.isKeyDown(minecraft.getWindow(), GLFW.GLFW_KEY_RIGHT_SHIFT);
+        return Keys.shiftHeld();
     }
 
     private void drawItemTooltip(Gfx gfx, QueryDto.ItemSummary summary, int mouseX, int mouseY) {
@@ -1405,14 +1407,22 @@ public final class ChestIndexScreen extends Screen {
         int mouseX = (int) event.x();
         int mouseY = (int) event.y();
 
-        if (event.button() == 0 && search != null
+        if (event.button() == Keys.MOUSE_LEFT && menuOpen) {
+            if (clickMenuRow(mouseX, mouseY)) return true;
+            if (!overToolbar(mouseX, mouseY)) {
+                menuOpen = false;
+                return true;
+            }
+        }
+
+        if (event.button() == Keys.MOUSE_LEFT && search != null
                 && mouseX >= search.getX() - 3 && mouseX < search.getX() + search.getWidth() + 3
                 && mouseY >= search.getY() && mouseY < search.getY() + 12) {
             categoriesAsked = true;
             refreshSuggestions();
         }
 
-        if (event.button() == 0) {
+        if (event.button() == Keys.MOUSE_LEFT) {
             int row = suggestionAt(mouseX, mouseY);
             if (row >= 0) {
                 suggestionIndex = row;
@@ -1421,19 +1431,11 @@ public final class ChestIndexScreen extends Screen {
             }
         }
 
-        if (event.button() == 0 && menuOpen) {
-            if (clickMenuRow(mouseX, mouseY)) return true;
-            if (!overToolbar(mouseX, mouseY)) {
-                menuOpen = false;
-                return true;
-            }
-        }
-
-        if (event.button() == 0 && clickButton(mouseX, mouseY)) return true;
-        if (event.button() == 0 && clickDimension(mouseX, mouseY)) return true;
+        if (event.button() == Keys.MOUSE_LEFT && clickButton(mouseX, mouseY)) return true;
+        if (event.button() == Keys.MOUSE_LEFT && clickDimension(mouseX, mouseY)) return true;
         if (!canQuery()) return super.mouseClicked(event, doubleClick);
 
-        if (event.button() == 1) {
+        if (event.button() == Keys.MOUSE_RIGHT) {
             if (selectedItemId != null) {
                 back();
                 if (itemsStale) refreshItems(false);
@@ -1446,7 +1448,7 @@ public final class ChestIndexScreen extends Screen {
             }
         }
 
-        if (event.button() == 0) {
+        if (event.button() == Keys.MOUSE_LEFT) {
             if (mouseX >= scrollbarX() && mouseX < scrollbarX() + 12
                     && mouseY >= gridY() - 1 && mouseY < gridY() - 1 + ROWS * SLOT) {
                 draggingScrollbar = true;
@@ -1574,22 +1576,22 @@ public final class ChestIndexScreen extends Screen {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
         if (!suggestions.isEmpty()) {
             switch (event.key()) {
-                case GLFW.GLFW_KEY_TAB -> {
+                case Keys.TAB -> {
                     applySuggestion(suggestions.get(
                             Math.max(0, Math.min(suggestionIndex, suggestions.size() - 1))));
                     return true;
                 }
-                case GLFW.GLFW_KEY_DOWN -> {
+                case Keys.DOWN -> {
                     suggestionIndex = (suggestionIndex + 1) % suggestions.size();
                     scrollToSuggestion();
                     return true;
                 }
-                case GLFW.GLFW_KEY_UP -> {
+                case Keys.UP -> {
                     suggestionIndex = (suggestionIndex + suggestions.size() - 1) % suggestions.size();
                     scrollToSuggestion();
                     return true;
                 }
-                case GLFW.GLFW_KEY_ESCAPE -> {
+                case Keys.ESCAPE -> {
                     suggestions = List.of();
                     categoriesAsked = false;
                     return true;
