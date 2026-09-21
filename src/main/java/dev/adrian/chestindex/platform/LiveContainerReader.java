@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 
 public final class LiveContainerReader {
-
     private static final int MAX_NESTING = 8;
 
     private LiveContainerReader() {}
@@ -137,7 +136,7 @@ public final class LiveContainerReader {
 
         BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         if (bundle != null) {
-            bundle.itemCopyStream().forEach(inner -> appendStack(inner, out, depth + 1, palette));
+            ItemContentsCompat.stacks(bundle).forEach(inner -> appendStack(inner, out, depth + 1, palette));
         }
     }
 }

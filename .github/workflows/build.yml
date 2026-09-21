@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [ "1.21.11", "26.2" ]
+        target: [ "1.21.11", "26.2", "26.3" ]
     steps:
       - uses: actions/checkout@v4
 

@@ -20,7 +20,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class ConfigScreen extends Screen {
-
     private static final int ROW_HEIGHT = 22;
     private static final int WIDGET_WIDTH = 200;
 
@@ -284,7 +283,6 @@ public final class ConfigScreen extends Screen {
     }
 
     abstract static class IntSlider extends AbstractSliderButton {
-
         private final int min;
         private final int max;
         private final int step;
@@ -427,8 +425,13 @@ public final class ConfigScreen extends Screen {
     }
 
     @Override
-    public void onClose() {
+    public void removed() {
         config.save();
+        super.removed();
+    }
+
+    @Override
+    public void onClose() {
         minecraft.setScreenAndShow(parent);
     }
 

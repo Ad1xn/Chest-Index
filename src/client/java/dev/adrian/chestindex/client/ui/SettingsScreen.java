@@ -1,7 +1,7 @@
 package dev.adrian.chestindex.client.ui;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chestindex.client.platform.Gfx;
+import dev.adrian.chestindex.client.platform.Keys;
 import dev.adrian.chestindex.config.ChestIndexConfig;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -11,7 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,7 +31,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class SettingsScreen extends Screen {
-
     private static final int RAIL_BUTTON = 20;
     private static final int RAIL_GAP = 2;
 
@@ -912,9 +910,7 @@ public final class SettingsScreen extends Screen {
     }
 
     private boolean shiftHeld() {
-        if (minecraft == null || minecraft.getWindow() == null) return false;
-        return InputConstants.isKeyDown(minecraft.getWindow(), GLFW.GLFW_KEY_LEFT_SHIFT)
-                || InputConstants.isKeyDown(minecraft.getWindow(), GLFW.GLFW_KEY_RIGHT_SHIFT);
+        return Keys.shiftHeld();
     }
 
     private List<String> wrap(String text, int maxWidth) {
@@ -1104,7 +1100,7 @@ public final class SettingsScreen extends Screen {
 
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
-        if (event.key() == GLFW.GLFW_KEY_ESCAPE && !filter.isBlank()) {
+        if (event.key() == Keys.ESCAPE && !filter.isBlank()) {
             filter = "";
             filterBox.setValue("");
             shown = null;
@@ -1115,8 +1111,13 @@ public final class SettingsScreen extends Screen {
     }
 
     @Override
-    public void onClose() {
+    public void removed() {
         config.save();
+        super.removed();
+    }
+
+    @Override
+    public void onClose() {
         minecraft.setScreenAndShow(parent);
     }
 

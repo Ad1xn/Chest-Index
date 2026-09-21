@@ -4,6 +4,7 @@ import dev.adrian.chestindex.client.ClientTracker;
 import dev.adrian.chestindex.client.ContainerSearch;
 import dev.adrian.chestindex.client.highlight.ContainerHighlight;
 import dev.adrian.chestindex.client.ActionBar;
+import dev.adrian.chestindex.client.platform.Keys;
 import dev.adrian.chestindex.client.platform.Gfx;
 import dev.adrian.chestindex.core.net.QueryDto;
 import net.minecraft.ChatFormatting;
@@ -26,7 +27,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class MaterialPickerScreen extends Screen {
-
     private static final int ROW_H = 18;
     private static final int WIDTH = 220;
     private static final int TOP = 34;
@@ -124,7 +124,7 @@ public final class MaterialPickerScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() == 0) {
+        if (event.button() == Keys.MOUSE_LEFT) {
             int index = rowAt(event.x(), event.y());
             if (index >= 0) {
                 search(materials.get(index));

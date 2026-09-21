@@ -2,6 +2,7 @@ package dev.adrian.chestindex.client;
 
 import dev.adrian.chestindex.ChestIndex;
 import dev.adrian.chestindex.client.highlight.ContainerHighlight;
+import dev.adrian.chestindex.client.platform.Keys;
 import dev.adrian.chestindex.client.platform.ClientCompat;
 import dev.adrian.chestindex.client.platform.Gfx;
 import dev.adrian.chestindex.client.ui.VanillaButton;
@@ -26,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 
 public final class LitematicaSearch {
-
     private LitematicaSearch() {}
 
     private static final String MATERIAL_LIST_GUI = "fi.dy.masa.litematica.gui.GuiMaterialList";
@@ -73,7 +73,7 @@ public final class LitematicaSearch {
             });
 
             ScreenMouseEvents.allowMouseClick(screen).register((clicked, event) -> {
-                if (event.button() != 0) return true;
+                if (event.button() != Keys.MOUSE_LEFT) return true;
 
                 for (LitematicaGui.Row row : LitematicaGui.rows(clicked)) {
                     if (rowButton(row).contains(event.x(), event.y())) {

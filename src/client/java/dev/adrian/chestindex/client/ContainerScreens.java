@@ -1,9 +1,8 @@
 package dev.adrian.chestindex.client;
 
-import com.mojang.blaze3d.platform.InputConstants;
-import org.lwjgl.glfw.GLFW;
 import dev.adrian.chestindex.ChestIndex;
 import dev.adrian.chestindex.client.platform.ClientCompat;
+import dev.adrian.chestindex.client.platform.Keys;
 import dev.adrian.chestindex.client.ui.SearchButton;
 import dev.adrian.chestindex.client.ui.SlotHighlight;
 import dev.adrian.chestindex.config.ChestIndexConfig;
@@ -17,7 +16,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.inventory.Slot;
 
 public final class ContainerScreens {
-
     private ContainerScreens() {}
 
     private static final long DEBOUNCE_MS = 300;
@@ -87,8 +85,7 @@ public final class ContainerScreens {
             return;
         }
 
-        boolean down = GLFW.glfwGetMouseButton(
-                client.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+        boolean down = Keys.rightMouseDown(client);
 
         double scaleX = client.getWindow().getGuiScaledWidth()
                 / (double) client.getWindow().getScreenWidth();

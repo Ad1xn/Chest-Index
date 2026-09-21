@@ -1,5 +1,6 @@
 package dev.adrian.chestindex.client.ui;
 
+import dev.adrian.chestindex.client.platform.Keys;
 import dev.adrian.chestindex.client.platform.ClientCompat;
 import dev.adrian.chestindex.client.platform.Gfx;
 import dev.adrian.chestindex.config.ChestIndexConfig;
@@ -16,7 +17,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class SearchButton extends AbstractWidget {
-
     public static final int SIZE = 11;
 
     private static final int PANEL = 0xFFC6C6C6;
@@ -96,7 +96,7 @@ public final class SearchButton extends AbstractWidget {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (!visible || !isMouseOver(event.x(), event.y())) return false;
 
-        if (event.button() == 0) {
+        if (event.button() == Keys.MOUSE_LEFT) {
             playDownSound(net.minecraft.client.Minecraft.getInstance().getSoundManager());
             ClientCompat.openScreenFromContainer(new ChestIndexScreen());
             return true;

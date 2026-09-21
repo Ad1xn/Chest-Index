@@ -1,7 +1,7 @@
 package dev.adrian.chestindex.client.ui;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import dev.adrian.chestindex.client.platform.Gfx;
+import dev.adrian.chestindex.client.platform.Keys;
 import dev.adrian.chestindex.config.ChestIndexConfig;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -11,7 +11,6 @@ import net.minecraft.client.multiplayer.ServerList;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +24,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class ServerListScreen extends Screen {
-
     private record Suggestion(String label, String value) {}
 
     private static final int ROW_H = 20;
@@ -452,7 +450,7 @@ public final class ServerListScreen extends Screen {
 
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
-        if ((event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER)
+        if ((event.key() == Keys.ENTER || event.key() == Keys.KP_ENTER)
                 && input != null && !input.getValue().isBlank()) {
             addEntry(input.getValue());
             input.setValue("");
@@ -464,8 +462,13 @@ public final class ServerListScreen extends Screen {
     }
 
     @Override
-    public void onClose() {
+    public void removed() {
         ChestIndexConfig.get().save();
+        super.removed();
+    }
+
+    @Override
+    public void onClose() {
         minecraft.setScreenAndShow(parent);
     }
 

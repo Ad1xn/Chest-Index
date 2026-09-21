@@ -18,6 +18,7 @@ stonecutter {
     shared {
         version("1.21.11", "1.21.11").buildscript("build-obfuscated.gradle.kts")
         version("26.2", "26.2").buildscript("build-native.gradle.kts")
+        version("26.3", "26.3").buildscript("build-native.gradle.kts")
     }
     create(rootProject)
 }

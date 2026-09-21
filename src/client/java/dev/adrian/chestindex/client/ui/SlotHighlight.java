@@ -19,7 +19,6 @@ import net.minecraft.world.item.component.ItemContainerContents;
 import java.util.Set;
 
 public final class SlotHighlight {
-
     private SlotHighlight() {}
 
     private static final int MAX_DEPTH = 3;
@@ -207,7 +206,7 @@ public final class SlotHighlight {
         }
 
         BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
-        return bundle != null && bundle.itemCopyStream()
+        return bundle != null && ItemContentsCompat.stacks(bundle)
                 .anyMatch(inner -> targets.contains(inner.getItem())
                         || holds(inner, targets, depth - 1));
     }

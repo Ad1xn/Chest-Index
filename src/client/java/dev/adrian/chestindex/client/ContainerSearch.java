@@ -26,7 +26,6 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 public final class ContainerSearch {
-
     private ContainerSearch() {}
 
     private static final int MAX_TARGETS = 64;
@@ -199,7 +198,7 @@ public final class ContainerSearch {
         }
         BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         if (bundle != null) {
-            bundle.itemCopyStream().forEach(inner -> add(inner, into, depth));
+            ItemContentsCompat.stacks(bundle).forEach(inner -> add(inner, into, depth));
         }
     }
 
@@ -226,7 +225,7 @@ public final class ContainerSearch {
         BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         if (bundle != null) {
             java.util.Optional<ItemStack> first =
-                    bundle.itemCopyStream().filter(inner -> !inner.isEmpty()).findFirst();
+                    ItemContentsCompat.stacks(bundle).filter(inner -> !inner.isEmpty()).findFirst();
             if (first.isPresent()) return first.get().getHoverName().getString();
         }
         return null;

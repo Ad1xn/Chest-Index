@@ -15,7 +15,6 @@ import net.minecraft.client.gui.GuiGraphics;
 //?}
 
 public final class HighlightColourScreen extends Screen {
-
     private static final int[] SUGGESTED = {
             0xFF2BD0, 0xFF3B7A, 0xFF6A2B, 0xFFC400, 0x9CFF2B, 0x2BFF9C, 0x2BE5FF, 0xB478FF,
     };
@@ -451,8 +450,13 @@ public final class HighlightColourScreen extends Screen {
     }
 
     @Override
-    public void onClose() {
+    public void removed() {
         config.save();
+        super.removed();
+    }
+
+    @Override
+    public void onClose() {
         minecraft.setScreenAndShow(parent);
     }
 

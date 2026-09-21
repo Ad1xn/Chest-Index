@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.Set;
 
 public final class MaterialGoals {
-
     private MaterialGoals() {}
 
     private static final long CHECK_INTERVAL_MS = 500;
@@ -162,7 +161,7 @@ public final class MaterialGoals {
         }
         BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         if (bundle != null) {
-            bundle.itemCopyStream().forEach(inner -> add(inner, counts, depth - 1));
+            ItemContentsCompat.stacks(bundle).forEach(inner -> add(inner, counts, depth - 1));
         }
     }
 
