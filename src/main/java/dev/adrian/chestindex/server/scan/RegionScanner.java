@@ -7,9 +7,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import dev.adrian.chestindex.core.store.ScanLog;
+import dev.adrian.chestindex.core.anvil.AnvilWorldView;
 import dev.adrian.chestindex.core.anvil.ChunkExtractor;
 import dev.adrian.chestindex.core.anvil.NbtCompound;
 import dev.adrian.chestindex.core.anvil.OriginClassifier;
+import dev.adrian.chestindex.core.anvil.OriginResolver;
+import dev.adrian.chestindex.core.util.MonsterRooms;
 import dev.adrian.chestindex.core.anvil.RegionFile;
 import dev.adrian.chestindex.core.anvil.WorldLayout;
 import dev.adrian.chestindex.core.model.ContainerRecord;
@@ -110,6 +113,10 @@ public final class RegionScanner {
     }
 
     public boolean start(Path worldRoot, long tick) {
+        return start(worldRoot, tick, Map.of(), true);
+    }
+
+    public boolean start(Path worldRoot, long tick, Map<String, Set<Long>> refine, boolean scan) {
         if (!running.compareAndSet(false, true)) return false;
 
         cancelled.set(false);
@@ -122,7 +129,8 @@ public final class RegionScanner {
 
         Thread thread = new Thread(() -> {
             try {
-                scanWorld(worldRoot, tick);
+                if (!refine.isEmpty()) refineChunks(worldRoot, refine, tick);
+                if (scan && !cancelled.get()) scanWorld(worldRoot, tick);
             } catch (Throwable t) {
                 ChestIndex.LOG.error("Region scan failed", t);
             } finally {
@@ -251,6 +259,7 @@ public final class RegionScanner {
 
         Map<Long, List<ContainerRecord>> byChunk = new LinkedHashMap<>();
         List<ChunkExtractor.StructureBox> regionBoxes = new ArrayList<>();
+        List<Long> regionSpawners = new ArrayList<>();
 
         try (RegionFile regionFile = RegionFile.open(file)) {
             for (int[] local : regionFile.presentChunks()) {
@@ -268,6 +277,7 @@ public final class RegionScanner {
                             chunk, trackedIds, localDimensionId, localPalette, tick);
 
                     regionBoxes.addAll(contents.structureBoxes());
+                    regionSpawners.addAll(contents.spawners());
                     byChunk.put(BlockKey.chunkKey(chunkX, chunkZ), contents.containers());
                     chunksRead.incrementAndGet();
                 } catch (IOException torn) {
@@ -279,11 +289,98 @@ public final class RegionScanner {
             return;
         }
 
-        for (Map.Entry<Long, List<ContainerRecord>> entry : byChunk.entrySet()) {
-            List<ContainerRecord> classified = OriginClassifier.classify(entry.getValue(), regionBoxes);
-            containersFound.addAndGet(classified.size());
-            pending.add(new Batch(dimensionId, entry.getKey(), classified, localPalette));
-            queueDepth.incrementAndGet();
+        int chestTypeId = localPalette.lookup(MonsterRooms.CHEST_ID);
+        try (AnvilWorldView world = new AnvilWorldView(file.getParent())) {
+            for (Map.Entry<Long, List<ContainerRecord>> entry : byChunk.entrySet()) {
+                List<ContainerRecord> classified = OriginClassifier.classify(entry.getValue(), regionBoxes,
+                        regionSpawners, chestTypeId);
+                classified = resolveGuesses(classified, chestTypeId, world);
+                containersFound.addAndGet(classified.size());
+                pending.add(new Batch(dimensionId, entry.getKey(), classified, localPalette));
+                queueDepth.incrementAndGet();
+            }
+        }
+    }
+
+    private static List<ContainerRecord> resolveGuesses(List<ContainerRecord> containers, int chestTypeId,
+                                                        AnvilWorldView world) {
+        List<ContainerRecord> resolved = null;
+        for (int i = 0; i < containers.size(); i++) {
+            ContainerRecord container = containers.get(i);
+            if (!container.isPlacementGuess()) continue;
+            ContainerRecord decided = OriginResolver.resolve(container, chestTypeId, world);
+            if (decided == container) continue;
+            if (resolved == null) resolved = new ArrayList<>(containers);
+            resolved.set(i, decided);
+        }
+        return resolved == null ? containers : resolved;
+    }
+
+    private void refineChunks(Path worldRoot, Map<String, Set<Long>> chunksByDimension, long tick) throws IOException {
+        Set<String> trackedIds = tracker.containerTypes().known();
+        int total = 0;
+        for (Set<Long> chunks : chunksByDimension.values()) total += chunks.size();
+        ChestIndex.LOG.info("Settling container origins from an older index: re-reading {} chunk(s)", total);
+
+        for (Map.Entry<String, Set<Long>> dimension : chunksByDimension.entrySet()) {
+            Path regionDir = WorldLayout.regionDirFor(worldRoot, dimension.getKey());
+            if (regionDir == null) continue;
+
+            StringPalette localPalette = new StringPalette();
+            int localDimensionId = localPalette.intern(dimension.getKey());
+            Map<Long, RegionFile> open = new LinkedHashMap<>();
+            try (AnvilWorldView world = new AnvilWorldView(regionDir)) {
+                for (long chunkKey : dimension.getValue()) {
+                    if (cancelled.get()) return;
+                    throttle();
+
+                    int chunkX = BlockKey.chunkX(chunkKey);
+                    int chunkZ = BlockKey.chunkZ(chunkKey);
+                    long regionKey = BlockKey.chunkKey(chunkX >> 5, chunkZ >> 5);
+                    RegionFile region = open.computeIfAbsent(regionKey, key -> openRegion(regionDir, chunkX >> 5, chunkZ >> 5));
+                    if (region == null) continue;
+
+                    NbtCompound chunk;
+                    try {
+                        chunk = region.readChunk(chunkX & 31, chunkZ & 31, ChunkExtractor.CHUNK_KEYS);
+                    } catch (IOException torn) {
+                        chunksFailed.incrementAndGet();
+                        continue;
+                    }
+                    if (chunk == null) continue;
+
+                    ChunkExtractor.ChunkContents contents = ChunkExtractor.extract(
+                            chunk, trackedIds, localDimensionId, localPalette, tick);
+                    int chestTypeId = localPalette.lookup(MonsterRooms.CHEST_ID);
+                    List<ContainerRecord> classified = OriginClassifier.classify(contents.containers(),
+                            contents.structureBoxes(), contents.spawners(), chestTypeId);
+                    classified = resolveGuesses(classified, chestTypeId, world);
+
+                    chunksRead.incrementAndGet();
+                    containersFound.addAndGet(classified.size());
+                    pending.add(new Batch(dimension.getKey(), chunkKey, classified, localPalette));
+                    queueDepth.incrementAndGet();
+                }
+            } finally {
+                for (RegionFile region : open.values()) {
+                    if (region == null) continue;
+                    try {
+                        region.close();
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+        }
+    }
+
+    private static RegionFile openRegion(Path regionDir, int regionX, int regionZ) {
+        Path file = regionDir.resolve("r." + regionX + "." + regionZ + ".mca");
+        if (!Files.isRegularFile(file)) return null;
+        try {
+            return RegionFile.open(file);
+        } catch (IOException unreadable) {
+            ChestIndex.LOG.warn("Skipping region {}: {}", file.getFileName(), unreadable.toString());
+            return null;
         }
     }
 

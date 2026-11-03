@@ -426,13 +426,16 @@ public final class WorldIndex {
     public Stats stats() {
         int known = 0;
         int unlooted = 0;
+        int placementGuesses = 0;
         Map<Origin, Integer> byOrigin = new HashMap<>();
         for (ContainerRecord record : byPos.values()) {
             if (record.contentsKnown()) known++;
             if (record.unlooted()) unlooted++;
+            if (record.isPlacementGuess()) placementGuesses++;
             byOrigin.merge(record.origin(), 1, Integer::sum);
         }
-        return new Stats(byPos.size(), known, unlooted, byChunk.size(), byItem.size(), Map.copyOf(byOrigin));
+        return new Stats(byPos.size(), known, unlooted, byChunk.size(), byItem.size(), Map.copyOf(byOrigin),
+                placementGuesses);
     }
 
     public record Stats(
@@ -441,6 +444,7 @@ public final class WorldIndex {
             int unlooted,
             int chunks,
             int distinctItems,
-            Map<Origin, Integer> byOrigin
+            Map<Origin, Integer> byOrigin,
+            int placementGuesses
     ) {}
 }

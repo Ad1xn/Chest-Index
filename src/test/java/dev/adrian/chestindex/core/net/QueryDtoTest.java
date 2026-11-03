@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class QueryDtoTest {
     @Test
     void originFilterMapsToTheMatchingOrigin() {
-        assertEquals(Set.of(Origin.PLAYER_PLACED, Origin.UNKNOWN),
+        assertEquals(Set.of(Origin.PLAYER_PLACED),
                 new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins());
         assertEquals(Set.of(Origin.NATURAL),
                 new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_NATURAL).origins());
@@ -30,12 +30,10 @@ class QueryDtoTest {
     }
 
     @Test
-    void theBuiltFilterKeepsContainersWhosePlacementWasNeverSeen() {
+    void theBuiltFilterIsExactNowThatEveryContainerIsDecided() {
         Set<Origin> built = new QueryDto.Filters(true, false, false, false, QueryDto.Filters.ORIGIN_PLAYER_PLACED).origins();
 
-        assertTrue(built.contains(Origin.PLAYER_PLACED));
-        assertTrue(built.contains(Origin.UNKNOWN));
-        assertFalse(built.contains(Origin.NATURAL));
+        assertEquals(Set.of(Origin.PLAYER_PLACED), built);
     }
 
     @Test

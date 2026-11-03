@@ -65,7 +65,8 @@ class ChunkExtractorTest {
         assertEquals(Origin.NATURAL, loot.origin());
 
         ContainerRecord plain = found.stream().filter(r -> !r.unlooted()).findFirst().orElseThrow();
-        assertEquals(Origin.UNKNOWN, plain.origin());
+        assertEquals(Origin.PLAYER_PLACED, plain.origin());
+        assertTrue(plain.isPlacementGuess());
     }
 
     @Test
@@ -215,5 +216,59 @@ class ChunkExtractorTest {
 
         ContainerRecord record = ChunkExtractor.extract(chunk, null, 0, palette, 0L).containers().get(0);
         assertEquals(12, record.contents().get(0).count());
+    }
+
+    @Test
+    void collectsSpawnersWithoutIndexingThem() throws IOException {
+        NbtCompound chunk = parse(NbtTestWriter.compound()
+                .put("block_entities", List.of(
+                        blockEntity("minecraft:mob_spawner", 3, 20, 3),
+                        blockEntity("minecraft:chest", 5, 20, 3)
+                                .put("Items", List.of(item("minecraft:bone", 4))))));
+
+        ChunkExtractor.ChunkContents contents = ChunkExtractor.extract(chunk, null, 0, palette, 0L);
+
+        assertEquals(1, contents.containers().size());
+        assertEquals(List.of(BlockKey.pack(3, 20, 3)), contents.spawners());
+    }
+
+    @Test
+    void anOpenedMonsterRoomChestIsStillNatural() throws IOException {
+        NbtCompound chunk = parse(NbtTestWriter.compound()
+                .put("block_entities", List.of(
+                        blockEntity("minecraft:mob_spawner", 3, 20, 3),
+                        blockEntity("minecraft:chest", 6, 20, 0)
+                                .put("Items", List.of(item("minecraft:bone", 4))),
+                        blockEntity("minecraft:barrel", 4, 20, 3)
+                                .put("Items", List.of(item("minecraft:bone", 1))),
+                        blockEntity("minecraft:chest", 3, 21, 3)
+                                .put("Items", List.of(item("minecraft:bone", 1))),
+                        blockEntity("minecraft:chest", 7, 20, 3)
+                                .put("Items", List.of(item("minecraft:bone", 1))))));
+
+        ChunkExtractor.ChunkContents contents = ChunkExtractor.extract(chunk, null, 0, palette, 0L);
+        List<ContainerRecord> classified = OriginClassifier.classify(contents.containers(),
+                contents.structureBoxes(), contents.spawners(), palette.lookup("minecraft:chest"));
+
+        assertEquals(Origin.NATURAL, originAt(classified, 6, 20, 0));
+        assertEquals(Origin.PLAYER_PLACED, originAt(classified, 4, 20, 3));
+        assertEquals(Origin.PLAYER_PLACED, originAt(classified, 3, 21, 3));
+        assertEquals(Origin.PLAYER_PLACED, originAt(classified, 7, 20, 3));
+    }
+
+    @Test
+    void aPlacedChestBesideASpawnerStaysPlaced() {
+        ContainerRecord placed = new ContainerRecord(BlockKey.pack(1, 20, 0), 0, 7, Origin.PLAYER_PLACED,
+                null, false, true, null, 0L, List.of());
+
+        ContainerRecord classified = OriginClassifier.classify(List.of(placed), List.of(),
+                List.of(BlockKey.pack(0, 20, 0)), 7).get(0);
+
+        assertEquals(Origin.PLAYER_PLACED, classified.origin());
+    }
+
+    private static Origin originAt(List<ContainerRecord> records, int x, int y, int z) {
+        long pos = BlockKey.pack(x, y, z);
+        return records.stream().filter(r -> r.pos() == pos).findFirst().orElseThrow().origin();
     }
 }

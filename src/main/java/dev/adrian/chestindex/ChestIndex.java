@@ -37,11 +37,12 @@ public final class ChestIndex implements ModInitializer {
             Trackers.setCurrent(tracker, server);
             LOG.info("ChestIndex ready: {} containers restored", tracker.totalContainers());
 
-            if (ChestIndexConfig.get().scanOnWorldJoin) {
-                RegionScanner scanner = Trackers.regionScanner();
-                if (scanner != null) {
-                    scanner.start(server.getWorldPath(LevelResource.ROOT), server.overworld().getGameTime());
-                }
+            var legacy = tracker.takeLegacyGuesses();
+            boolean scan = ChestIndexConfig.get().scanOnWorldJoin;
+            RegionScanner scanner = Trackers.regionScanner();
+            if (scanner != null && (scan || !legacy.isEmpty())) {
+                scanner.start(server.getWorldPath(LevelResource.ROOT), server.overworld().getGameTime(),
+                        legacy, scan);
             }
         });
 

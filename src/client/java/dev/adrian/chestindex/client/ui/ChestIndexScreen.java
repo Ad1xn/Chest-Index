@@ -1315,14 +1315,21 @@ public final class ChestIndexScreen extends Screen {
                         y + DETAIL_ROW - 1, ROW_HOVER);
             }
 
-            gfx.text(font, Component.literal(row.distance()),
-                    listLeft() + listWidth() - 4 - row.distanceWidth(), y, TEXT_MAIN);
+            int distanceX = listLeft() + listWidth() - 4 - row.distanceWidth();
+            gfx.text(font, Component.literal(row.distance()), distanceX, y, TEXT_MAIN);
+            if (row.generated()) {
+                gfx.text(font, Component.literal(GENERATED_TAG),
+                        distanceX - GENERATED_GAP - font.width(GENERATED_TAG), y, TEXT_MUTED);
+            }
             gfx.text(font, Component.literal(row.description()), textX, y, TEXT_MAIN);
         }
         setHoverLabel("Click to be guided", "right-click to go back");
     }
 
-    private record DetailRow(String description, String distance, int distanceWidth) {}
+    private static final String GENERATED_TAG = "generated";
+    private static final int GENERATED_GAP = 6;
+
+    private record DetailRow(String description, String distance, int distanceWidth, boolean generated) {}
 
     private List<DetailRow> detailRows() {
         if (detailRows != null && detailRowsFrom == containers) return detailRows;
@@ -1332,8 +1339,9 @@ public final class ChestIndexScreen extends Screen {
         for (QueryDto.ContainerHit hit : containers) {
             String distance = distanceOf(hit);
             int distanceWidth = font.width(distance);
-            rows.add(new DetailRow(truncate(describe(hit), textWidth - distanceWidth - 4),
-                    distance, distanceWidth));
+            int tagWidth = hit.natural() ? font.width(GENERATED_TAG) + GENERATED_GAP : 0;
+            rows.add(new DetailRow(truncate(describe(hit), textWidth - distanceWidth - tagWidth - 4),
+                    distance, distanceWidth, hit.natural()));
         }
 
         detailRowsFrom = containers;

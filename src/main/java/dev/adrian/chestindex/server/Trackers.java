@@ -183,6 +183,10 @@ public final class Trackers {
     }
 
     public static void onBlockPlaced(Level level, BlockPos pos, LivingEntity placer) {
+        if (level.isClientSide()) {
+            dev.adrian.chestindex.platform.ClientBlockChanges.firePlaced(level, pos, placer);
+            return;
+        }
         TrackerService tracker = current;
         if (tracker == null || !(level instanceof ServerLevel serverLevel)) return;
         if (!(placer instanceof Player player)) return;

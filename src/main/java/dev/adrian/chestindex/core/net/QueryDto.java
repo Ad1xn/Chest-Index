@@ -24,7 +24,7 @@ public final class QueryDto {
 
         public Set<Origin> origins() {
             return switch (originFilter) {
-                case ORIGIN_PLAYER_PLACED -> Set.of(Origin.PLAYER_PLACED, Origin.UNKNOWN);
+                case ORIGIN_PLAYER_PLACED -> Set.of(Origin.PLAYER_PLACED);
                 case ORIGIN_NATURAL -> Set.of(Origin.NATURAL);
                 default -> Set.of();
             };

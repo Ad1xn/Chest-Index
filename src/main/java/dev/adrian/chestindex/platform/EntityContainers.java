@@ -1,13 +1,15 @@
 package dev.adrian.chestindex.platform;
 
 import dev.adrian.chestindex.core.model.ContainerRecord;
-import dev.adrian.chestindex.core.model.Origin;
 import dev.adrian.chestindex.core.model.StackEntry;
 import dev.adrian.chestindex.core.store.StringPalette;
 import dev.adrian.chestindex.core.util.BlockKey;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.Container;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.vehicle.ContainerEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 
@@ -53,18 +55,28 @@ public final class EntityContainers {
 
             List<StackEntry> contents =
                     LiveContainerReader.read((Container) entity, palette);
+            boolean generated = isGenerated(level, entity);
             records.add(new Found(new ContainerRecord(
                     pos,
                     dimensionKey,
                     palette.intern(key.toString()),
-                    Origin.PLAYER_PLACED,
+                    ContainerRecord.decided(generated),
                     null,
                     false,
                     true,
                     null,
                     tick,
-                    contents), entity.getId()));
+                    contents,
+                    !generated), entity.getId()));
         }
         return records;
+    }
+
+    private static boolean isGenerated(Level level, Entity entity) {
+        if (entity instanceof ContainerEntity vehicle && vehicle.getContainerLootTable() != null) return true;
+        BlockPos pos = entity.blockPosition();
+        LevelChunk chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        if (chunk == null) return false;
+        return WorldGenProbe.isGenerated(level, chunk, pos, null);
     }
 }

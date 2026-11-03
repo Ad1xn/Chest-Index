@@ -10,6 +10,7 @@ import dev.adrian.chestindex.core.util.BlockKey;
 import dev.adrian.chestindex.platform.ChunkPosCompat;
 import dev.adrian.chestindex.platform.ContainerTypes;
 import dev.adrian.chestindex.platform.LiveContainerReader;
+import dev.adrian.chestindex.platform.WorldGenProbe;
 import dev.adrian.chestindex.server.TrackerService;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -22,6 +23,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -86,6 +88,7 @@ public final class ClientObserver {
         ClientChunkEvents.CHUNK_LOAD.register(ClientObserver::onChunkLoad);
 
         dev.adrian.chestindex.platform.ClientBlockChanges.listen(ClientObserver::onBlockChanged);
+        dev.adrian.chestindex.platform.ClientBlockChanges.listenForPlacements(ClientObserver::onBlockPlaced);
 
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (!(screen instanceof AbstractContainerScreen<?>)) return;
@@ -125,10 +128,17 @@ public final class ClientObserver {
 
             long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
 
-            if (tracker.index(dimensionId).get(key) != null) continue;
+            ContainerRecord known = tracker.index(dimensionId).get(key);
+            if (known != null && !known.isPlacementGuess()) continue;
+            if (!tracker.firstOriginCheck(dimensionId, key)) continue;
 
+            boolean generated = WorldGenProbe.isGenerated(level, chunk, pos, typeId);
+            if (known != null) {
+                if (generated) tracker.record(dimensionId, known.withOrigin(Origin.NATURAL, null));
+                continue;
+            }
             tracker.record(dimensionId, ContainerRecord.locationOnly(
-                    key, dimensionKey, tracker.palette().intern(typeId), Origin.UNKNOWN, tick));
+                    key, dimensionKey, tracker.palette().intern(typeId), generated, tick));
         }
 
         dropBrokenContainers(tracker, dimensionId, chunkKey, chunk);
@@ -146,6 +156,30 @@ public final class ClientObserver {
                 tracker.remove(dimensionId, pos);
             }
         }
+    }
+
+    private static void onBlockPlaced(Level level, BlockPos pos, LivingEntity placer) {
+        if (level != Minecraft.getInstance().level) return;
+        if (placer == null || placer != Minecraft.getInstance().player) return;
+        if (!BlockKey.isRepresentable(pos.getX(), pos.getY(), pos.getZ())) return;
+
+        TrackerService tracker = active();
+        if (tracker == null) return;
+
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity == null || !ContainerTypes.isContainer(blockEntity)) return;
+        String typeId = ContainerTypes.idOf(blockEntity);
+        if (typeId == null) return;
+
+        String dimensionId = dimensionOf(level);
+        long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
+        ContainerRecord existing = tracker.index(dimensionId).get(key);
+        tracker.record(dimensionId, existing != null
+                ? existing.withOrigin(Origin.PLAYER_PLACED, placer.getUUID())
+                : new ContainerRecord(key, tracker.palette().intern(dimensionId),
+                        tracker.palette().intern(typeId), Origin.PLAYER_PLACED, placer.getUUID(),
+                        false, true, null, level.getGameTime(), List.of()));
+        ClientIndex.touch();
     }
 
     private static void onBlockChanged(Level level, BlockPos pos) {
@@ -237,7 +271,7 @@ public final class ClientObserver {
             ContainerRecord existing = tracker.index(watchingDimension).get(other);
             if (existing != null && existing.contentsKnown()) {
                 tracker.record(watchingDimension, ContainerRecord.locationOnly(
-                        other, existing.dimensionId(), existing.typeId(), existing.origin(),
+                        other, existing.dimensionId(), existing.typeId(), existing.origin() == Origin.NATURAL,
                         client.level.getGameTime()));
             }
         }
@@ -251,13 +285,14 @@ public final class ClientObserver {
                 pos,
                 tracker.palette().intern(dimensionId),
                 tracker.palette().intern(typeId),
-                Origin.UNKNOWN,
+                Origin.PLAYER_PLACED,
                 null,
                 false,
                 true,
                 null,
                 tick,
-                contents));
+                contents,
+                true));
         ClientIndex.touch();
     }
 

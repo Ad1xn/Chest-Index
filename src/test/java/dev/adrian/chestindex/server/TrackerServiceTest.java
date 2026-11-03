@@ -123,9 +123,10 @@ class TrackerServiceTest {
     }
 
     @Test
-    void anObservationStillEstablishesClassificationWhenNoneWasKnown() {
+    void evidenceOverrulesAPlacementGuess() {
         tracker.record(DIM, observed(1));
-        assertEquals(Origin.UNKNOWN, tracker.index(DIM).get(POS).origin());
+        assertEquals(Origin.PLAYER_PLACED, tracker.index(DIM).get(POS).origin());
+        assertTrue(tracker.index(DIM).get(POS).isPlacementGuess());
 
         tracker.record(DIM, new ContainerRecord(POS, tracker.palette().intern(DIM),
                 tracker.palette().intern("minecraft:chest"), Origin.NATURAL, null,
@@ -200,5 +201,62 @@ class TrackerServiceTest {
         List<Integer> details = remapped.contents().get(0).details();
         assertEquals(1, details.size());
         assertEquals("ench:mending", tracker.palette().value(details.get(0)));
+    }
+
+    @Test
+    void aFormat3IndexLoadsWithNoUndecidedOriginAndNamesItsChunksForRefinement(@TempDir Path storage)
+            throws java.io.IOException {
+        long guessPos = BlockKey.pack(40, 64, 40);
+        long lootPos = BlockKey.pack(41, 64, 40);
+        long placedPos = BlockKey.pack(-20, 64, 3);
+        java.io.ByteArrayOutputStream raw = new java.io.ByteArrayOutputStream();
+        try (java.io.DataOutputStream out = new java.io.DataOutputStream(new java.util.zip.GZIPOutputStream(raw))) {
+            out.writeInt(0x43544958);
+            out.writeInt(3);
+            out.writeInt(0);
+            writeVarInt(out, 2);
+            out.writeUTF(DIM);
+            out.writeUTF("minecraft:chest");
+            writeVarInt(out, 3);
+            legacyRecord(out, guessPos, Origin.UNKNOWN.ordinal() | (1 << 3));
+            legacyRecord(out, lootPos, Origin.UNKNOWN.ordinal() | (1 << 2));
+            legacyRecord(out, placedPos, Origin.PLAYER_PLACED.ordinal() | (1 << 3));
+        }
+        java.nio.file.Files.write(storage.resolve("minecraft.overworld.idx"), raw.toByteArray());
+
+        TrackerService loaded = new TrackerService(storage);
+        loaded.load();
+
+        for (ContainerRecord record : loaded.index(DIM).all()) {
+            assertNotEquals(Origin.UNKNOWN, record.origin());
+        }
+        assertTrue(loaded.index(DIM).get(guessPos).isPlacementGuess());
+        assertEquals(Origin.NATURAL, loaded.index(DIM).get(lootPos).origin());
+        assertFalse(loaded.index(DIM).get(placedPos).isPlacementGuess());
+
+        assertEquals(java.util.Map.of(DIM, Set.of(BlockKey.chunkOf(guessPos))), loaded.takeLegacyGuesses());
+        assertTrue(loaded.takeLegacyGuesses().isEmpty());
+    }
+
+    private static void legacyRecord(java.io.DataOutputStream out, long pos, int flags) throws java.io.IOException {
+        out.writeLong(pos);
+        writeVarInt(out, 0);
+        writeVarInt(out, 1);
+        out.writeByte(flags);
+        writeVarLong(out, 7L);
+        writeVarInt(out, 0);
+    }
+
+    private static void writeVarInt(java.io.DataOutputStream out, int value) throws java.io.IOException {
+        writeVarLong(out, Integer.toUnsignedLong((value << 1) ^ (value >> 31)));
+    }
+
+    private static void writeVarLong(java.io.DataOutputStream out, long value) throws java.io.IOException {
+        long remaining = value;
+        while ((remaining & ~0x7FL) != 0) {
+            out.writeByte((int) (remaining & 0x7F) | 0x80);
+            remaining >>>= 7;
+        }
+        out.writeByte((int) remaining);
     }
 }

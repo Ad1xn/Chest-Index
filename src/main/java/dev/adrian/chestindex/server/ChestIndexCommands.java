@@ -207,10 +207,10 @@ public final class ChestIndexCommands {
 
             source.sendSuccess(() -> Component.literal("    ")
                     .append(count(origin(stats, Origin.PLAYER_PLACED))).append(label(" placed"))
+                    .append(label(" ("))
+                    .append(count(stats.placementGuesses())).append(label(" by elimination)"))
                     .append(bullet())
-                    .append(count(origin(stats, Origin.NATURAL))).append(label(" natural"))
-                    .append(bullet())
-                    .append(count(origin(stats, Origin.UNKNOWN))).append(label(" unknown"))
+                    .append(count(origin(stats, Origin.NATURAL))).append(label(" generated"))
                     .append(bullet())
                     .append(count(stats.unlooted())).append(label(" unlooted"))
                     .append(stats.unlooted() > 0 && !ChestIndexConfig.get().indexesGeneratedChests()

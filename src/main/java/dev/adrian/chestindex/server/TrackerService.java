@@ -10,6 +10,8 @@ import dev.adrian.chestindex.core.store.IndexCodec;
 import dev.adrian.chestindex.core.store.StringPalette;
 import dev.adrian.chestindex.platform.ContainerTypes;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,6 +29,10 @@ public final class TrackerService {
     private final Path storageRoot;
 
     private final Map<String, AtomicLong> generations = new ConcurrentHashMap<>();
+
+    private final Map<String, LongOpenHashSet> originChecked = new HashMap<>();
+
+    private final Map<String, Set<Long>> legacyGuesses = new HashMap<>();
 
     public TrackerService(Path storageRoot) {
         this.storageRoot = storageRoot;
@@ -71,8 +77,14 @@ public final class TrackerService {
         bump(dimensionId);
     }
 
+    public boolean firstOriginCheck(String dimensionId, long pos) {
+        return originChecked.computeIfAbsent(dimensionId, id -> new LongOpenHashSet()).add(pos);
+    }
+
     public ContainerRecord remove(String dimensionId, long pos) {
         ContainerRecord removed = index(dimensionId).remove(pos);
+        LongOpenHashSet checked = originChecked.get(dimensionId);
+        if (checked != null) checked.remove(pos);
         if (removed != null) bump(dimensionId);
         return removed;
     }
@@ -112,8 +124,12 @@ public final class TrackerService {
                         ChestIndex.LOG.warn("Skipping {}: its dimension id is missing from the palette", file);
                         continue;
                     }
-                    if (snapshot.version() < IndexCodec.FORMAT_VERSION) anyOlderThanCurrent = true;
-                    byDimension.put(dimensionId, reindex(snapshot, dimensionId));
+                    if (snapshot.version() < IndexCodec.OLDEST_KEPT_WITHOUT_RESCAN) anyOlderThanCurrent = true;
+                    WorldIndex restored = reindex(snapshot, dimensionId);
+                    byDimension.put(dimensionId, restored);
+                    if (snapshot.version() < IndexCodec.FIRST_BINARY_ORIGIN_VERSION) {
+                        noteLegacyGuesses(dimensionId, restored);
+                    }
                 } catch (IOException e) {
                     ChestIndex.LOG.warn("Could not read index {}: {}", file, e.toString());
                 }
@@ -123,6 +139,23 @@ public final class TrackerService {
         }
 
         if (anyOlderThanCurrent) forgetWhatWasScanned();
+    }
+
+    private void noteLegacyGuesses(String dimensionId, WorldIndex index) {
+        Set<Long> chunks = new java.util.LinkedHashSet<>();
+        for (ContainerRecord record : index.all()) {
+            if (record.isPlacementGuess()) chunks.add(record.chunkKey());
+        }
+        if (chunks.isEmpty()) return;
+        legacyGuesses.put(dimensionId, chunks);
+        ChestIndex.LOG.info("{}: {} chunk(s) hold containers of undecided origin from an older index",
+                dimensionId, chunks.size());
+    }
+
+    public Map<String, Set<Long>> takeLegacyGuesses() {
+        Map<String, Set<Long>> taken = Map.copyOf(legacyGuesses);
+        legacyGuesses.clear();
+        return taken;
     }
 
     private void forgetWhatWasScanned() {
@@ -159,7 +192,7 @@ public final class TrackerService {
 
         return new ContainerRecord(record.pos(), palette.intern(dimensionId), palette.intern(typeId),
                 record.origin(), record.owner(), record.unlooted(), record.contentsKnown(),
-                record.customName(), record.lastSeenTick(), contents);
+                record.customName(), record.lastSeenTick(), contents, record.originInferred());
     }
 
     private List<Integer> remapDetails(List<Integer> details, StringPalette from) {
@@ -174,6 +207,7 @@ public final class TrackerService {
 
     public void clearIndexes() {
         byDimension.clear();
+        originChecked.clear();
         generations.values().forEach(java.util.concurrent.atomic.AtomicLong::incrementAndGet);
     }
 

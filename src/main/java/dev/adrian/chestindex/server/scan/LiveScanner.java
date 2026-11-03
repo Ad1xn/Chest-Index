@@ -7,13 +7,13 @@ import dev.adrian.chestindex.core.util.BlockKey;
 import dev.adrian.chestindex.platform.ChunkPosCompat;
 import dev.adrian.chestindex.platform.ContainerTypes;
 import dev.adrian.chestindex.platform.LiveContainerReader;
+import dev.adrian.chestindex.platform.WorldGenProbe;
 import dev.adrian.chestindex.server.TrackerService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 
@@ -97,7 +97,7 @@ public final class LiveScanner {
             long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
             actual.add(key);
             tracker.record(dimensionId, toRecord(blockEntity, key, typeId, dimensionId, tick,
-                    naturalityOf(level, chunk, pos, key, dimensionId)));
+                    naturalityOf(level, chunk, pos, key, dimensionId, typeId)));
             found++;
         }
 
@@ -124,37 +124,21 @@ public final class LiveScanner {
         String typeId = ContainerTypes.idOf(blockEntity);
         if (typeId == null) return true;
         tracker.record(dimensionId, toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime(),
-                naturalityOf(level, chunk, blockPos, pos, dimensionId)));
+                naturalityOf(level, chunk, blockPos, pos, dimensionId, typeId)));
         return true;
     }
 
-    private Origin naturalityOf(ServerLevel level, LevelChunk chunk, BlockPos blockPos,
-                                long pos, String dimensionId) {
-        if (tracker.index(dimensionId).get(pos) != null) return Origin.UNKNOWN;
-        if (chunk == null) return Origin.UNKNOWN;
-        return structurePieceAt(level, chunk, blockPos) ? Origin.NATURAL : Origin.UNKNOWN;
-    }
-
-    private boolean structurePieceAt(ServerLevel level, LevelChunk chunk, BlockPos blockPos) {
-        var chunkSource = level.getChunkSource();
-
-        for (var entry : chunk.getAllReferences().entrySet()) {
-            for (long reference : entry.getValue()) {
-                LevelChunk startChunk = chunkSource
-                        .getChunkNow(ChunkPos.getX(reference), ChunkPos.getZ(reference));
-                if (startChunk == null) continue;
-
-                StructureStart start = startChunk.getStartForStructure(entry.getKey());
-                if (start == null || !start.isValid()) continue;
-
-                if (level.structureManager().structureHasPieceAt(blockPos, start)) return true;
-            }
-        }
-        return false;
+    private boolean naturalityOf(ServerLevel level, LevelChunk chunk, BlockPos blockPos,
+                                 long pos, String dimensionId, String typeId) {
+        if (chunk == null) return false;
+        ContainerRecord known = tracker.index(dimensionId).get(pos);
+        if (known != null && !known.isPlacementGuess()) return false;
+        if (!tracker.firstOriginCheck(dimensionId, pos)) return false;
+        return WorldGenProbe.isGenerated(level, chunk, blockPos, typeId);
     }
 
     private ContainerRecord toRecord(BlockEntity blockEntity, long pos, String typeId,
-                                     String dimensionId, long tick, Origin observed) {
+                                     String dimensionId, long tick, boolean generated) {
         boolean unlooted = blockEntity instanceof RandomizableContainerBlockEntity randomizable
                 && randomizable.getLootTable() != null;
 
@@ -167,7 +151,7 @@ public final class LiveScanner {
         }
 
         List<StackEntry> contents = LiveContainerReader.read((Container) blockEntity, tracker.palette());
-        return new ContainerRecord(pos, dimId, typeKey, observed, null,
-                false, true, null, tick, contents);
+        return new ContainerRecord(pos, dimId, typeKey, ContainerRecord.decided(generated), null,
+                false, true, null, tick, contents, !generated);
     }
 }

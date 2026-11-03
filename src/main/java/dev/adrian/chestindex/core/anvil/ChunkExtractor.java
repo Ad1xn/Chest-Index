@@ -1,11 +1,11 @@
 package dev.adrian.chestindex.core.anvil;
 
 import dev.adrian.chestindex.core.model.ContainerRecord;
-import dev.adrian.chestindex.core.model.Origin;
 import dev.adrian.chestindex.core.model.StackDetail;
 import dev.adrian.chestindex.core.model.StackEntry;
 import dev.adrian.chestindex.core.store.StringPalette;
 import dev.adrian.chestindex.core.util.BlockKey;
+import dev.adrian.chestindex.core.util.MonsterRooms;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +19,12 @@ public final class ChunkExtractor {
 
     private ChunkExtractor() {}
 
-    public record ChunkContents(List<ContainerRecord> containers, List<StructureBox> structureBoxes) {}
+    public record ChunkContents(List<ContainerRecord> containers, List<StructureBox> structureBoxes,
+                                List<Long> spawners, List<Long> structureReferences) {
+        public ChunkContents(List<ContainerRecord> containers, List<StructureBox> structureBoxes) {
+            this(containers, structureBoxes, List.of(), List.of());
+        }
+    }
 
     public record StructureBox(String structureId, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
         public boolean contains(int x, int y, int z) {
@@ -30,12 +35,14 @@ public final class ChunkExtractor {
     public static ChunkContents extract(NbtCompound chunk, Set<String> trackedIds,
                                         int dimensionId, StringPalette palette, long tick) {
         List<ContainerRecord> containers = new ArrayList<>();
+        List<Long> spawners = List.of();
 
         for (NbtCompound blockEntity : chunk.getCompoundList("block_entities")) {
             String id = blockEntity.getString("id");
             if (id == null) continue;
 
-            if (!isTracked(blockEntity, id, trackedIds)) continue;
+            boolean spawner = id.equals(MonsterRooms.SPAWNER_ID);
+            if (!spawner && !isTracked(blockEntity, id, trackedIds)) continue;
 
             int x = blockEntity.getInt("x", Integer.MIN_VALUE);
             int y = blockEntity.getInt("y", Integer.MIN_VALUE);
@@ -43,8 +50,13 @@ public final class ChunkExtractor {
             if (x == Integer.MIN_VALUE || y == Integer.MIN_VALUE || z == Integer.MIN_VALUE) continue;
             if (!BlockKey.isRepresentable(x, y, z)) continue;
 
-            boolean unlooted = blockEntity.contains("LootTable") || blockEntity.contains("loot_table");
-            Origin origin = unlooted ? Origin.NATURAL : Origin.UNKNOWN;
+            if (spawner) {
+                if (spawners.isEmpty()) spawners = new ArrayList<>(2);
+                spawners.add(BlockKey.pack(x, y, z));
+                continue;
+            }
+
+            boolean unlooted = hasLootTable(blockEntity);
 
             List<StackEntry> contents = List.of();
             if (!unlooted) {
@@ -57,23 +69,27 @@ public final class ChunkExtractor {
                     BlockKey.pack(x, y, z),
                     dimensionId,
                     palette.intern(id),
-                    origin,
+                    ContainerRecord.decided(unlooted),
                     null,
                     unlooted,
                     !unlooted,
                     PlainText.of(blockEntity.getString("CustomName")),
                     tick,
-                    contents));
+                    contents,
+                    !unlooted));
         }
 
-        return new ChunkContents(containers, extractStructureBoxes(chunk));
+        return new ChunkContents(containers, extractStructureBoxes(chunk), spawners, structureReferences(chunk));
+    }
+
+    public static boolean hasLootTable(NbtCompound blockEntity) {
+        return blockEntity.contains("LootTable") || blockEntity.contains("loot_table")
+                || blockEntity.contains("LootTableSeed") || blockEntity.contains("loot_table_seed");
     }
 
     private static boolean isTracked(NbtCompound blockEntity, String id, Set<String> trackedIds) {
         if (trackedIds != null) return trackedIds.contains(id);
-        return blockEntity.contains("Items")
-                || blockEntity.contains("LootTable")
-                || blockEntity.contains("loot_table");
+        return blockEntity.contains("Items") || hasLootTable(blockEntity);
     }
 
     private static void collectItems(List<NbtCompound> items, List<StackEntry> out, int depth, StringPalette palette) {
@@ -169,7 +185,24 @@ public final class ChunkExtractor {
         return value;
     }
 
-    private static List<StructureBox> extractStructureBoxes(NbtCompound chunk) {
+    public static List<Long> structureReferences(NbtCompound chunk) {
+        NbtCompound structures = chunk.getCompound("structures");
+        if (structures == null) return List.of();
+        NbtCompound references = structures.getCompound("References");
+        if (references == null) return List.of();
+
+        List<Long> starts = new ArrayList<>();
+        for (String structureId : references.keys()) {
+            long[] chunks = references.getLongArray(structureId);
+            if (chunks == null) continue;
+            for (long start : chunks) {
+                if (!starts.contains(start)) starts.add(start);
+            }
+        }
+        return starts;
+    }
+
+    public static List<StructureBox> extractStructureBoxes(NbtCompound chunk) {
         NbtCompound structures = chunk.getCompound("structures");
         if (structures == null) return List.of();
         NbtCompound starts = structures.getCompound("starts");
