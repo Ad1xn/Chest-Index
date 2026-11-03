@@ -133,8 +133,11 @@ public final class LiveScanner {
         if (chunk == null) return false;
         ContainerRecord known = tracker.index(dimensionId).get(pos);
         if (known != null && !known.isPlacementGuess()) return false;
-        if (!tracker.firstOriginCheck(dimensionId, pos)) return false;
-        return WorldGenProbe.isGenerated(level, chunk, blockPos, typeId);
+        if (tracker.originChecked(dimensionId, pos)) return false;
+
+        WorldGenProbe.Verdict verdict = WorldGenProbe.check(level, chunk, blockPos, typeId);
+        if (verdict != WorldGenProbe.Verdict.UNSURE) tracker.markOriginChecked(dimensionId, pos);
+        return verdict == WorldGenProbe.Verdict.GENERATED;
     }
 
     private ContainerRecord toRecord(BlockEntity blockEntity, long pos, String typeId,

@@ -77,8 +77,13 @@ public final class TrackerService {
         bump(dimensionId);
     }
 
-    public boolean firstOriginCheck(String dimensionId, long pos) {
-        return originChecked.computeIfAbsent(dimensionId, id -> new LongOpenHashSet()).add(pos);
+    public boolean originChecked(String dimensionId, long pos) {
+        LongOpenHashSet checked = originChecked.get(dimensionId);
+        return checked != null && checked.contains(pos);
+    }
+
+    public void markOriginChecked(String dimensionId, long pos) {
+        originChecked.computeIfAbsent(dimensionId, id -> new LongOpenHashSet()).add(pos);
     }
 
     public ContainerRecord remove(String dimensionId, long pos) {

@@ -130,9 +130,11 @@ public final class ClientObserver {
 
             ContainerRecord known = tracker.index(dimensionId).get(key);
             if (known != null && !known.isPlacementGuess()) continue;
-            if (!tracker.firstOriginCheck(dimensionId, key)) continue;
+            if (tracker.originChecked(dimensionId, key)) continue;
 
-            boolean generated = WorldGenProbe.isGenerated(level, chunk, pos, typeId);
+            WorldGenProbe.Verdict verdict = WorldGenProbe.check(level, chunk, pos, typeId);
+            if (verdict != WorldGenProbe.Verdict.UNSURE) tracker.markOriginChecked(dimensionId, key);
+            boolean generated = verdict == WorldGenProbe.Verdict.GENERATED;
             if (known != null) {
                 if (generated) tracker.record(dimensionId, known.withOrigin(Origin.NATURAL, null));
                 continue;

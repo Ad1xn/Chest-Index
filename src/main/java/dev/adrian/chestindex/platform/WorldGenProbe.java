@@ -21,21 +21,29 @@ public final class WorldGenProbe {
 
     private WorldGenProbe() {}
 
-    public static boolean isGenerated(Level level, LevelChunk chunk, BlockPos pos, String typeId) {
-        if (level instanceof ServerLevel serverLevel && chunk != null && inStructurePiece(serverLevel, chunk, pos)) {
-            return true;
+    public enum Verdict { GENERATED, PLACED, UNSURE }
+
+    public static Verdict check(Level level, LevelChunk chunk, BlockPos pos, String typeId) {
+        Resident blocks = new Resident(level, chunk);
+        if (level instanceof ServerLevel serverLevel && chunk != null
+                && inStructurePiece(serverLevel, chunk, pos, blocks)) {
+            return Verdict.GENERATED;
         }
-        if (MonsterRooms.CHEST_ID.equals(typeId) && nearMonsterRoomSpawner(level, pos)) return true;
-        return surroundedByWorldGen(level, pos);
+        if (MonsterRooms.CHEST_ID.equals(typeId) && nearMonsterRoomSpawner(pos, blocks)) return Verdict.GENERATED;
+        if (WorldGenMarkers.surroundedByWorldGen(BlockKey.pack(pos.getX(), pos.getY(), pos.getZ()), blocks)) {
+            return Verdict.GENERATED;
+        }
+        return blocks.missed ? Verdict.UNSURE : Verdict.PLACED;
     }
 
-    public static boolean inStructurePiece(ServerLevel level, LevelChunk chunk, BlockPos pos) {
-        var chunkSource = level.getChunkSource();
+    public static boolean isGenerated(Level level, LevelChunk chunk, BlockPos pos, String typeId) {
+        return check(level, chunk, pos, typeId) == Verdict.GENERATED;
+    }
 
+    private static boolean inStructurePiece(ServerLevel level, LevelChunk chunk, BlockPos pos, Resident blocks) {
         for (var entry : chunk.getAllReferences().entrySet()) {
             for (long reference : entry.getValue()) {
-                LevelChunk startChunk = chunkSource
-                        .getChunkNow(ChunkPos.getX(reference), ChunkPos.getZ(reference));
+                LevelChunk startChunk = blocks.chunkAt(ChunkPos.getX(reference) << 4, ChunkPos.getZ(reference) << 4);
                 if (startChunk == null) continue;
 
                 StructureStart start = startChunk.getStartForStructure(entry.getKey());
@@ -47,8 +55,7 @@ public final class WorldGenProbe {
         return false;
     }
 
-    public static boolean nearMonsterRoomSpawner(Level level, BlockPos chest) {
-        Resident blocks = new Resident(level);
+    private static boolean nearMonsterRoomSpawner(BlockPos chest, Resident blocks) {
         BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
         for (int dx = -MonsterRooms.REACH; dx <= MonsterRooms.REACH; dx++) {
             for (int dz = -MonsterRooms.REACH; dz <= MonsterRooms.REACH; dz++) {
@@ -60,31 +67,32 @@ public final class WorldGenProbe {
         return false;
     }
 
-    public static boolean surroundedByWorldGen(Level level, BlockPos pos) {
-        return WorldGenMarkers.surroundedByWorldGen(
-                BlockKey.pack(pos.getX(), pos.getY(), pos.getZ()), new Resident(level));
-    }
-
     private static String idOf(Block block) {
         return BLOCK_IDS.computeIfAbsent(block, b -> BuiltInRegistries.BLOCK.getKey(b).toString());
     }
 
     private static final class Resident implements WorldGenMarkers.Blocks {
         private final Level level;
+        private final LevelChunk own;
         private final BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
         private LevelChunk chunk;
         private int chunkX = Integer.MIN_VALUE;
         private int chunkZ = Integer.MIN_VALUE;
+        boolean missed;
 
-        Resident(Level level) {
+        Resident(Level level, LevelChunk own) {
             this.level = level;
+            this.own = own;
         }
 
         LevelChunk chunkAt(int x, int z) {
             int cx = x >> 4;
             int cz = z >> 4;
             if (cx != chunkX || cz != chunkZ) {
-                chunk = level.getChunkSource().getChunkNow(cx, cz);
+                chunk = own != null && ChunkPosCompat.x(own.getPos()) == cx && ChunkPosCompat.z(own.getPos()) == cz
+                        ? own
+                        : level.getChunkSource().getChunkNow(cx, cz);
+                if (chunk == null) missed = true;
                 chunkX = cx;
                 chunkZ = cz;
             }
