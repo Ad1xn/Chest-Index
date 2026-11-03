@@ -98,6 +98,27 @@ public final class ClientObserver {
         });
     }
 
+    public static int recheckLoaded() {
+        Minecraft client = Minecraft.getInstance();
+        TrackerService tracker = active();
+        if (tracker == null || client.level == null || client.player == null) return -1;
+
+        tracker.forgetOriginChecks();
+        int radius = client.options.getEffectiveRenderDistance();
+        int centreX = client.player.getBlockX() >> 4;
+        int centreZ = client.player.getBlockZ() >> 4;
+        int chunks = 0;
+        for (int cx = centreX - radius; cx <= centreX + radius; cx++) {
+            for (int cz = centreZ - radius; cz <= centreZ + radius; cz++) {
+                LevelChunk chunk = client.level.getChunkSource().getChunkNow(cx, cz);
+                if (chunk == null) continue;
+                onChunkLoad(client.level, chunk);
+                chunks++;
+            }
+        }
+        return chunks;
+    }
+
     private static void onChunkLoad(ClientLevel level, LevelChunk chunk) {
         TrackerService tracker = active();
         if (tracker == null) return;

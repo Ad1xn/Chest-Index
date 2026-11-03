@@ -82,6 +82,20 @@ public final class TrackerService {
         return checked != null && checked.contains(pos);
     }
 
+    public void forgetOriginChecks() {
+        originChecked.clear();
+    }
+
+    public Map<String, Set<Long>> indexedChunks() {
+        Map<String, Set<Long>> chunks = new HashMap<>();
+        for (Map.Entry<String, WorldIndex> entry : byDimension.entrySet()) {
+            Set<Long> keys = new java.util.LinkedHashSet<>();
+            for (ContainerRecord record : entry.getValue().all()) keys.add(record.chunkKey());
+            if (!keys.isEmpty()) chunks.put(entry.getKey(), keys);
+        }
+        return chunks;
+    }
+
     public void markOriginChecked(String dimensionId, long pos) {
         originChecked.computeIfAbsent(dimensionId, id -> new LongOpenHashSet()).add(pos);
     }

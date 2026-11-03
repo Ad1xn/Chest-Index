@@ -1,8 +1,10 @@
 package dev.adrian.chestindex.client.ui;
 
 import dev.adrian.chestindex.ChestIndex;
+import dev.adrian.chestindex.client.index.ClientObserver;
 import dev.adrian.chestindex.client.index.IndexStore;
 import dev.adrian.chestindex.client.platform.Gfx;
+import dev.adrian.chestindex.server.Trackers;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
@@ -43,6 +45,8 @@ public final class IndexScreen extends Screen {
     private int armed = -1;
 
     private String problem;
+
+    private String status;
 
     private String hoverTitle;
 
@@ -200,19 +204,119 @@ public final class IndexScreen extends Screen {
                 tooltipAvoidBottom = y + ROW_H;
             }
 
-            int buttonX = right - 4 - BUTTON_SIZE;
-            gfx.text(font, Component.literal(truncate(location.name(), buttonX - left - 8)),
+            int buttonX = deleteX(right);
+            int recheckX = recheckX(location, right);
+            gfx.text(font, Component.literal(truncate(location.name(), recheckX - left - 8)),
                     left + 4, y + 4, Panel.TEXT_MAIN);
-            gfx.text(font, Component.literal(truncate(location.describe(), buttonX - left - 8)),
+            gfx.text(font, Component.literal(truncate(location.describe(), recheckX - left - 8)),
                     left + 4, y + 14, location.active() ? Panel.ON : Panel.TEXT_MUTED);
 
-            boolean primed = index == armed;
             int buttonY = y + (ROW_H - BUTTON_SIZE) / 2;
-            Panel.raised(gfx, buttonX, buttonY, BUTTON_SIZE, BUTTON_SIZE, false);
-            if (primed) {
-                gfx.fill(buttonX, buttonY, buttonX + BUTTON_SIZE - 1, buttonY + BUTTON_SIZE - 1, DANGER);
+            drawRecheck(gfx, location, recheckX, buttonY, mouseX, mouseY);
+            if (!hosted(location)) {
+                boolean primed = index == armed;
+                Panel.raised(gfx, buttonX, buttonY, BUTTON_SIZE, BUTTON_SIZE, false);
+                if (primed) {
+                    gfx.fill(buttonX, buttonY, buttonX + BUTTON_SIZE - 1, buttonY + BUTTON_SIZE - 1, DANGER);
+                }
+                bin(gfx, buttonX + 3, buttonY + 3, primed ? Panel.TEXT_MAIN : Panel.ICON);
             }
-            bin(gfx, buttonX + 3, buttonY + 3, primed ? Panel.TEXT_MAIN : Panel.ICON);
+        }
+    }
+
+    private static boolean hosted(IndexStore.Location location) {
+        return location.kind() == IndexStore.Kind.HOSTED;
+    }
+
+    private static int deleteX(int right) {
+        return right - 4 - BUTTON_SIZE;
+    }
+
+    private static int recheckX(IndexStore.Location location, int right) {
+        return hosted(location) ? deleteX(right) : deleteX(right) - 3 - BUTTON_SIZE;
+    }
+
+    private String recheckBlocker(IndexStore.Location location) {
+        return switch (location.kind()) {
+            case WORLD -> location.active() ? null : "Open this world to re-check it.";
+            case SERVER -> location.active() ? null : "Join this server to re-check it.";
+            case HOSTED -> IndexStore.mayRecheckHosted() ? null : "Only operators can re-check the server's index.";
+        };
+    }
+
+    private void drawRecheck(Gfx gfx, IndexStore.Location location, int x, int y, int mouseX, int mouseY) {
+        String blocker = recheckBlocker(location);
+        Panel.raised(gfx, x, y, BUTTON_SIZE, BUTTON_SIZE, false);
+        if (within(mouseX, mouseY, x, y, BUTTON_SIZE, BUTTON_SIZE)) {
+            if (blocker == null) gfx.fill(x + 1, y + 1, x + BUTTON_SIZE - 1, y + BUTTON_SIZE - 1, Panel.HOVER);
+            hoverTitle = "Re-check";
+            pendingTooltip = new ArrayList<>(List.of("Re-check",
+                    "Reads every indexed chunk again: contents,",
+                    "and whether each container was built or generated.",
+                    "Containers you were seen placing stay built."));
+            if (blocker != null) {
+                pendingTooltip.add("");
+                pendingTooltip.add(blocker);
+            }
+        }
+        recheckIcon(gfx, x + 3, y + 3, blocker == null ? Panel.ICON : Panel.TEXT_MUTED);
+    }
+
+    private static final String[] RECHECK_ICON = {
+            ".###.#",
+            "#...##",
+            "#..###",
+            "#.....",
+            "#....#",
+            ".####."
+    };
+
+    private void recheckIcon(Gfx gfx, int x, int y, int colour) {
+        for (int row = 0; row < RECHECK_ICON.length; row++) {
+            String line = RECHECK_ICON[row];
+            for (int col = 0; col < line.length(); col++) {
+                if (line.charAt(col) == '#') gfx.fill(x + col, y + row, x + col + 1, y + row + 1, colour);
+            }
+        }
+    }
+
+    private void recheck(IndexStore.Location location) {
+        problem = recheckBlocker(location);
+        status = null;
+        if (problem != null) return;
+
+        switch (location.kind()) {
+            case WORLD -> {
+                var server = minecraft.getSingleplayerServer();
+                if (server == null) {
+                    problem = "Open this world to re-check it.";
+                    return;
+                }
+                status = "Starting the re-check...";
+                server.execute(() -> {
+                    Trackers.Recheck result = Trackers.recheck();
+                    minecraft.execute(() -> {
+                        if (result.started()) {
+                            status = "Re-checking " + String.format("%,d", result.chunks()) + " chunks in the background.";
+                        } else {
+                            status = null;
+                            problem = result.problem();
+                        }
+                    });
+                });
+            }
+            case SERVER -> {
+                int chunks = ClientObserver.recheckLoaded();
+                if (chunks < 0) {
+                    problem = "Join this server to re-check it.";
+                } else {
+                    status = "Re-checked the " + chunks + " chunks around you.";
+                }
+            }
+            case HOSTED -> {
+                minecraft.getConnection().sendCommand("chestindex recheck");
+                status = "Asked the server - its answer is in chat.";
+            }
         }
     }
 
@@ -220,8 +324,10 @@ public final class IndexScreen extends Screen {
         List<String> lines = new ArrayList<>();
         lines.add(location.name());
         lines.add(location.describe());
-        lines.add("");
-        lines.addAll(wrapPath(location.directory().toString()));
+        if (location.directory() != null) {
+            lines.add("");
+            lines.addAll(wrapPath(location.directory().toString()));
+        }
         return lines;
     }
 
@@ -257,6 +363,8 @@ public final class IndexScreen extends Screen {
         String footer;
         if (problem != null) {
             footer = problem;
+        } else if (status != null) {
+            footer = status;
         } else if (armed >= 0) {
             footer = "Click again to delete it. Scanning rebuilds it.";
         } else {
@@ -300,11 +408,20 @@ public final class IndexScreen extends Screen {
         if (index < 0) return super.mouseClicked(event, doubleClick);
 
         int right = rowsX() + rowsW();
-        if (mouseX < right - 4 - BUTTON_SIZE || mouseX >= right - 4) return true;
+        IndexStore.Location location = locations.get(index);
+        int recheckX = recheckX(location, right);
+        if (mouseX >= recheckX && mouseX < recheckX + BUTTON_SIZE) {
+            armed = -1;
+            VanillaButton.playClick();
+            recheck(location);
+            return true;
+        }
+        if (hosted(location) || mouseX < deleteX(right) || mouseX >= right - 4) return true;
 
         if (armed != index) {
             armed = index;
             problem = null;
+            status = null;
             VanillaButton.playClick();
             return true;
         }
@@ -317,6 +434,7 @@ public final class IndexScreen extends Screen {
             ChestIndex.LOG.warn("Could not delete a stored index: {}", failed.toString());
         }
         armed = -1;
+        status = null;
         VanillaButton.playClick();
         scroll = Math.min(scroll, maxScroll());
         return true;

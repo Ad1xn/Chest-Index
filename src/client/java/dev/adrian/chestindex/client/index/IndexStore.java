@@ -1,9 +1,11 @@
 package dev.adrian.chestindex.client.index;
 
 import dev.adrian.chestindex.ChestIndex;
+import dev.adrian.chestindex.client.net.ServerLink;
 import dev.adrian.chestindex.server.Trackers;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,7 +20,8 @@ public final class IndexStore {
 
     public enum Kind {
         WORLD,
-        SERVER
+        SERVER,
+        HOSTED
     }
 
     public record Location(String name, Path directory, Kind kind,
@@ -30,6 +33,7 @@ public final class IndexStore {
         }
 
         public String describe() {
+            if (kind == Kind.HOSTED) return "Kept by the server - in use now";
             String dims = dimensions + (dimensions == 1 ? " dimension" : " dimensions");
             return active ? dims + " - " + size() + " - in use now" : dims + " - " + size();
         }
@@ -77,7 +81,25 @@ public final class IndexStore {
 
         found.sort(Comparator.comparing(Location::kind).thenComparing(
                 Comparator.comparingLong(Location::bytes).reversed()));
+
+        Location hosted = hosted();
+        if (hosted != null) found.add(0, hosted);
         return found;
+    }
+
+    private static Location hosted() {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.hasSingleplayerServer() || client.getConnection() == null) return null;
+        if (ServerLink.state() != ServerLink.State.PRESENT) return null;
+        ServerData server = client.getCurrentServer();
+        return new Location(server == null ? "This server" : server.name, null, Kind.HOSTED, 0, 0, true);
+    }
+
+    public static boolean mayRecheckHosted() {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.getConnection() == null) return false;
+        var chestindex = client.getConnection().getCommands().getRoot().getChild("chestindex");
+        return chestindex != null && chestindex.getChild("recheck") != null;
     }
 
     private static Location read(String name, Path directory, Kind kind, boolean active) {

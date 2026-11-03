@@ -130,7 +130,11 @@ public final class RegionScanner {
         Thread thread = new Thread(() -> {
             try {
                 if (!refine.isEmpty()) refineChunks(worldRoot, refine, tick);
-                if (scan && !cancelled.get()) scanWorld(worldRoot, tick);
+                if (scan && !cancelled.get()) {
+                    scanWorld(worldRoot, tick);
+                } else if (!refine.isEmpty()) {
+                    announceFinished("re-check");
+                }
             } catch (Throwable t) {
                 ChestIndex.LOG.error("Region scan failed", t);
             } finally {
@@ -209,10 +213,10 @@ public final class RegionScanner {
                 chunksRead.get(), containersFound.get(), chunksFailed.get(),
                 allRegions.size() - pending.size());
 
-        announceFinished();
+        announceFinished("scan");
     }
 
-    private void announceFinished() {
+    private void announceFinished(String what) {
         MinecraftServer server = dev.adrian.chestindex.server.Trackers.server();
         if (server == null) return;
 
@@ -224,7 +228,7 @@ public final class RegionScanner {
         server.execute(() -> {
             Component message = Component.literal("ChestIndex  ")
                     .withStyle(ChatFormatting.GRAY)
-                    .append(Component.literal(wasCancelled ? "scan cancelled" : "scan finished")
+                    .append(Component.literal(what + (wasCancelled ? " cancelled" : " finished"))
                             .withStyle(ChatFormatting.WHITE))
                     .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
                     .append(Component.literal(String.format("%,d", containers))

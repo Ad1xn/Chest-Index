@@ -46,6 +46,8 @@ public final class ChestIndexCommands {
                                 .executes(ctx -> scanWorld(ctx.getSource(), true)))
                         .then(Commands.literal("cancel")
                                 .executes(ctx -> cancelScan(ctx.getSource()))))
+                .then(Commands.literal("recheck")
+                        .executes(ctx -> recheck(ctx.getSource())))
                 .then(Commands.literal("access")
                         .executes(ctx -> showAccess(ctx.getSource()))
                         .then(Commands.argument("tier", StringArgumentType.word())
@@ -155,6 +157,17 @@ public final class ChestIndexCommands {
                         + "changed since the last scan. Use /chestindex scanworld override "
                         + "to throw the index away and read everything again."), false);
         return 1;
+    }
+
+    private static int recheck(CommandSourceStack source) {
+        Trackers.Recheck result = Trackers.recheck();
+        if (!result.started()) {
+            source.sendFailure(Component.literal(result.problem()));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Re-checking the " + String.format("%,d", result.chunks())
+                + " indexed chunks in the background - contents and where each container came from."), true);
+        return result.chunks();
     }
 
     private static int cancelScan(CommandSourceStack source) {

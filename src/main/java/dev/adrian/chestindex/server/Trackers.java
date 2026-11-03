@@ -169,6 +169,30 @@ public final class Trackers {
         return refreshed;
     }
 
+    public record Recheck(boolean started, int chunks, String problem) {}
+
+    public static Recheck recheck() {
+        TrackerService tracker = current;
+        var scanner = regionScanner;
+        var minecraftServer = server;
+        if (tracker == null || scanner == null || minecraftServer == null) {
+            return new Recheck(false, 0, "ChestIndex is not active on this world.");
+        }
+        if (scanner.isRunning()) {
+            return new Recheck(false, 0, "A scan is already running.");
+        }
+
+        var chunks = tracker.indexedChunks();
+        int total = 0;
+        for (var keys : chunks.values()) total += keys.size();
+        if (total == 0) return new Recheck(false, 0, "Nothing is indexed yet.");
+
+        tracker.forgetOriginChecks();
+        boolean started = scanner.start(minecraftServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT),
+                minecraftServer.overworld().getGameTime(), chunks, false);
+        return started ? new Recheck(true, total, null) : new Recheck(false, 0, "Could not start the re-check.");
+    }
+
     public static void liveScanChunk(String dimensionId, long chunkKey) {
         TrackerService tracker = current;
         if (tracker == null) return;
