@@ -71,6 +71,11 @@ public final class AnvilWorldView implements OriginResolver.World, Closeable {
         return chunk(BlockKey.chunkKey(x >> 4, z >> 4)).blocks().idAt(x, y, z);
     }
 
+    @Override
+    public String facingAt(int x, int y, int z) {
+        return chunk(BlockKey.chunkKey(x >> 4, z >> 4)).blocks().facingAt(x, y, z);
+    }
+
     private ChunkView chunk(long chunkKey) {
         ChunkView cached = chunks.get(chunkKey);
         if (cached != null) return cached;

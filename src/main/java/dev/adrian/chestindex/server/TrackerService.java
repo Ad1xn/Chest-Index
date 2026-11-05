@@ -5,9 +5,12 @@ import dev.adrian.chestindex.core.index.IndexQuery;
 import dev.adrian.chestindex.core.index.SearchResult;
 import dev.adrian.chestindex.core.index.WorldIndex;
 import dev.adrian.chestindex.core.model.ContainerRecord;
+import dev.adrian.chestindex.core.model.Origin;
 import dev.adrian.chestindex.core.model.StackEntry;
 import dev.adrian.chestindex.core.store.IndexCodec;
 import dev.adrian.chestindex.core.store.StringPalette;
+import dev.adrian.chestindex.core.util.BuiltEvidence;
+import dev.adrian.chestindex.core.util.ShulkerMachines;
 import dev.adrian.chestindex.platform.ContainerTypes;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -146,8 +149,8 @@ public final class TrackerService {
                     if (snapshot.version() < IndexCodec.OLDEST_KEPT_WITHOUT_RESCAN) anyOlderThanCurrent = true;
                     WorldIndex restored = reindex(snapshot, dimensionId);
                     byDimension.put(dimensionId, restored);
-                    if (snapshot.version() < IndexCodec.FIRST_BINARY_ORIGIN_VERSION) {
-                        noteLegacyGuesses(dimensionId, restored);
+                    if (snapshot.version() < IndexCodec.FIRST_BUILT_EVIDENCE_VERSION) {
+                        noteLegacyGuesses(dimensionId, restored, snapshot.version());
                     }
                 } catch (IOException e) {
                     ChestIndex.LOG.warn("Could not read index {}: {}", file, e.toString());
@@ -160,15 +163,23 @@ public final class TrackerService {
         if (anyOlderThanCurrent) forgetWhatWasScanned();
     }
 
-    private void noteLegacyGuesses(String dimensionId, WorldIndex index) {
+    private void noteLegacyGuesses(String dimensionId, WorldIndex index, int version) {
         Set<Long> chunks = new java.util.LinkedHashSet<>();
-        for (ContainerRecord record : index.all()) {
-            if (record.isPlacementGuess()) chunks.add(record.chunkKey());
+        for (ContainerRecord record : List.copyOf(index.all())) {
+            ContainerRecord settled = BuiltEvidence.settle(record, null);
+            if (settled != record) index.put(settled);
+            if (needsAnotherLook(settled, version)) chunks.add(record.chunkKey());
         }
         if (chunks.isEmpty()) return;
         legacyGuesses.put(dimensionId, chunks);
-        ChestIndex.LOG.info("{}: {} chunk(s) hold containers of undecided origin from an older index",
+        ChestIndex.LOG.info("{}: {} chunk(s) hold containers to look at again after an upgrade",
                 dimensionId, chunks.size());
+    }
+
+    private boolean needsAnotherLook(ContainerRecord record, int version) {
+        if (version < IndexCodec.FIRST_BINARY_ORIGIN_VERSION && record.isPlacementGuess()) return true;
+        if (record.origin() == Origin.NATURAL && !record.unlooted()) return true;
+        return ShulkerMachines.isShulkerBox(palette.value(record.typeId()));
     }
 
     public Map<String, Set<Long>> takeLegacyGuesses() {
@@ -211,7 +222,7 @@ public final class TrackerService {
 
         return new ContainerRecord(record.pos(), palette.intern(dimensionId), palette.intern(typeId),
                 record.origin(), record.owner(), record.unlooted(), record.contentsKnown(),
-                record.customName(), record.lastSeenTick(), contents, record.originInferred());
+                record.customName(), record.lastSeenTick(), contents, record.originInferred(), record.inMachine());
     }
 
     private List<Integer> remapDetails(List<Integer> details, StringPalette from) {

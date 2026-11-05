@@ -17,7 +17,8 @@ public record ContainerRecord(
         String customName,
         long lastSeenTick,
         List<StackEntry> contents,
-        boolean originInferred
+        boolean originInferred,
+        boolean inMachine
 ) {
     public ContainerRecord {
         Objects.requireNonNull(origin, "origin");
@@ -38,6 +39,19 @@ public record ContainerRecord(
                            long lastSeenTick, List<StackEntry> contents) {
         this(pos, dimensionId, typeId, origin, owner, unlooted, contentsKnown, customName,
                 lastSeenTick, contents, false);
+    }
+
+    public ContainerRecord(long pos, int dimensionId, int typeId, Origin origin, UUID owner,
+                           boolean unlooted, boolean contentsKnown, String customName,
+                           long lastSeenTick, List<StackEntry> contents, boolean originInferred) {
+        this(pos, dimensionId, typeId, origin, owner, unlooted, contentsKnown, customName,
+                lastSeenTick, contents, originInferred, false);
+    }
+
+    public ContainerRecord inMachine(boolean nowInMachine) {
+        if (nowInMachine == inMachine) return this;
+        return new ContainerRecord(pos, dimensionId, typeId, origin, owner, unlooted, contentsKnown, customName,
+                lastSeenTick, contents, originInferred, nowInMachine);
     }
 
     public static Origin decided(boolean generated) {
@@ -74,7 +88,7 @@ public record ContainerRecord(
         if (surer == this && knownOwner == owner) return this;
 
         return new ContainerRecord(pos, dimensionId, typeId, surer.origin, knownOwner,
-                unlooted, contentsKnown, customName, lastSeenTick, contents, surer.originInferred);
+                unlooted, contentsKnown, customName, lastSeenTick, contents, surer.originInferred, inMachine);
     }
 
     public boolean sameDataAs(ContainerRecord other) {
@@ -84,6 +98,7 @@ public record ContainerRecord(
                 && typeId == other.typeId
                 && origin == other.origin
                 && originInferred == other.originInferred
+                && inMachine == other.inMachine
                 && unlooted == other.unlooted
                 && contentsKnown == other.contentsKnown
                 && Objects.equals(owner, other.owner)
@@ -114,7 +129,7 @@ public record ContainerRecord(
 
     public ContainerRecord withContents(List<StackEntry> newContents, String newCustomName, long tick) {
         return new ContainerRecord(pos, dimensionId, typeId, origin, owner, unlooted, true, newCustomName, tick,
-                newContents, originInferred);
+                newContents, originInferred, inMachine);
     }
 
     public ContainerRecord withOrigin(Origin newOrigin, UUID newOwner) {
@@ -123,11 +138,11 @@ public record ContainerRecord(
         ContainerRecord surer = outranks(seen) ? this : seen;
         return new ContainerRecord(pos, dimensionId, typeId, surer.origin,
                 newOwner != null ? newOwner : owner, unlooted, contentsKnown, customName, lastSeenTick,
-                contents, surer.originInferred);
+                contents, surer.originInferred, inMachine);
     }
 
     public ContainerRecord withUnlooted(boolean nowUnlooted) {
         return new ContainerRecord(pos, dimensionId, typeId, origin, owner, nowUnlooted, contentsKnown, customName,
-                lastSeenTick, contents, originInferred);
+                lastSeenTick, contents, originInferred, inMachine);
     }
 }

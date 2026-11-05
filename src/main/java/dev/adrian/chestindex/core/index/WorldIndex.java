@@ -290,6 +290,7 @@ public final class WorldIndex {
         if (plan.types != null && !Bits.test(plan.types, record.typeId())) return false;
         if (plan.excludedTypes != null && Bits.test(plan.excludedTypes, record.typeId())) return false;
         if (query.unlootedOnly() && !record.unlooted()) return false;
+        if (query.hideMachineParts() && record.inMachine()) return false;
         if (query.knownContentsOnly() && !record.contentsKnown()) return false;
         if (query.owner() != null && !query.owner().equals(record.owner())) return false;
         return true;

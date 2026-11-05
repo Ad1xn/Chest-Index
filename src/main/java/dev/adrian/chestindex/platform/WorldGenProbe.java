@@ -1,6 +1,9 @@
 package dev.adrian.chestindex.platform;
 
+import dev.adrian.chestindex.core.model.ContainerRecord;
 import dev.adrian.chestindex.core.util.BlockKey;
+import dev.adrian.chestindex.core.util.BuiltEvidence;
+import dev.adrian.chestindex.core.util.ShulkerMachines;
 import dev.adrian.chestindex.core.util.MonsterRooms;
 import dev.adrian.chestindex.core.util.WorldGenMarkers;
 import net.minecraft.core.BlockPos;
@@ -10,6 +13,8 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 
@@ -34,6 +39,15 @@ public final class WorldGenProbe {
             return Verdict.GENERATED;
         }
         return blocks.missed ? Verdict.UNSURE : Verdict.PLACED;
+    }
+
+    public static ContainerRecord settle(Level level, LevelChunk chunk, ContainerRecord container, String typeId) {
+        Resident blocks = new Resident(level, chunk);
+        ContainerRecord settled = BuiltEvidence.settle(container, blocks);
+        if (ShulkerMachines.isShulkerBox(typeId)) {
+            settled = settled.inMachine(ShulkerMachines.inMachine(container.pos(), blocks));
+        }
+        return settled;
     }
 
     public static boolean isGenerated(Level level, LevelChunk chunk, BlockPos pos, String typeId) {
@@ -104,6 +118,29 @@ public final class WorldGenProbe {
             LevelChunk at = chunkAt(x, z);
             if (at == null) return null;
             return idOf(at.getBlockState(probe.set(x, y, z)).getBlock());
+        }
+
+        @Override
+        public String facingAt(int x, int y, int z) {
+            LevelChunk at = chunkAt(x, z);
+            if (at == null) return null;
+            BlockState state = at.getBlockState(probe.set(x, y, z));
+            for (Property<?> property : state.getProperties()) {
+                if (property.getName().equals("facing")) return valueName(state, property);
+            }
+            return null;
+        }
+
+        @Override
+        public boolean blocksLid(int x, int y, int z) {
+            LevelChunk at = chunkAt(x, z);
+            if (at == null) return false;
+            probe.set(x, y, z);
+            return !at.getBlockState(probe).getCollisionShape(level, probe).isEmpty();
+        }
+
+        private static <T extends Comparable<T>> String valueName(BlockState state, Property<T> property) {
+            return property.getName(state.getValue(property));
         }
     }
 }

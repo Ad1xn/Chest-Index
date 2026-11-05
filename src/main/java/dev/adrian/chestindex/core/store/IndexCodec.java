@@ -25,9 +25,11 @@ import java.util.zip.GZIPOutputStream;
 public final class IndexCodec {
     private static final int MAGIC = 0x43544958;
 
-    public static final int FORMAT_VERSION = 4;
+    public static final int FORMAT_VERSION = 5;
 
     public static final int FIRST_BINARY_ORIGIN_VERSION = 4;
+
+    public static final int FIRST_BUILT_EVIDENCE_VERSION = 5;
 
     public static final int OLDEST_KEPT_WITHOUT_RESCAN = 3;
 
@@ -38,6 +40,7 @@ public final class IndexCodec {
     private static final int FLAG_HAS_OWNER = 1 << 4;
     private static final int FLAG_HAS_NAME = 1 << 5;
     private static final int FLAG_ORIGIN_INFERRED = 1 << 6;
+    private static final int FLAG_IN_MACHINE = 1 << 7;
     private static final int ORIGIN_MASK = 0b11;
 
     private static final Origin[] ORIGINS = Origin.values();
@@ -154,6 +157,7 @@ public final class IndexCodec {
         if (record.owner() != null) flags |= FLAG_HAS_OWNER;
         if (record.customName() != null) flags |= FLAG_HAS_NAME;
         if (record.originInferred()) flags |= FLAG_ORIGIN_INFERRED;
+        if (record.inMachine()) flags |= FLAG_IN_MACHINE;
         out.writeByte(flags);
 
         if (record.owner() != null) {
@@ -189,6 +193,7 @@ public final class IndexCodec {
         boolean unlooted = (flags & FLAG_UNLOOTED) != 0;
         boolean contentsKnown = (flags & FLAG_CONTENTS_KNOWN) != 0;
         boolean originInferred = (flags & FLAG_ORIGIN_INFERRED) != 0;
+        boolean inMachine = (flags & FLAG_IN_MACHINE) != 0;
 
         UUID owner = null;
         if ((flags & FLAG_HAS_OWNER) != 0) {
@@ -217,7 +222,7 @@ public final class IndexCodec {
         }
 
         return new ContainerRecord(pos, dimensionId, typeId, origin, owner,
-                unlooted, contentsKnown, customName, lastSeenTick, contents, originInferred);
+                unlooted, contentsKnown, customName, lastSeenTick, contents, originInferred, inMachine);
     }
 
     static void writeVarInt(DataOutputStream out, int value) throws IOException {

@@ -59,6 +59,14 @@ public final class WorldGenMarkers {
 
     public interface Blocks {
         String idAt(int x, int y, int z);
+
+        default String facingAt(int x, int y, int z) {
+            return null;
+        }
+
+        default boolean blocksLid(int x, int y, int z) {
+            return Neighbours.blocksLid(idAt(x, y, z));
+        }
     }
 
     public static boolean surroundedByWorldGen(long pos, Blocks blocks) {

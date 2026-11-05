@@ -394,7 +394,7 @@ public final class ChestIndexScreen extends Screen {
         switch (sort) {
             case NEAREST -> copy.sort(Comparator.comparingDouble(QueryDto.ItemSummary::nearestDistSq));
             case NAME -> copy.sort(Comparator.comparing(entry -> displayName(entry.itemId())));
-            case COUNT -> {  }
+            case COUNT -> copy.sort(Comparator.comparingInt(QueryDto.ItemSummary::totalCount).reversed());
         }
         return copy;
     }

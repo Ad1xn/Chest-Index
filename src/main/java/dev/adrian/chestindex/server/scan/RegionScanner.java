@@ -17,7 +17,10 @@ import dev.adrian.chestindex.core.anvil.RegionFile;
 import dev.adrian.chestindex.core.anvil.WorldLayout;
 import dev.adrian.chestindex.core.model.ContainerRecord;
 import dev.adrian.chestindex.core.store.StringPalette;
+import dev.adrian.chestindex.core.model.Origin;
 import dev.adrian.chestindex.core.util.BlockKey;
+import dev.adrian.chestindex.core.util.BuiltEvidence;
+import dev.adrian.chestindex.core.util.ShulkerMachines;
 import dev.adrian.chestindex.server.TrackerService;
 
 import java.io.IOException;
@@ -34,7 +37,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class RegionScanner {
-    private static final int APPLY_BUDGET_PER_TICK = 64;
+    private static final int APPLY_BUDGET_PER_TICK = 256;
+
+    private static final int QUEUE_LIMIT = 4096;
 
     private static final long APPLY_SLICE_NANOS = 4_000_000L;
 
@@ -189,23 +194,50 @@ public final class RegionScanner {
 
         Set<String> trackedIds = tracker.containerTypes().known();
 
-        int sinceWrite = 0;
-        for (int i = 0; i < pending.size() && !cancelled.get(); i++) {
-            Path file = pending.get(i);
-            long size = sizeOf(file);
-            long modifiedAt = modifiedAt(file);
+        AtomicInteger next = new AtomicInteger();
+        AtomicInteger sinceWrite = new AtomicInteger();
+        Runnable work = () -> {
+            int i;
+            while (!cancelled.get() && (i = next.getAndIncrement()) < pending.size()) {
+                Path file = pending.get(i);
+                long size = sizeOf(file);
+                long modifiedAt = modifiedAt(file);
 
-            scanRegion(file, pendingOwners.get(i), trackedIds, tick);
-            regionsRead.incrementAndGet();
+                scanRegion(file, pendingOwners.get(i), trackedIds, tick);
+                if (cancelled.get()) return;
+                regionsRead.incrementAndGet();
 
-            log.mark(file.toString(), size, modifiedAt);
-            if (++sinceWrite >= LOG_EVERY) {
-                sinceWrite = 0;
-                writeLog(log, logFile);
+                synchronized (log) {
+                    log.mark(file.toString(), size, modifiedAt);
+                    if (sinceWrite.incrementAndGet() >= LOG_EVERY) {
+                        sinceWrite.set(0);
+                        writeLog(log, logFile);
+                    }
+                }
+            }
+        };
+
+        List<Thread> helpers = new ArrayList<>();
+        for (int h = 1; h < workerCount(pending.size()); h++) {
+            Thread helper = new Thread(work, "ChestIndex-RegionScan-" + h);
+            helper.setDaemon(true);
+            helper.setPriority(Thread.MIN_PRIORITY);
+            helper.start();
+            helpers.add(helper);
+        }
+        work.run();
+        for (Thread helper : helpers) {
+            try {
+                helper.join();
+            } catch (InterruptedException interrupted) {
+                cancelled.set(true);
+                helpers.forEach(Thread::interrupt);
             }
         }
 
-        writeLog(log, logFile);
+        synchronized (log) {
+            writeLog(log, logFile);
+        }
 
         ChestIndex.LOG.info("Region scan {}: {} chunks, {} containers, {} failed, "
                         + "{} regions skipped as unchanged",
@@ -214,6 +246,11 @@ public final class RegionScanner {
                 allRegions.size() - pending.size());
 
         announceFinished("scan");
+    }
+
+    private static int workerCount(int regions) {
+        int spare = Runtime.getRuntime().availableProcessors() / 2;
+        return Math.max(1, Math.min(Math.min(4, spare), regions));
     }
 
     private void announceFinished(String what) {
@@ -299,6 +336,7 @@ public final class RegionScanner {
                 List<ContainerRecord> classified = OriginClassifier.classify(entry.getValue(), regionBoxes,
                         regionSpawners, chestTypeId);
                 classified = resolveGuesses(classified, chestTypeId, world);
+                classified = settle(classified, localPalette, world);
                 containersFound.addAndGet(classified.size());
                 pending.add(new Batch(dimensionId, entry.getKey(), classified, localPalette));
                 queueDepth.incrementAndGet();
@@ -318,6 +356,23 @@ public final class RegionScanner {
             resolved.set(i, decided);
         }
         return resolved == null ? containers : resolved;
+    }
+
+    private static List<ContainerRecord> settle(List<ContainerRecord> containers, StringPalette palette,
+                                                AnvilWorldView world) {
+        List<ContainerRecord> settled = null;
+        for (int i = 0; i < containers.size(); i++) {
+            ContainerRecord container = containers.get(i);
+            ContainerRecord decided = BuiltEvidence.settle(container,
+                    container.origin() == Origin.NATURAL ? world : null);
+            if (ShulkerMachines.isShulkerBox(palette.value(container.typeId()))) {
+                decided = decided.inMachine(ShulkerMachines.inMachine(container.pos(), world));
+            }
+            if (decided == container) continue;
+            if (settled == null) settled = new ArrayList<>(containers);
+            settled.set(i, decided);
+        }
+        return settled == null ? containers : settled;
     }
 
     private void refineChunks(Path worldRoot, Map<String, Set<Long>> chunksByDimension, long tick) throws IOException {
@@ -359,6 +414,7 @@ public final class RegionScanner {
                     List<ContainerRecord> classified = OriginClassifier.classify(contents.containers(),
                             contents.structureBoxes(), contents.spawners(), chestTypeId);
                     classified = resolveGuesses(classified, chestTypeId, world);
+                    classified = settle(classified, localPalette, world);
 
                     chunksRead.incrementAndGet();
                     containersFound.addAndGet(classified.size());
@@ -389,7 +445,7 @@ public final class RegionScanner {
     }
 
     private void throttle() {
-        while (queueDepth.get() > 512 && !cancelled.get()) {
+        while (queueDepth.get() > QUEUE_LIMIT && !cancelled.get()) {
             try {
                 Thread.sleep(20);
             } catch (InterruptedException interrupted) {
@@ -409,8 +465,14 @@ public final class RegionScanner {
         long deadline = System.nanoTime() + APPLY_SLICE_NANOS;
         Batch batch;
         while (applied < APPLY_BUDGET_PER_TICK && (batch = pending.poll()) != null) {
-            applied++;
             queueDepth.decrementAndGet();
+            if (batch.containers().isEmpty()
+                    && tracker.index(batch.dimensionId()).positionsInChunk(batch.chunkKey()).isEmpty()
+                    && !isChunkLoaded.test(batch.dimensionId(), batch.chunkKey())) {
+                if (System.nanoTime() >= deadline) break;
+                continue;
+            }
+            applied++;
 
             if (isChunkLoaded.test(batch.dimensionId(), batch.chunkKey())) {
                 liveScanChunk.accept(batch.dimensionId(), batch.chunkKey());

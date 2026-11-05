@@ -96,8 +96,9 @@ public final class LiveScanner {
 
             long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
             actual.add(key);
-            tracker.record(dimensionId, toRecord(blockEntity, key, typeId, dimensionId, tick,
-                    naturalityOf(level, chunk, pos, key, dimensionId, typeId)));
+            tracker.record(dimensionId, WorldGenProbe.settle(level, chunk,
+                    toRecord(blockEntity, key, typeId, dimensionId, tick,
+                            naturalityOf(level, chunk, pos, key, dimensionId, typeId)), typeId));
             found++;
         }
 
@@ -123,8 +124,9 @@ public final class LiveScanner {
 
         String typeId = ContainerTypes.idOf(blockEntity);
         if (typeId == null) return true;
-        tracker.record(dimensionId, toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime(),
-                naturalityOf(level, chunk, blockPos, pos, dimensionId, typeId)));
+        tracker.record(dimensionId, WorldGenProbe.settle(level, chunk,
+                toRecord(blockEntity, pos, typeId, dimensionId, level.getGameTime(),
+                        naturalityOf(level, chunk, blockPos, pos, dimensionId, typeId)), typeId));
         return true;
     }
 

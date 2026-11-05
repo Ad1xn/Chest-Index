@@ -150,18 +150,22 @@ public final class ClientObserver {
             long key = BlockKey.pack(pos.getX(), pos.getY(), pos.getZ());
 
             ContainerRecord known = tracker.index(dimensionId).get(key);
-            if (known != null && !known.isPlacementGuess()) continue;
-            if (tracker.originChecked(dimensionId, key)) continue;
-
-            WorldGenProbe.Verdict verdict = WorldGenProbe.check(level, chunk, pos, typeId);
-            if (verdict != WorldGenProbe.Verdict.UNSURE) tracker.markOriginChecked(dimensionId, key);
-            boolean generated = verdict == WorldGenProbe.Verdict.GENERATED;
-            if (known != null) {
-                if (generated) tracker.record(dimensionId, known.withOrigin(Origin.NATURAL, null));
-                continue;
+            ContainerRecord seen = known;
+            if ((known == null || known.isPlacementGuess()) && !tracker.originChecked(dimensionId, key)) {
+                WorldGenProbe.Verdict verdict = WorldGenProbe.check(level, chunk, pos, typeId);
+                if (verdict != WorldGenProbe.Verdict.UNSURE) tracker.markOriginChecked(dimensionId, key);
+                boolean generated = verdict == WorldGenProbe.Verdict.GENERATED;
+                if (known == null) {
+                    seen = ContainerRecord.locationOnly(
+                            key, dimensionKey, tracker.palette().intern(typeId), generated, tick);
+                } else if (generated) {
+                    seen = known.withOrigin(Origin.NATURAL, null);
+                }
             }
-            tracker.record(dimensionId, ContainerRecord.locationOnly(
-                    key, dimensionKey, tracker.palette().intern(typeId), generated, tick));
+            if (seen == null) continue;
+
+            seen = WorldGenProbe.settle(level, chunk, seen, typeId);
+            if (seen != known) tracker.record(dimensionId, seen);
         }
 
         dropBrokenContainers(tracker, dimensionId, chunkKey, chunk);
@@ -304,7 +308,7 @@ public final class ClientObserver {
     private static void store(TrackerService tracker, String dimensionId, long pos,
                               String typeId, List<ItemStack> stacks, long tick) {
         List<StackEntry> contents = LiveContainerReader.read(stacks, tracker.palette());
-        tracker.record(dimensionId, new ContainerRecord(
+        tracker.record(dimensionId, WorldGenProbe.settle(Minecraft.getInstance().level, null, new ContainerRecord(
                 pos,
                 tracker.palette().intern(dimensionId),
                 tracker.palette().intern(typeId),
@@ -315,7 +319,7 @@ public final class ClientObserver {
                 null,
                 tick,
                 contents,
-                true));
+                true), typeId));
         ClientIndex.touch();
     }
 

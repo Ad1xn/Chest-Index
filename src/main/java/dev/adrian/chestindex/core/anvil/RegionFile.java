@@ -2,18 +2,20 @@ package dev.adrian.chestindex.core.anvil;
 
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.DataFormatException;
 import java.util.zip.GZIPInputStream;
+import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
 public final class RegionFile implements Closeable {
@@ -32,6 +34,9 @@ public final class RegionFile implements Closeable {
     private final Path path;
     private final RandomAccessFile file;
     private final int[] locations = new int[CHUNKS_PER_AXIS * CHUNKS_PER_AXIS];
+    private final byte[] chunkHeader = new byte[5];
+    private final Inflater inflater = new Inflater();
+    private byte[] inflated = new byte[1 << 17];
 
     private RegionFile(Path path, RandomAccessFile file) throws IOException {
         this.path = path;
@@ -106,8 +111,10 @@ public final class RegionFile implements Closeable {
         }
 
         file.seek((long) sectorOffset * SECTOR_BYTES);
-        int declaredLength = file.readInt();
-        int compression = file.readUnsignedByte();
+        file.readFully(chunkHeader);
+        int declaredLength = ((chunkHeader[0] & 0xFF) << 24) | ((chunkHeader[1] & 0xFF) << 16)
+                | ((chunkHeader[2] & 0xFF) << 8) | (chunkHeader[3] & 0xFF);
+        int compression = chunkHeader[4] & 0xFF;
 
         if (declaredLength <= 0) {
             throw new IOException("Chunk " + localX + "," + localZ + " declares length " + declaredLength);
@@ -128,9 +135,38 @@ public final class RegionFile implements Closeable {
             file.readFully(payload);
         }
 
-        try (InputStream in = decompress(compression, payload)) {
-            return NbtReader.readNamedRoot(new DataInputStream(in), keepKeys);
+        if (compression == COMPRESSION_ZLIB) {
+            int length = inflate(payload);
+            return NbtReader.readNamedRoot(new NbtBytes(inflated, length), keepKeys);
         }
+        return switch (compression) {
+            case COMPRESSION_NONE -> NbtReader.readNamedRoot(new NbtBytes(payload, payload.length), keepKeys);
+            default -> {
+                try (InputStream in = decompress(compression, payload)) {
+                    byte[] raw = in.readAllBytes();
+                    yield NbtReader.readNamedRoot(new NbtBytes(raw, raw.length), keepKeys);
+                }
+            }
+        };
+    }
+
+    private int inflate(byte[] payload) throws IOException {
+        inflater.reset();
+        inflater.setInput(payload);
+        int length = 0;
+        try {
+            while (!inflater.finished()) {
+                if (length == inflated.length) inflated = Arrays.copyOf(inflated, inflated.length * 2);
+                int produced = inflater.inflate(inflated, length, inflated.length - length);
+                if (produced == 0 && (inflater.needsInput() || inflater.needsDictionary())) {
+                    throw new IOException("Chunk data is cut short in " + path);
+                }
+                length += produced;
+            }
+        } catch (DataFormatException corrupt) {
+            throw new IOException("Chunk data is corrupt in " + path + ": " + corrupt.getMessage());
+        }
+        return length;
     }
 
     private byte[] readExternal(int localX, int localZ) throws IOException {
@@ -175,6 +211,7 @@ public final class RegionFile implements Closeable {
 
     @Override
     public void close() throws IOException {
+        inflater.end();
         file.close();
     }
 }

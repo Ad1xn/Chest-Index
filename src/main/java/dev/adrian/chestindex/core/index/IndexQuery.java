@@ -17,7 +17,8 @@ public record IndexQuery(
         boolean includeNested,
         long center,
         double maxDistance,
-        int limit
+        int limit,
+        boolean hideMachineParts
 ) {
     public IndexQuery {
         itemIds = itemIds == null ? Set.of() : Set.copyOf(itemIds);
@@ -52,6 +53,7 @@ public record IndexQuery(
         private long center;
         private double maxDistance;
         private int limit;
+        private boolean hideMachineParts;
 
         public Builder items(Set<Integer> ids) { this.itemIds = ids; return this; }
         public Builder item(int id) { this.itemIds = Set.of(id); return this; }
@@ -67,10 +69,11 @@ public record IndexQuery(
         public Builder center(long packedPos) { this.center = packedPos; return this; }
         public Builder maxDistance(double blocks) { this.maxDistance = blocks; return this; }
         public Builder limit(int n) { this.limit = n; return this; }
+        public Builder hideMachineParts(boolean v) { this.hideMachineParts = v; return this; }
 
         public IndexQuery build() {
             return new IndexQuery(itemIds, origins, typeIds, excludedTypeIds, detailIds, unlootedOnly,
-                    knownContentsOnly, owner, includeNested, center, maxDistance, limit);
+                    knownContentsOnly, owner, includeNested, center, maxDistance, limit, hideMachineParts);
         }
     }
 }

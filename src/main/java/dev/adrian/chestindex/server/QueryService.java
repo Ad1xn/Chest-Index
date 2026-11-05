@@ -448,7 +448,10 @@ public final class QueryService {
 
         ChestIndexConfig config = ChestIndexConfig.get();
         Set<String> hidden = new HashSet<>();
-        if (!effective.includeMachines()) hidden.addAll(config.machineTypes);
+        if (!effective.includeMachines()) {
+            hidden.addAll(config.machineTypes);
+            builder.hideMachineParts(true);
+        }
         if (!effective.includeUtility()) hidden.addAll(config.utilityTypes);
         if (!hidden.isEmpty()) builder.excludeTypes(typeIdsOf(tracker, hidden));
     }
