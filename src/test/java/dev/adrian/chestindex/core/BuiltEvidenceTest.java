@@ -84,6 +84,13 @@ class BuiltEvidenceTest {
     }
 
     @Test
+    void anUnloadedNeighbourIsNotRedstone() {
+        WorldGenMarkers.Blocks unloaded = (x, y, z) -> null;
+        ContainerRecord loot = generated(List.of());
+        assertSame(loot, BuiltEvidence.settle(loot, unloaded));
+    }
+
+    @Test
     void lootTablesAreNeverOverruled() {
         ContainerRecord unlooted = new ContainerRecord(POS, 0, 1, Origin.NATURAL, null, true, false, null, 1L,
                 List.of());
