@@ -34,7 +34,8 @@ public final class BuiltEvidence {
         int y = BlockKey.y(pos);
         int z = BlockKey.z(pos);
         for (Neighbours.Side side : Neighbours.Side.values()) {
-            if (REDSTONE_PARTS.contains(blocks.idAt(x + side.dx, y + side.dy, z + side.dz))) return true;
+            String id = blocks.idAt(x + side.dx, y + side.dy, z + side.dz);
+            if (id != null && REDSTONE_PARTS.contains(id)) return true;
         }
         return false;
     }
