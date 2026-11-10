@@ -125,7 +125,7 @@ public final class MaterialGoals {
                     }
                     if (response.hits().isEmpty()) {
                         ActionBar.say(Component.literal(
-                                        "Nothing indexed holds the rest of the materials")
+                                        "No remaining materials found")
                                 .withStyle(ChatFormatting.YELLOW));
                         ContainerHighlight.get().clear();
                         clear();

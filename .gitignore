@@ -27,5 +27,5 @@ versions/*/logs/
 # OS
 .DS_Store
 
+# Local
 graphify-out/
-

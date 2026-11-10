@@ -58,8 +58,7 @@ public final class ClientIndex {
 
         String key = currentServerKey();
         if (key == null) {
-            ChestIndex.LOG.warn("No address for the server just joined; "
-                    + "the client-side index is not being kept for it");
+            ChestIndex.LOG.warn("No server address, skipping client-side index");
             return;
         }
 

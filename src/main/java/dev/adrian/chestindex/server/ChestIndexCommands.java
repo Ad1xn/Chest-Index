@@ -119,7 +119,7 @@ public final class ChestIndexCommands {
                 result.containersFound(), result.staleRemoved())), false);
 
         source.sendSuccess(() -> Component.literal(
-                "Only chunks in memory are read here; scanworld covers the rest."), false);
+                "Only loaded chunks. Use scanworld for the rest."), false);
         return result.containersFound();
     }
 
@@ -151,11 +151,9 @@ public final class ChestIndexCommands {
         }
 
         source.sendSuccess(() -> Component.literal(override
-                ? "Index cleared. Reading every region file again from scratch - "
-                        + "searches will be empty until this finishes."
-                : "Scanning the world in the background - only the region files that "
-                        + "changed since the last scan. Use /chestindex scanworld override "
-                        + "to throw the index away and read everything again."), false);
+                ? "Index cleared. Rescanning the whole world."
+                : "Scanning changed regions. Use /chestindex scanworld override "
+                        + "for a full rescan."), false);
         return 1;
     }
 
@@ -166,7 +164,7 @@ public final class ChestIndexCommands {
             return 0;
         }
         source.sendSuccess(() -> Component.literal("Re-checking the " + String.format("%,d", result.chunks())
-                + " indexed chunks in the background - contents and where each container came from."), true);
+                + " indexed chunks."), true);
         return result.chunks();
     }
 

@@ -139,118 +139,92 @@ public final class SettingsScreen extends Screen {
     private List<Section> buildSections() {
         return List.of(
                 new Section("General", "minecraft:chest",
-                        "The mod as a whole, and where it is allowed to run.",
+                        "The mod and where it runs.",
                         List.of(
                                 new Toggle("ChestIndex",
-                                        "The whole mod, on or off.",
-                                        "The whole mod. Off means no search screen, no button on containers, "
-                                                + "no key, nothing indexed and nothing drawn in the world - not "
-                                                + "merely hidden.",
+                                        "Turns the whole mod on or off.",
+                                        "Turns the whole mod on or off. Off means no screen, no button, no key "
+                                                + "and no indexing.",
                                         () -> config.enabled, value -> config.enabled = value),
                                 new Link("Servers it stays off on",
-                                        "Addresses the mod switches itself off on.",
-                                        "Addresses the mod turns itself off on. Starts with four large public "
-                                                + "servers whose rules on client mods are strict; remove any of "
-                                                + "them if you would rather decide for yourself.",
+                                        "Servers where the mod turns itself off.",
+                                        "Servers where the mod turns itself off. Comes with a few large public "
+                                                + "servers that don't allow client mods. Remove any you like.",
                                         () -> new ServerListScreen(this,
                                                 "Servers ChestIndex stays off on",
-                                                "Joining one of these switches the mod off for as long as you are\n"
-                                                        + "connected. Matched by host, so example.net covers eu.example.net.",
+                                                "The mod is off while you're on one of these.\n"
+                                                        + "example.net also covers eu.example.net.",
                                                 config.disabledServers)),
                                 new Toggle("Run on servers without the mod",
-                                        "Whether a vanilla server gets a client-side index.",
-                                        "On a vanilla server the only index there can be is one this client "
-                                                + "keeps for itself, built from what the server already sends you "
-                                                + "and the containers you open. Nothing is sent, nothing is opened "
-                                                + "for you.\n\nOff switches the mod off entirely on those servers - "
-                                                + "no key, no screen, nothing indexed - because without that index "
-                                                + "there is nothing here for it to search. Your own world and "
-                                                + "servers running the mod are unaffected.",
+                                        "Keep a local index on vanilla servers.",
+                                        "On vanilla servers, index the containers you open and what the server "
+                                                + "sends you. Nothing extra is sent to the server.\n\nOff turns the "
+                                                + "mod off on those servers.",
                                         () -> config.clientSideIndex, value -> config.clientSideIndex = value),
                                 new Toggle("Scan world on join",
-                                        "Reads the world off disk to find unvisited chunks.",
-                                        "Reads the world off disk in the background when you join, so "
-                                                + "containers in chunks you have never visited are found too. "
-                                                + "Costs some throughput for a few seconds on a large world.",
+                                        "Scan the world files when you join.",
+                                        "Scans the world files in the background when you join, so chunks you "
+                                                + "haven't visited are found too.",
                                         () -> config.scanOnWorldJoin, value -> config.scanOnWorldJoin = value),
                                 new Link("Stored indexes",
-                                        "What has been indexed, and how to throw one away.",
-                                        "Every world and server this machine holds an index for, "
-                                                + "how large each has got, and a button to delete "
-                                                + "one. An index is a cache of somebody's world, so "
-                                                + "deleting one costs a rescan and never the world "
-                                                + "itself - worth doing when a world has been edited "
-                                                + "outside the game, or for a server you played once "
-                                                + "and will not return to.",
+                                        "See and delete saved indexes.",
+                                        "Every world and server with a saved index, its size, and a delete "
+                                                + "button. Deleting one only means a rescan, your world is not touched.",
                                         () -> new IndexScreen(this)),
                                 new Choice("LAN/server guests may search",
-                                        "Who may search once your world is opened up.",
-                                        "Who may search when your world is opened to LAN, or on a server "
-                                                + "running the mod. The host is never gated in their own world, "
-                                                + "so this does nothing in plain singleplayer - it starts "
-                                                + "mattering the moment that world is opened up, which is exactly "
-                                                + "when nobody thinks to look in a settings screen.",
+                                        "Who can search in your LAN world.",
+                                        "Who can search when your world is open to LAN, or on a server with the "
+                                                + "mod. Does nothing in singleplayer.",
                                         this::accessValue, this::cycleAccess))),
 
                 new Section("Containers", "minecraft:hopper",
-                        "Which containers count, and what counts as being inside one.",
+                        "Which containers are included.",
                         List.of(
                                 new Toggle("Count items inside shulker boxes",
-                                        "Whether a shulker's contents count as in the chest.",
-                                        "Whether a shulker box in a chest contributes its contents to that "
-                                                + "chest, or only counts as a shulker box.",
+                                        "Count shulker contents as part of the chest.",
+                                        "Count the items inside a shulker box as part of the chest it's in.",
                                         () -> config.includeNested, value -> config.includeNested = value),
                                 new Toggle("Show machines by default",
                                         "Hoppers, droppers, dispensers, crafters.",
-                                        "Hoppers, droppers, dispensers and crafters - containers that move "
-                                                + "items about on their own. Always indexed; this is only whether "
-                                                + "the search screen starts with them shown.",
+                                        "Hoppers, droppers, dispensers and crafters. They're always indexed, "
+                                                + "this only sets whether they're shown by default.",
                                         () -> config.showMachines, value -> config.showMachines = value),
                                 new Toggle("Show furnaces & pots by default",
                                         "Furnaces, brewing stands, jukeboxes, pots, shelves.",
                                         "Furnaces, brewing stands, jukeboxes, lecterns, decorated pots and "
-                                                + "chiseled bookshelves - things that hold items but are not "
-                                                + "storage. A separate group from the machines, because a pot "
-                                                + "holds exactly what you put in it while a hopper's contents "
-                                                + "are in transit.",
+                                                + "chiseled bookshelves.",
                                         () -> config.showUtility, value -> config.showUtility = value),
                                 new Toggle("Show minecarts & boats by default",
                                         "Chest minecarts, hopper minecarts, chest boats.",
-                                        "Chest minecarts, hopper minecarts and chest boats. Read live at the "
-                                                + "moment you search rather than indexed, because they move - so "
-                                                + "they are found only where the world is loaded, and never "
-                                                + "remembered between sessions.",
+                                        "Chest minecarts, hopper minecarts and chest boats. Only found in "
+                                                + "loaded chunks, and not saved.",
                                         () -> config.showEntities, value -> config.showEntities = value),
                                 new Link("What counts as a machine",
-                                        "The container types the machines toggle hides.",
-                                        "Container types filtered by the machines toggle. Add a modded machine "
-                                                + "here to have it filtered with the vanilla ones.",
+                                        "Blocks the machines toggle hides.",
+                                        "Blocks the machines toggle hides. Add modded machines here.",
                                         () -> new ServerListScreen(this,
                                                 "Machines",
-                                                "Container types filtered by the \"Machines\" toggle. Anything in neither\n"
-                                                        + "group is ordinary storage and is always shown.",
+                                                "Blocks hidden by the \"Machines\" toggle.\n"
+                                                        + "Anything not in a list is always shown.",
                                                 config.machineTypes,
                                                 ServerListScreen::asRegistryId, "hopper")),
                                 new Link("What counts as a functional block",
-                                        "The container types the functional toggle hides.",
-                                        "Container types filtered by the functional-blocks toggle: furnaces, "
-                                                + "brewing stands, jukeboxes, lecterns, pots and shelves.",
+                                        "Blocks the functional toggle hides.",
+                                        "Blocks the functional blocks toggle hides.",
                                         () -> new ServerListScreen(this,
                                                 "Functional blocks",
-                                                "Container types filtered by the \"Functional blocks\" toggle. Anything in\n"
-                                                        + "neither group is ordinary storage and is always shown.",
+                                                "Blocks hidden by the \"Functional blocks\" toggle.\n"
+                                                        + "Anything not in a list is always shown.",
                                                 config.utilityTypes,
                                                 ServerListScreen::asRegistryId, "jukebox")))),
 
                 new Section("Searching", "minecraft:spyglass",
-                        "The search screen, and the ways of reaching it.",
+                        "The search screen.",
                         List.of(
                                 new Range("Items shown",
-                                        "How many distinct items the grid lists at once.",
-                                        "How many distinct items the search screen will list at once. Past the "
-                                                + "top of the range it reads unlimited rather than a number: "
-                                                + "dragging it to the end means stop hiding things, not exactly "
-                                                + "two thousand.",
+                                        "How many items the grid shows.",
+                                        "How many different items the search screen shows. The end of the "
+                                                + "slider is unlimited.",
                                         () -> config.maxResults <= 0 ? MAX_RESULTS_CEILING : config.maxResults,
                                         value -> config.maxResults = value >= MAX_RESULTS_CEILING
                                                 ? ChestIndexConfig.UNLIMITED_RESULTS : value,
@@ -258,207 +232,140 @@ public final class SettingsScreen extends Screen {
                                         value -> "Items shown: " + (value >= MAX_RESULTS_CEILING
                                                 ? "unlimited" : Integer.toString(value))),
                                 new Choice("Item detail",
-                                        "The panel describing the item under the cursor.",
-                                        "Describes the item under the cursor in the search grid: how many "
-                                                + "there are, in how many containers, how many are sealed inside "
-                                                + "shulker boxes, and how far the nearest is. The title row "
-                                                + "always carries the short version.",
+                                        "Info about the hovered item.",
+                                        "Shows how many of the hovered item there are, in how many containers, "
+                                                + "how many are in shulker boxes, and how far the nearest is.",
                                         this::detailValue, this::cycleDetail),
                                 new Toggle("Ender chest view",
-                                        "Your ender chest as a view of its own.",
-                                        "Offers your ender chest as a view of its own, beside the dimension "
-                                                + "buttons. It lists only what is in there - never mixed with a "
-                                                + "dimension - and appears only when it is not empty.",
+                                        "Show your ender chest as its own view.",
+                                        "Adds your ender chest next to the dimension buttons. Only shows up "
+                                                + "when it's not empty.",
                                         () -> config.enderChestView, value -> config.enderChestView = value),
                                 new Toggle("Search button on containers",
-                                        "A magnifier on chest and container windows.",
-                                        "A small magnifier on chests and other container windows. Left-click "
-                                                + "opens the search screen; right-drag moves it. Each kind of "
-                                                + "window remembers its own place, so a hopper's button need not "
-                                                + "sit where a chest's does.",
+                                        "A search button on container screens.",
+                                        "A small search button on chests and other containers. Left-click to "
+                                                + "open search, right-drag to move it.",
                                         () -> config.containerSearchButton,
                                         value -> config.containerSearchButton = value),
                                 new Toggle("Shulker key searches contents",
-                                        "The search key looks inside a held shulker box.",
-                                        "Pointing the search key at a shulker box or bundle looks for "
-                                                + "everything inside it rather than for more shulker boxes - "
-                                                + "which is almost always the question. Off, it searches for the "
-                                                + "box itself, empty ones included.",
+                                        "Search a shulker's contents with the key.",
+                                        "Using the search key on a shulker box or bundle searches for what's "
+                                                + "inside it. Off searches for the box itself.",
                                         () -> config.searchShulkerContents,
                                         value -> config.searchShulkerContents = value),
                                 new Toggle("Litematica material list buttons",
-                                        "Search buttons on Litematica's material list.",
-                                        "Adds search buttons to Litematica's material list: one on each row, "
-                                                + "left of that row's Ignore, which finds that material; and one "
-                                                + "beside Export, which finds everything the schematic still "
-                                                + "needs. Only appears when Litematica is installed.",
+                                        "Search buttons in Litematica's material list.",
+                                        "Adds a search button to each row of Litematica's material list, and "
+                                                + "one next to Export that finds everything still needed. "
+                                                + "Needs Litematica.",
                                         () -> config.litematicaButton,
                                         value -> config.litematicaButton = value))),
 
                 new Section("Guidance", "minecraft:compass",
-                        "How a container you have searched for is pointed out.",
+                        "How found containers are shown.",
                         List.of(
                                 new Choice("Show found containers as",
-                                        "Boxes in the world, text above the hotbar, or both.",
-                                        "Boxes drawn around the containers in the world, a line of text above "
-                                                + "the hotbar, both, or neither.",
+                                        "Boxes, text above the hotbar, or both.",
+                                        "Boxes around the containers, text above the hotbar, both, or neither.",
                                         this::displayValue, this::cycleDisplay),
                                 new Range("Guidance lasts",
-                                        "How long the markers stay up after a search.",
-                                        "How long the markers stay up after a search, if you have not walked "
-                                                + "to one of them first.",
+                                        "How long markers stay after a search.",
+                                        "How long markers stay after a search.",
                                         () -> config.highlightSeconds,
                                         value -> config.highlightSeconds = value,
                                         5, HIGHLIGHT_MAX, 5, value -> "Guidance lasts: " + value + "s"),
                                 new Range("Grace when walking away",
-                                        "How long they survive once you head away.",
-                                        "How long the markers survive once you are heading away from every "
-                                                + "match, rather than being dropped the moment the distance "
-                                                + "starts growing.",
+                                        "How long markers stay when you walk away.",
+                                        "How long markers stay once you walk away from every match.",
                                         () -> config.highlightRecedingGraceSeconds,
                                         value -> config.highlightRecedingGraceSeconds = value,
                                         1, GRACE_MAX, 1, value -> "Grace when walking away: " + value + "s"))),
 
                 new Section("Markers", "minecraft:spectral_arrow",
-                        "What the markers look like. The picture changes as you do.",
+                        "How markers look.",
                         List.of(
                                 new Choice("Marker shape",
-                                        "A full cube, just its outline, or both.",
-                                        "What a marker in the world is drawn as. The full cube is found by "
-                                                + "looking rather than by scanning, which is the job at any "
-                                                + "distance; the outline is the more precise of the two and "
-                                                + "leaves the container visible inside its own marker. A "
-                                                + "double chest is one marker across both halves either way.",
+                                        "Full cube, outline, or both.",
+                                        "Full cube, outline, or both. A double chest gets one marker.",
                                         this::shapeValue, this::cycleShape),
                                 new Choice("Markers arrive by",
-                                        "How a marker appears when a search lands.",
-                                        "How the markers appear when a search lands. A search closes the "
-                                                + "screen and drops you back into the world, and markers that "
-                                                + "are simply there the moment it closes read as part of the "
-                                                + "scenery. Something that arrives is something the mod is "
-                                                + "saying. Over in under half a second whichever you pick.",
+                                        "How markers appear after a search.",
+                                        "The animation markers use when they appear.",
                                         this::entryValue, this::cycleEntry),
                                 new Range("Cube solidity",
-                                        "How solid a filled marker is.",
-                                        "How solid the full-cube marker is drawn. It has to be obvious from "
-                                                + "across a base and still leave the container recognisable "
-                                                + "close up, and those pull against each other - this is "
-                                                + "where you settle it. No effect on the outline.",
+                                        "How solid the cube marker is.",
+                                        "How solid the cube marker is. Doesn't affect the outline.",
                                         () -> config.highlightCubeOpacity,
                                         value -> config.highlightCubeOpacity = value,
                                         5, 100, 5, value -> "Cube solidity: " + value + "%"),
                                 new Toggle("Boxes show through walls",
-                                        "A marker you can only see in the open says little.",
-                                        "Draws the boxes through whatever is in front of them, which is the "
-                                                + "point of pointing at a container - it is behind something. "
-                                                + "Turn it off if a shader pack or another rendering mod "
-                                                + "disagrees with it; the boxes then hide behind walls as any "
-                                                + "other line in the game does. The trail is always drawn "
-                                                + "against the world rather than through it.",
+                                        "Draw markers through walls.",
+                                        "Draws markers through walls. Turn it off if it breaks with a shader "
+                                                + "or another render mod.",
                                         () -> config.highlightThroughWalls,
                                         value -> config.highlightThroughWalls = value),
                                 new Toggle("Trail of marks above matches",
-                                        "Works past render distance, where boxes cannot.",
-                                        "Stands a column of marks on every distant match, running up to the "
-                                                + "build limit. This is the part that still works past render "
-                                                + "distance, where there is no terrain drawn to place a box "
-                                                + "against. Unlike the boxes it is drawn behind the world "
-                                                + "rather than through it, so it reads as standing somewhere "
-                                                + "in the landscape rather than floating in front of it.",
+                                        "Works past render distance.",
+                                        "A column of marks above far away matches. Works past render distance.",
                                         () -> config.guideBeam, value -> config.guideBeam = value),
                                 new Range("Trails start at",
-                                        "How far off a match must be to get a trail.",
-                                        "How far away a match has to be before a trail is stood on it. A "
-                                                + "container across the room does not need a column over it - "
-                                                + "the box already says which one it is - and a base full of "
-                                                + "them is a fence you cannot see the chests through. The "
-                                                + "default is past most render distances, which is where the "
-                                                + "box stops being enough.",
+                                        "How far a match must be to get a trail.",
+                                        "How far away a match has to be to get a trail.",
                                         () -> config.guideBeamFromChunks,
                                         value -> config.guideBeamFromChunks = value,
                                         0, BEAM_FROM_MAX, 1,
                                         value -> "Trails start at: " + value + " chunks"),
                                 new Link("Highlight colours",
-                                        "The two colours the world markers are drawn in.",
-                                        "The colours the in-world markers are drawn in. The nearest match "
-                                                + "holds the first one; every other match rests at the second "
-                                                + "and swells through the first, which is what picks the "
-                                                + "nearest out without labelling it.",
+                                        "Marker colours.",
+                                        "One colour for the nearest match, one for the rest.",
                                         () -> new HighlightColourScreen(this)),
                                 new Choice("Marked slots",
-                                        "How a matching slot is marked in an open container.",
-                                        "How a slot holding what you searched for is marked, in whatever "
-                                                + "container is open. The outline leaves the item and its stack "
-                                                + "count fully visible; the background is easier to pick out "
-                                                + "against a busy container texture, and is drawn as a tint so "
-                                                + "the item still reads through it.",
+                                        "How matching slots are marked.",
+                                        "How slots with the searched item are marked in an open container.",
                                         this::slotStyleValue, this::cycleSlotStyle)), true),
 
                 new Section("Cheats", "minecraft:command_block",
-                        "Things that cross the line. All off until you turn them on.",
+                        "Cheat-like features. All off by default.",
                         List.of(
                                 new Toggle("Enable cheat-like features",
-                                        "The master switch over everything below.",
-                                        "Nothing in this section does anything until this is on. Each setting "
-                                                + "below keeps its own value while it is off, so you can switch "
-                                                + "the lot off for one server and back on at home without "
-                                                + "setting them all up again. Off by default, and deliberately: "
-                                                + "whether these are a convenience or cheating depends on which "
-                                                + "world you are in and what you agreed to there, which is not "
-                                                + "something the mod can tell from the outside.",
+                                        "Turns on everything below.",
+                                        "Nothing below works until this is on. The settings below keep their "
+                                                + "values while it's off.",
                                         () -> config.cheatFeatures, value -> config.cheatFeatures = value),
                                 new Toggle("Index generated chests",
-                                        "Loot nobody has opened, including unvisited chunks.",
-                                        "Puts unopened structure loot into the index, including in chunks "
-                                                + "nobody has ever loaded, because the scanner reads the "
-                                                + "world's files directly. This is x-ray in the plainest "
-                                                + "sense. Off, that loot is neither recorded nor returned and "
-                                                + "the index stays a map of what players put somewhere. A "
-                                                + "generated chest someone has already opened is always kept "
-                                                + "either way - remembering what you have seen is the whole "
-                                                + "mod. Turning it off hides them at once; turning it on "
-                                                + "fills them in on the next scan.",
+                                        "Unopened loot chests, even in unvisited chunks.",
+                                        "Indexes unopened loot chests, even in chunks nobody has loaded. "
+                                                + "This is basically x-ray. Loot chests you've opened are always "
+                                                + "indexed.",
                                         () -> config.indexGeneratedChests,
                                         value -> config.indexGeneratedChests = value),
                                 new Toggle("Read minecarts on servers without the mod",
-                                        "On a server they have moved since being seen.",
-                                        "On a server these are moved by other players and by rails this "
-                                                + "client is not simulating, so where one was found is not "
-                                                + "where it is - and guidance that confidently walks you to the "
-                                                + "wrong place is worse than not answering. In your own world "
-                                                + "they are always read.",
+                                        "They may have moved since you saw them.",
+                                        "Minecarts on servers may have moved since you saw them, so this can "
+                                                + "point to the wrong place. Always on in your own world.",
                                         () -> config.entityContainersOnVanillaServers,
                                         value -> config.entityContainersOnVanillaServers = value),
                                 new Toggle("Open a match in reach",
-                                        "Opens a match instead of pointing at it.",
-                                        "If a container you just searched for is within normal reach, open it "
-                                                + "instead of pointing at it. Sends the same interaction as "
-                                                + "right-clicking, so a server checks the distance as usual.",
+                                        "Open a match instead of pointing at it.",
+                                        "Opens a found container if it's in reach, same as right-clicking it.",
                                         () -> config.openInReach, value -> config.openInReach = value),
                                 new Toggle("Turn to face a match",
-                                        "Turns your view towards the nearest match.",
-                                        "Turns your view towards the nearest match when a search lands. Worth "
-                                                + "knowing on a server you do not run: a client that moves the "
-                                                + "view is the shape of thing some anti-cheats watch for.",
+                                        "Turn your view to the nearest match.",
+                                        "Turns your view to the nearest match. Some anti-cheats may flag this.",
                                         () -> config.turnToTarget, value -> config.turnToTarget = value),
                                 new Toggle("Assist on every server",
-                                        "Off by default: both look like cheats to anti-cheat.",
-                                        "Whether the two assist settings act on servers as well as in your "
-                                                + "own world. Off by default: turning to face a match and "
-                                                + "opening one in reach are the only things this mod does that a "
-                                                + "server can see, and both look exactly like the cheats "
-                                                + "anti-cheat is written to catch. Prefer naming the servers you "
-                                                + "trust to switching this on everywhere.",
+                                        "Allow the two options above on all servers.",
+                                        "Lets the two options above work on every server, not just your own "
+                                                + "world. Anti-cheats may flag them.",
                                         () -> config.assistOnServers, value -> config.assistOnServers = value),
                                 new Link("Servers assist is allowed on",
-                                        "The named servers the two assist features act on.",
-                                        "A named server you trust, rather than every server you ever join. "
-                                                + "Turning to face a match and opening one in reach act on these "
-                                                + "and nowhere else; your own world always allows both.",
+                                        "Servers where the two options above work.",
+                                        "Servers where the two options above work. Your own world always "
+                                                + "allows them.",
                                         () -> new ServerListScreen(this,
                                                 "Servers assist is allowed on",
-                                                "Turning to face a match and opening one in reach act on these servers\n"
-                                                        + "and nowhere else. Your own world always allows both.",
+                                                "Opening and turning to matches works on these servers.\n"
+                                                        + "Your own world always allows it.",
                                                 config.assistServers)))));
     }
 

@@ -41,7 +41,7 @@ public final class SearchButton extends AbstractWidget {
         this.anchorY = anchorY;
         follow();
         setTooltip(Tooltip.create(Component.literal(
-                "Search containers  (right-drag to move it on this kind of window)")));
+                "Search containers (right-drag to move)")));
     }
 
     public void follow() {

@@ -251,9 +251,8 @@ public final class IndexScreen extends Screen {
             if (blocker == null) gfx.fill(x + 1, y + 1, x + BUTTON_SIZE - 1, y + BUTTON_SIZE - 1, Panel.HOVER);
             hoverTitle = "Re-check";
             pendingTooltip = new ArrayList<>(List.of("Re-check",
-                    "Reads every indexed chunk again: contents,",
-                    "and whether each container was built or generated.",
-                    "Containers you were seen placing stay built."));
+                    "Reads every indexed chunk again",
+                    "without a full rescan."));
             if (blocker != null) {
                 pendingTooltip.add("");
                 pendingTooltip.add(blocker);
@@ -366,9 +365,9 @@ public final class IndexScreen extends Screen {
         } else if (status != null) {
             footer = status;
         } else if (armed >= 0) {
-            footer = "Click again to delete it. Scanning rebuilds it.";
+            footer = "Click again to delete.";
         } else {
-            footer = "Deleting one costs a rescan, never the world itself.";
+            footer = "Deleting only means a rescan.";
         }
         gfx.text(font, Component.literal(footer),
                 panelX + (PANEL_W - font.width(footer)) / 2, panelY + panelH() + 6,

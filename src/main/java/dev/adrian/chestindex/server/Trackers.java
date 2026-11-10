@@ -105,6 +105,7 @@ public final class Trackers {
         }
     }
 
+    // Hoppers only call the static setChanged.
     public static void onContainerChanged(Level level, BlockPos pos) {
         TrackerService tracker = current;
         if (tracker == null) return;

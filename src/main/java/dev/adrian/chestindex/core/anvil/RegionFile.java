@@ -187,8 +187,8 @@ public final class RegionFile implements Closeable {
             case COMPRESSION_ZLIB -> new InflaterInputStream(raw);
             case COMPRESSION_NONE -> raw;
             case COMPRESSION_LZ4 -> throw new IOException(
-                    "Chunk uses LZ4 compression, which needs a codec this build does not bundle. "
-                    + "Set region-file-compression to deflate in server.properties, or the chunk will be skipped.");
+                    "Chunk uses LZ4 compression, which isn't supported. "
+                    + "Set region-file-compression to deflate in server.properties.");
             default -> throw new IOException("Unknown chunk compression type " + compression);
         };
     }

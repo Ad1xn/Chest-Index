@@ -21,6 +21,7 @@ import net.minecraft.world.level.levelgen.structure.StructureStart;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Don't use getChunk here, it deadlocks during chunk unload.
 public final class WorldGenProbe {
     private static final Map<Block, String> BLOCK_IDS = new ConcurrentHashMap<>();
 

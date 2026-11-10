@@ -66,7 +66,7 @@ public final class Session {
             return "Switched off on " + ChestIndexConfig.host(address) + ".";
         }
         if (!config.clientSideIndex) {
-            return "This server does not have the mod, and indexing those is off.";
+            return "This server doesn't have the mod, and indexing is off for those.";
         }
         return "Switched off in the settings.";
     }
@@ -115,11 +115,8 @@ public final class Session {
 
         if (loader.isModLoaded(OWN_OLD_ID)) {
             dev.adrian.chestindex.ChestIndex.LOG.warn(
-                    "An older build of this mod ({}) is loaded alongside it. Up to 1.1 it was "
-                            + "called ChestTracker and carried that id, so Fabric loads both and "
-                            + "you get two search screens on the same keys. Delete the old jar "
-                            + "from your mods folder; your settings and indexes have already been "
-                            + "moved across.", OWN_OLD_ID);
+                    "An old ChestTracker build ({}) is also installed. Delete the old jar, "
+                            + "your settings and indexes were already moved over.", OWN_OLD_ID);
             ClientCompat.toast(Component.literal("An older ChestIndex is still installed"),
                     Component.literal("Delete the old chest-tracker jar from mods"));
             return;
@@ -128,9 +125,8 @@ public final class Session {
         if (!loader.isModLoaded(REPLACED_MOD)) return;
 
         dev.adrian.chestindex.ChestIndex.LOG.warn(
-                "'Chest Tracker (Unofficial port)' ({}) is installed alongside this mod. "
-                        + "Delete or disable it - ChestIndex replaces it, and running both "
-                        + "gives you two search screens bound to the same keys.", REPLACED_MOD);
+                "'Chest Tracker (Unofficial port)' ({}) is also installed. "
+                        + "Remove it, ChestIndex replaces it.", REPLACED_MOD);
         ClientCompat.toast(Component.literal("Another chest tracker is installed"),
                 Component.literal("Delete or disable 'Chest Tracker (Unofficial port)'"));
     }
@@ -152,7 +148,7 @@ public final class Session {
 
         warnedAboutEntities = true;
         ClientCompat.toast(Component.literal("Minecarts are not tracked here"),
-                Component.literal("They move, and this server has no index to follow them"));
+                Component.literal("They move, and this server can't track them"));
     }
 
     public static void forget() {

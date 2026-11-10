@@ -56,6 +56,7 @@ public final class HighlightRenderTypes {
                 RenderTypes.debugFilledBox());
     }
 
+    // 26.3 needs the colour targets from vanilla's pipeline or rendering crashes.
     private static RenderType build(RenderPipeline.Snippet snippet, RenderPipeline vanilla,
                                     String location, String name, RenderType fallback) {
         try {

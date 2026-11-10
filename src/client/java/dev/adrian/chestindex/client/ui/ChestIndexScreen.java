@@ -653,10 +653,10 @@ public final class ChestIndexScreen extends Screen {
     private void describeDimension(QueryDto.DimensionSummary dimension, boolean ender) {
         String head = ender ? "Your ender chest" : shortName(dimension.dimensionId());
         String detail = ender
-                ? "The same six slots wherever you open one - carried with you, not left behind."
+                ? "Same items in every ender chest."
                 : String.format("%,d containers indexed here.", dimension.containers());
         String action = viewing.equals(dimension.dimensionId())
-                ? "Pinned here. Click the one you are standing in to follow you again."
+                ? "Pinned. Click your current dimension to unpin."
                 : "Click to pin the view here.";
         pendingHint = List.of(head, detail, action);
     }
@@ -779,7 +779,7 @@ public final class ChestIndexScreen extends Screen {
             case NOT_PERMITTED -> "This server does not allow searching.";
             default -> ChestIndexConfig.get().clientSideIndex && minecraft != null
                     && !minecraft.hasSingleplayerServer()
-                    ? "Nothing seen yet - walk around, and open a chest."
+                    ? "Nothing indexed yet. Open some chests."
                     : "No index here yet.";
         };
     }
@@ -881,7 +881,7 @@ public final class ChestIndexScreen extends Screen {
         if (!viewing.isEmpty() && !viewing.equals(currentDimensionId())) {
             return "Nothing here in " + (QueryDto.ENDER_CHEST.equals(viewing)
                     ? "your ender chest" : shortName(viewing))
-                    + " - the view is pinned to it, click another to unpin";
+                    + " (pinned, click another to unpin)";
         }
         if (availability == ClientTracker.Availability.CLIENT_ONLY) {
             return "Open a chest to remember what is in it";
@@ -1038,15 +1038,15 @@ public final class ChestIndexScreen extends Screen {
                 new MenuRow("Sort by", sort.label, sort != Sort.COUNT,
                         "most, nearest, or A-Z"),
                 new MenuRow("Origin", origin, originIndex != 0,
-                        "built by players, or generated with the world"),
+                        "player-built or world-generated"),
                 new MenuRow("Inside shulkers", includeNested ? "counted" : "ignored", includeNested,
-                        "whether a shulker's contents count as being in the chest"),
+                        "count shulker contents in the chest"),
                 new MenuRow("Machines", includeMachines ? "shown" : "hidden", includeMachines,
                         "hoppers, droppers, dispensers, crafters"),
                 new MenuRow("Functional blocks", includeUtility ? "shown" : "hidden", includeUtility,
                         "furnaces, brewing stands, jukeboxes, lecterns, pots, bookshelves"),
                 new MenuRow("Moving containers", includeEntities ? "shown" : "hidden", includeEntities,
-                        "chest and hopper minecarts, chest boats - found only where loaded"));
+                        "minecarts and chest boats, loaded chunks only"));
     }
 
     private int buttonX(int index) {

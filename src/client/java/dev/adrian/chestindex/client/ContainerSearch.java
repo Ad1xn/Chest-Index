@@ -105,8 +105,8 @@ public final class ContainerSearch {
         ContainerHighlight.get().markCarried(wanted.get(0), label, chests, dimensionId);
         ContainerHighlight.get().searchingFor(wanted);
         say(chests.isEmpty()
-                        ? label + " is in your ender chest - open it and it will be marked"
-                        : label + " is in your ender chest - the nearest one is marked",
+                        ? label + " is in your ender chest"
+                        : label + " is in your ender chest, nearest one marked",
                 ChatFormatting.AQUA);
     }
 

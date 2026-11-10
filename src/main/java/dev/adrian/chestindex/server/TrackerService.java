@@ -193,7 +193,7 @@ public final class TrackerService {
         try {
             if (!Files.deleteIfExists(log)) return;
             ChestIndex.LOG.info(
-                    "Index was written by an older build: reading the world again to correct it.");
+                    "Index is from an older version, rescanning.");
         } catch (IOException e) {
             ChestIndex.LOG.warn("Could not clear the scan log {}: {}", log, e.toString());
         }
