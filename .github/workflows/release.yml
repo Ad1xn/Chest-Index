@@ -36,7 +36,7 @@ jobs:
       - name: Collect jars
         run: |
           mkdir -p release
-          find versions -path '*/build/libs/*.jar' ! -name '*-sources.jar' -exec cp {} release/ \;
+          find versions paper -path '*/build/libs/*.jar' ! -name '*-sources.jar' -exec cp {} release/ \;
           ls -la release
 
       - name: Publish
