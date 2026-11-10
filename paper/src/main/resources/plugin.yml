@@ -1,0 +1,18 @@
+name: ChestIndex
+version: '${version}'
+main: dev.adrian.chestindex.paper.ChestIndexPlugin
+api-version: '1.21.11'
+description: Server-side index for the ChestIndex mod. Players with the mod search every container on the server.
+website: https://modrinth.com/mod/chestindex
+commands:
+  chestindex:
+    description: Show the index, read the world again, or reload settings.
+    usage: /chestindex <status|rescan|recheck|reload>
+    permission: chestindex.admin
+permissions:
+  chestindex.use:
+    description: Search the server's index from the ChestIndex mod.
+    default: true
+  chestindex.admin:
+    description: Run /chestindex and see every container when access is owned.
+    default: op

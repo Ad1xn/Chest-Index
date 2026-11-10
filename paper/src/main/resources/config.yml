@@ -1,0 +1,31 @@
+# Who can search: ALL, OWNED (own containers, ops see all) or OP
+access: ALL
+
+# Scan the world on startup (unchanged regions are skipped)
+scan-on-start: true
+
+# Include minecarts and chest boats
+track-entity-containers: true
+
+# Include unopened loot chests
+index-unlooted-generated-chests: false
+
+# Hidden unless machines are shown
+machine-types:
+  - minecraft:hopper
+  - minecraft:dropper
+  - minecraft:dispenser
+  - minecraft:crafter
+
+# Hidden unless functional blocks are shown
+utility-types:
+  - minecraft:furnace
+  - minecraft:blast_furnace
+  - minecraft:smoker
+  - minecraft:brewing_stand
+  - minecraft:campfire
+  - minecraft:soul_campfire
+  - minecraft:jukebox
+  - minecraft:lectern
+  - minecraft:decorated_pot
+  - minecraft:chiseled_bookshelf

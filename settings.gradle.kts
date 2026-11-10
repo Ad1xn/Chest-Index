@@ -24,3 +24,5 @@ stonecutter {
 }
 
 rootProject.name = "chestindex"
+
+include("paper")
