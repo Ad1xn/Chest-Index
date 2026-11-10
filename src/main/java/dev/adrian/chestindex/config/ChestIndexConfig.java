@@ -91,7 +91,7 @@ public final class ChestIndexConfig {
 
     public String sortMode = "COUNT";
 
-    public int originFilter = 0;
+    public int originFilter = 1;
 
     public String searchText = "";
 
