@@ -53,7 +53,7 @@ public final class ChestIndexClient implements ClientModInitializer {
                     Session.remind();
                     continue;
                 }
-                ClientCompat.openScreen(new ChestIndexScreen());
+                ClientCompat.openScreen(ChestIndexScreen.fromHotkey());
             }
             Session.tick();
             Session.warnAboutEntities();

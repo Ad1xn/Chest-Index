@@ -191,6 +191,28 @@ public final class ChestIndexScreen extends Screen {
 
     private boolean categoriesAsked;
 
+    // The hotkey's own character (e.g. dead-key ^ on macOS) arrives after the
+    // screen opens. Drop the first char if no key was pressed in this screen
+    // yet, or if it's an accent like ^ ` ´ that a dead key emits late.
+    private boolean dropOpeningChar;
+    private boolean keyPressedHere;
+
+    public static ChestIndexScreen fromHotkey() {
+        ChestIndexScreen screen = new ChestIndexScreen();
+        screen.dropOpeningChar = true;
+        return screen;
+    }
+
+    @Override
+    public boolean charTyped(net.minecraft.client.input.CharacterEvent event) {
+        if (dropOpeningChar) {
+            dropOpeningChar = false;
+            if (!keyPressedHere
+                    || Character.getType(event.codepoint()) == Character.MODIFIER_SYMBOL) return true;
+        }
+        return super.charTyped(event);
+    }
+
     public ChestIndexScreen() {
         super(Component.literal("Chest Index"));
     }
@@ -1582,6 +1604,7 @@ public final class ChestIndexScreen extends Screen {
 
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        keyPressedHere = true;
         if (!suggestions.isEmpty()) {
             switch (event.key()) {
                 case Keys.TAB -> {
